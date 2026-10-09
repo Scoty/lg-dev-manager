@@ -234,8 +234,8 @@ Legacy, newer ones run Modern best, and sometimes an older version is wanted.
   Installing over an installed Litefin asks first (all builds share the app id `org.litefin.app`, so it replaces it,
   and it says when it is a downgrade).
 - The status line shows the installed Litefin version and whether a newer one is out. The **suggested build** for the TV
-  is highlighted from its webOS version, by the release notes' TV years: webOS 22+ → Modern, webOS 5/6 → Normal,
-  webOS 4 → Legacy, older → Ultra Legacy. A "Which build?" box repeats the release notes' guidance.
+  is highlighted from its webOS version, by the release notes' webOS versions: webOS 22+ → Modern, webOS 6+ → Normal,
+  webOS 4–5 → Legacy, older → Ultra Legacy (owner decision: the versions win over the notes' TV years). A "Which build?" box repeats the release notes' guidance.
 
 **How.**
 - RPCs `litefin.list` (cached 10 minutes; a refresh button asks again) and `litefin.install` (`tag` + `variant` only — the

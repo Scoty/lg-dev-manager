@@ -20,7 +20,7 @@ describe('Litefin variants', () => {
     expect(suggestedVariant('8.0.0')).toBe('Modern'); // webOS 23
     expect(suggestedVariant('7.3.1')).toBe('Modern'); // webOS 22
     expect(suggestedVariant('6.4.0')).toBe('Normal');
-    expect(suggestedVariant('5.2.0')).toBe('Normal');
+    expect(suggestedVariant('5.2.0')).toBe('Legacy');
     expect(suggestedVariant('4.9.7')).toBe('Legacy');
     expect(suggestedVariant('3.4.0')).toBe('Ultra-Legacy');
     expect(suggestedVariant(undefined)).toBeNull();

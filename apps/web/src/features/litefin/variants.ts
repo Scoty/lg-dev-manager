@@ -13,8 +13,8 @@ export interface VariantInfo {
 
 export const KNOWN_VARIANTS: Record<string, VariantInfo> = {
   Modern: { label: 'Modern', target: 'High-end 2021+ TVs', webos: 'webOS 22+' },
-  Normal: { label: 'Normal', target: 'Most 2019+ TVs', webos: 'webOS 5+' },
-  Legacy: { label: 'Legacy', target: '2017–2018 TVs', webos: 'webOS 4' },
+  Normal: { label: 'Normal', target: 'Most 2019+ TVs', webos: 'webOS 6+' },
+  Legacy: { label: 'Legacy', target: '2017–2018 TVs', webos: 'webOS 4–5' },
   'Ultra-Legacy': { label: 'Ultra Legacy', target: 'Pre-2017 TVs', webos: 'webOS 1–3' },
   'Ultra-Legacy-NoService': { label: 'Ultra Legacy, no service', target: 'Ultra Legacy without Litefin’s background service — if Ultra Legacy won’t start', webos: '' },
 };
@@ -31,16 +31,14 @@ export function variantColumns(releases: readonly LitefinRelease[]): string[] {
 }
 
 /**
- * The build the release notes point this TV at, from its webOS version as the TV reports it (webOS 22 reports 7.x).
- * The notes' TV years are the guide: Modern for 2021+ high-end sets (webOS 22+), Normal for 2019+ (its Chromium 63
- * target runs on webOS 5's Chromium 68; the notes' "webOS 6+" undersells it), Legacy for 2017/2018 (webOS 4.x),
- * Ultra Legacy before that. Null when the version is unknown.
+ * The build the release notes point this TV at, by their webOS versions (as the TV reports them; webOS 22 reports 7.x):
+ * Modern for webOS 22+, Normal for webOS 6+, Legacy for webOS 4+, Ultra Legacy below. Null when the version is unknown.
  */
 export function suggestedVariant(osVersion: string | undefined): string | null {
   const major = Number(/^(\d+)/.exec(osVersion ?? '')?.[1]);
   if (!Number.isFinite(major) || major <= 0) return null;
   if (major >= 7) return 'Modern';
-  if (major >= 5) return 'Normal';
+  if (major >= 6) return 'Normal';
   if (major >= 4) return 'Legacy';
   return 'Ultra-Legacy';
 }
