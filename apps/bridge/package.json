@@ -1,6 +1,6 @@
 {
   "name": "lg-dev-manager-bridge",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Local bridge that lets the LG Dev Manager web UI talk to webOS TVs over SSH",
   "license": "Apache-2.0",
   "type": "module",

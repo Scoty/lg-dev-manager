@@ -101,7 +101,7 @@ export function Sidebar() {
         </div>
         <div className="brand-text">
           <div className="brand-name">LG Dev Manager</div>
-          <div className="brand-tag">v{APP_VERSION} · preview</div>
+          <div className="brand-tag">v{APP_VERSION}</div>
         </div>
       </Link>
 
