@@ -33,6 +33,7 @@ test.describe('Dev Mode TV', () => {
   test('apps: list, install an IPK, launch, uninstall', async ({ paired: page, errors }) => {
     await addDevModeTv(page, 'Kitchen');
     await page.goto('/#/apps/installed');
+    await expect(page.locator('.hero-sub')).toContainText('Apps on Kitchen (LG C3).', { timeout: 30_000 });
     await expect(page.getByText('com.example.hello')).toBeVisible();
     await expect(page.getByText(/free of/)).toBeVisible();
 

@@ -91,13 +91,16 @@ export function InstalledAppsPage() {
 
   const canInstall = !!active && !busy;
 
+  // The model in brackets, unless the TV is already named after it (a TV called "LG C4" would read "LG C4 (LG C4)").
+  const modelText = active?.info?.modelName ? modelLabel(active.info.modelName) : undefined;
+  const model = modelText && modelText.trim().toLowerCase() !== active?.name.trim().toLowerCase() ? modelText : undefined;
   return (
     <div className="drop-zone-page" {...dropHandlers}>
       <PageHeader
         eyebrow="Apps"
         title="Installed"
         accent="apps"
-        sub={active ? <>Apps on <b>{active.name}</b>{active.info?.modelName && <> ({modelLabel(active.info.modelName)})</>}. Drop an <span className="mono">.ipk</span> anywhere on this page to install it.</> : 'Apps on your TV.'}
+        sub={active ? <>Apps on <b>{active.name}</b>{model && <> ({model})</>}. Drop an <span className="mono">.ipk</span> anywhere on this page to install it.</> : 'Apps on your TV.'}
         actions={
           active && (
             <>
