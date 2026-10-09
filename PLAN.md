@@ -332,7 +332,10 @@ it). The site shows a notice when the connected bridge is older than the one rel
    that should use it. npm no longer accepts plain tokens for publishing (only ones that bypass 2FA, being phased out).
    **1.0.0 was published by hand** (the package must exist before a trusted publisher can be added):
    `pnpm build`, then in `apps/bridge`: `pnpm pack`, `npm login --auth-type=web`,
-   `npm publish ./lg-dev-manager-bridge-1.0.0.tgz --access public` (approve 2FA in the browser).
+   `npm publish ./lg-dev-manager-bridge-1.0.0.tgz --access public` (approve 2FA in the browser). For a brand-new
+   package npm *stages* the version and publishes only a `0.0.0-stage` placeholder (no files to run) until a maintainer
+   approves it: `npm stage list lg-dev-manager-bridge`, then `npm stage approve <stage-id>`, or the Staged tab on
+   npmjs.com. Test `npx` from outside the repository — inside `apps/bridge` npx finds the local package instead.
 4. The package contains `dist/cli.js` (protocol bundled), `web/` (the built site, served as the local page),
    `LICENSE`, `NOTICE` and its README — copied in by `apps/bridge/scripts/prepack.mjs`.
 5. Create GitHub releases for both tags with the notes from `CHANGELOG.md`.
