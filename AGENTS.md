@@ -81,7 +81,10 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 ## Testing expectations
 
 - Every new RPC gets a bridge integration test against the mock TV.
-- Every page gets a Playwright smoke test (renders in light + dark, no console errors) — add it to `apps/web/e2e/smoke.spec.ts`.
+- Every page gets a Playwright smoke test (renders in light + dark, no console errors) — add it to the `PAGES` list in
+  `apps/web/e2e/smoke.spec.ts` (one test per theme walks every page in one tab).
+- Keep e2e fast: set up TVs with `addDevModeTv` / `addRootedTv` (saved straight into the browser's store); only tests about
+  the add-device wizard use `addDevModeTvWithWizard` / `addRootedTvWithWizard`. No fixed waits (`waitForTimeout`).
 - User flows that touch the TV get a Playwright test against the mock TVs (`apps/web/e2e/devices-apps.spec.ts`,
   `repo.spec.ts`, `files-terminal.spec.ts`, `info.spec.ts`, `debug.spec.ts`). The rig's TVs are shared by parallel tests, so each test uses app ids no other test touches.
 - Debug tools on the mock TV (followed logs, `PmLogCtl`, `ls-monitor -j`, crash reports) live in `tools/mock-tv/src/debug.ts`;

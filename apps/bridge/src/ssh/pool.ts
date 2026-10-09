@@ -28,6 +28,8 @@ interface Entry {
   /** Exec channels in use, and callers waiting for one. */
   channels: number;
   waiting: (() => void)[];
+  /** Forgotten by `close({ graceful })`: end the connection once its running commands finish. */
+  closing?: boolean;
 }
 
 export interface ExecResult {
@@ -196,11 +198,15 @@ export class SshPool implements SshRunner {
           if (released) return;
           released = true;
           e.busy--;
-          if (e.busy === 0 && this.entries.get(e.key) === e) {
+          if (e.busy === 0 && e.closing) {
+            e.client.end();
+          } else if (e.busy === 0 && this.entries.get(e.key) === e) {
             clearTimeout(e.idle);
             // The timer only ever closes this same entry, and only if nobody picked it up again meanwhile.
             e.idle = setTimeout(() => {
-              if (e.busy === 0 && this.entries.get(e.key) === e) {
+              if (e.busy === 0 && e.closing) {
+            e.client.end();
+          } else if (e.busy === 0 && this.entries.get(e.key) === e) {
                 this.forget(e);
                 e.client.end();
               }
@@ -348,14 +354,19 @@ export class SshPool implements SshRunner {
   }
 
   /** Close the pooled connection for one device, or all of them. Returns how many were closed. */
-  close(t?: DeviceTarget): number {
+  /**
+   * Forget pooled connections (all, or one device's). New calls connect afresh. `graceful`: a connection that is
+   * still running commands (another page, another tab) is ended when they finish instead of cutting them off.
+   */
+  close(t?: DeviceTarget, { graceful = false }: { graceful?: boolean } = {}): number {
     const keys = t ? [keyOf(t)] : [...this.entries.keys()];
     let n = 0;
     for (const k of keys) {
       const e = this.entries.get(k);
       if (!e) continue;
       this.forget(e);
-      e.client.end();
+      if (graceful && e.busy > 0) e.closing = true;
+      else e.client.end();
       n++;
     }
     return n;

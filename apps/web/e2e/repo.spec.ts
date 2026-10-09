@@ -79,7 +79,7 @@ test('a download that fails its checksum is not installed', async ({ paired: pag
 
 test('rooted: update badges on the Installed page, Homebrew Channel updates itself, beta channel', async ({ paired: page, errors }) => {
   await addRootedTv(page, 'Repo Root');
-  await page.getByRole('button', { name: 'Go to apps' }).click();
+  await page.goto('/#/apps/installed');
   // Homebrew Channel 0.7.2 is installed; the repository has 0.7.3.
   await expect(page.getByText('v0.7.3 available')).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Update Homebrew Channel to 0.7.3' }).click();

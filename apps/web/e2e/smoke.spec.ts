@@ -1,32 +1,36 @@
 import { expect, setTheme, test } from './fixtures';
 
-/** Every page renders in light and dark without console errors (AGENTS.md → Testing expectations). */
-const PAGES = [
-  '/bridge',
-  '/devices',
-  '/devices/new',
-  '/apps/installed',
-  '/apps/homebrew',
-  '/files',
-  '/terminal',
-  '/info',
-  '/debug/logs',
-  '/debug/pmlog',
-  '/debug/dmesg',
-  '/debug/crashes',
-  '/debug/luna',
+/**
+ * Every page renders in light and dark without console errors (AGENTS.md → Testing expectations).
+ * One test per theme walks all pages in the same tab (hash navigation, like a user clicking through), instead of
+ * a fresh browser per page — same checks, a fraction of the time.
+ */
+const PAGES: [path: string, heading: RegExp][] = [
+  ['/bridge', /Connect the\s*bridge/],
+  ['/devices', /^Devices/],
+  ['/devices/new', /Add a\s*TV/],
+  ['/apps/installed', /Installed\s*apps/],
+  ['/apps/homebrew', /Homebrew\s*repository/],
+  ['/files', /^Files/],
+  ['/terminal', /^Terminal/],
+  ['/info', /Device\s*info/],
+  ['/debug/logs', /System\s*log/],
+  ['/debug/pmlog', /Log\s*levels/],
+  ['/debug/dmesg', /Kernel\s*log/],
+  ['/debug/crashes', /Crash\s*reports/],
+  ['/debug/luna', /Luna\s*monitor/],
 ];
 
 for (const theme of ['light', 'dark'] as const) {
-  test.describe(`${theme} theme`, () => {
-    for (const path of PAGES) {
-      test(`renders ${path}`, async ({ paired: page, errors }) => {
-        await setTheme(page, theme);
+  test(`every page renders in the ${theme} theme`, async ({ paired: page, errors }) => {
+    await setTheme(page, theme);
+    for (const [path, heading] of PAGES) {
+      await test.step(path, async () => {
         await page.goto(`/#${path}`);
+        await expect(page.locator('h1')).toHaveText(heading);
         await expect(page.getByText('Bridge connected')).toBeVisible();
-        await expect(page.locator('h1')).toBeVisible();
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-        expect(errors).toEqual([]);
+        expect(errors, `console errors on ${path}`).toEqual([]);
       });
     }
   });

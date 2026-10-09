@@ -13,7 +13,7 @@ import { useDevices } from '../../devices/useDevices';
 import { consoleTarget } from '../../console/store';
 import { AuthFields } from './AuthFields';
 import { PortCheck, SshOffHint, type PortResult } from './PortCheck';
-import { ScanPanel, tvLabel } from './ScanPanel';
+import { ScanPanel, savedAt, tvLabel } from './ScanPanel';
 import { STEP_LABELS, verifyDevice, type VerifyState, type VerifyStepId } from './verify';
 import { MODE_DEFAULTS, authProblems, emptyAuth, hostProblem, type AuthDraft, type AuthKind, type SetupMode } from './auth';
 
@@ -170,6 +170,7 @@ export function AddDevicePage() {
         ? 'You already have a TV with this name.'
         : null;
   const hostErr = hostProblem(host);
+  const alreadySaved = host.trim() && !hostErr ? savedAt(devices ?? [], host) : [];
   const portProblem = !Number.isInteger(port) || port < 1 || port > 65535 ? 'Port must be 1–65535.' : null;
   const userProblem = !/^[a-z_][a-z0-9_-]{0,31}$/.test(username) ? 'Not a valid user name.' : null;
   const detailsValid =
@@ -343,7 +344,7 @@ export function AddDevicePage() {
 
           {step === 'details' && (
             <form className="wizard-body" onSubmit={onDetailsSubmit} noValidate>
-              <ScanPanel selected={host.trim()} onPick={pickTv} />
+              <ScanPanel selected={host.trim()} onPick={pickTv} saved={devices ?? []} />
               <div className="form-grid">
                 <div className="field">
                   <label className="field-label" htmlFor="dev-name">Name <span className="req">*</span></label>
@@ -378,6 +379,13 @@ export function AddDevicePage() {
                   </div>
                   {showErrors && hostErr ? (
                     <span className="field-error">{hostErr}</span>
+                  ) : alreadySaved.length ? (
+                    <span className="field-warning" role="status">
+                      <Icon name="alert" />
+                      <span>
+                        This TV is already added as <b>{alreadySaved.map((d) => d.name).join(', ')}</b>. You can still add it again, e.g. with another login.
+                      </span>
+                    </span>
                   ) : (
                     <span className="field-help">On the TV: Settings → General → Network → Wi-Fi / Wired → Advanced.</span>
                   )}

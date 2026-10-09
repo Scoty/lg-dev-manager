@@ -1,4 +1,4 @@
-import { addDevModeTv, addRootedTv, expect, ipkFile, ROOTED_PORT, test } from './fixtures';
+import { addDevModeTv, addRootedTv, addRootedTvWithWizard, expect, ipkFile, ROOTED_PORT, test } from './fixtures';
 
 test.describe('Dev Mode TV', () => {
   test('wizard: port check, wrong passphrase, then success', async ({ paired: page, errors }) => {
@@ -32,7 +32,7 @@ test.describe('Dev Mode TV', () => {
 
   test('apps: list, install an IPK, launch, uninstall', async ({ paired: page, errors }) => {
     await addDevModeTv(page, 'Kitchen');
-    await page.getByRole('button', { name: 'Go to apps' }).click();
+    await page.goto('/#/apps/installed');
     await expect(page.getByText('com.example.hello')).toBeVisible();
     await expect(page.getByText(/free of/)).toBeVisible();
 
@@ -55,7 +55,7 @@ test.describe('Dev Mode TV', () => {
 
   test('a broken IPK shows the installer error', async ({ paired: page }) => {
     await addDevModeTv(page, 'Office');
-    await page.getByRole('button', { name: 'Go to apps' }).click();
+    await page.goto('/#/apps/installed');
     const chooser = page.waitForEvent('filechooser');
     await page.getByRole('button', { name: 'Install IPK' }).click();
     await (await chooser).setFiles({ name: 'broken.ipk', mimeType: 'application/octet-stream', buffer: Buffer.from('not a package') });
@@ -66,7 +66,7 @@ test.describe('Dev Mode TV', () => {
 
 test.describe('rooted TV with Homebrew Channel', () => {
   test('manual setup, install through Homebrew Channel, guarded hbchannel removal', async ({ paired: page, errors }) => {
-    await addRootedTv(page, 'Bedroom');
+    await addRootedTvWithWizard(page, 'Bedroom');
     await page.getByRole('button', { name: 'Go to apps' }).click();
     await expect(page.getByText('org.webosbrew.hbchannel')).toBeVisible();
 

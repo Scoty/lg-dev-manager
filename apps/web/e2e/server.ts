@@ -34,6 +34,8 @@ process.env.LGDM_SCAN_EXTRA_HOSTS ??= '127.0.0.1';
 const devTv = await startMockTv({ sshPort: 9922, keyServerPort: 9991, passphrase: E2E.passphrase, ssapPort: 3000 });
 const rootTv = await startMockTv({ username: 'root', password: 'alpine', hbchannel: true, sshPort: E2E.rootedPort });
 const noPtyTv = await startMockTv({ username: 'root', password: 'alpine', pty: false, sshPort: E2E.noPtyPort });
+// Followed logs tick faster than on a real TV, so tests waiting for new lines finish sooner.
+for (const tv of [devTv, rootTv, noPtyTv]) tv.state.debug.every = 150;
 const repo = await startMockRepo({ port: E2E.repoPort });
 const lge = await startMockLge({ tokens: { [MOCK_DEVMODE_TOKEN]: (742 * 3600 + 15 * 60) * 1000 } });
 // Launching the Developer Mode app with { extend: true } resets the session at LG, like on a real TV.

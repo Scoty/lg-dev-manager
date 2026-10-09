@@ -49,8 +49,8 @@ async function openWizard(page: Page) {
   await expect(page.getByRole('radio', { name: /Developer Mode/ })).toBeVisible();
 }
 
-/** Run the add-device wizard for the Dev Mode mock TV. */
-export async function addDevModeTv(page: Page, name: string) {
+/** Run the add-device wizard for the Dev Mode mock TV (for tests about the wizard or what it leaves behind). */
+export async function addDevModeTvWithWizard(page: Page, name: string) {
   await openWizard(page);
   await page.getByRole('radio', { name: /Developer Mode/ }).click();
   await page.getByRole('button', { name: 'Next' }).click();
@@ -63,7 +63,7 @@ export async function addDevModeTv(page: Page, name: string) {
 }
 
 /** Run the add-device wizard ("Set up manually") for the rooted mock TV. */
-export async function addRootedTv(page: Page, name: string, port = ROOTED_PORT) {
+export async function addRootedTvWithWizard(page: Page, name: string, port = ROOTED_PORT) {
   await openWizard(page);
   await page.getByRole('radio', { name: /Set up manually/ }).click();
   await page.getByRole('button', { name: 'Next' }).click();
@@ -74,4 +74,66 @@ export async function addRootedTv(page: Page, name: string, port = ROOTED_PORT) 
   await page.getByLabel(/Password for/).fill('alpine');
   await page.getByRole('button', { name: 'Verify & add' }).click();
   await expect(page.getByText(`${name} is ready`)).toBeVisible({ timeout: 30_000 });
+}
+
+let devModeKey: Promise<string> | null = null;
+/** The Dev Mode mock TV's private key, from its key server (what the wizard fetches). */
+function fetchDevModeKey(): Promise<string> {
+  devModeKey ??= fetch('http://127.0.0.1:9991/webos_rsa').then(async (r) => {
+    if (!r.ok) throw new Error(`key server: HTTP ${r.status}`);
+    return r.text();
+  });
+  return devModeKey;
+}
+
+interface SeedDevice {
+  name: string;
+  mode: 'devmode' | 'rooted';
+  port: number;
+  username: string;
+  auth: { kind: 'key'; privateKey: string; passphrase?: string } | { kind: 'password'; password: string };
+}
+
+/**
+ * Save a TV straight into the browser's device store and make it the active one — what the wizard ends with,
+ * without its ~3 s of checks. Leaves the page on Devices. Tests about the wizard itself use the *WithWizard helpers.
+ */
+async function seedDevice(page: Page, device: SeedDevice) {
+  await page.goto('/#/devices');
+  await page.evaluate(async (d) => {
+    // Wait for the app to have created its database (it opens it on start).
+    for (let i = 0; i < 100; i++) {
+      const dbs = await indexedDB.databases();
+      if (dbs.some((x) => x.name === 'lgdm' && (x.version ?? 0) >= 2)) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const r = indexedDB.open('lgdm');
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+    const now = Date.now();
+    const id = crypto.randomUUID();
+    await new Promise<void>((resolve, reject) => {
+      const t = db.transaction('devices', 'readwrite');
+      t.objectStore('devices').put({ ...d, id, host: '127.0.0.1', createdAt: now, updatedAt: now });
+      t.oncomplete = () => resolve();
+      t.onerror = () => reject(t.error);
+    });
+    db.close();
+    localStorage.setItem('lgdm-active-device', id);
+  }, device);
+  await page.reload();
+  await expect(page.locator('.data-cell-user-name').getByText(device.name, { exact: true })).toBeVisible();
+}
+
+/** Add the Dev Mode mock TV (port 9922, key from its key server) and make it active. */
+export async function addDevModeTv(page: Page, name: string) {
+  const privateKey = await fetchDevModeKey();
+  await seedDevice(page, { name, mode: 'devmode', port: 9922, username: 'prisoner', auth: { kind: 'key', privateKey, passphrase: PASSPHRASE } });
+}
+
+/** Add a rooted mock TV (root / alpine) and make it active. */
+export async function addRootedTv(page: Page, name: string, port = ROOTED_PORT) {
+  await seedDevice(page, { name, mode: 'rooted', port, username: 'root', auth: { kind: 'password', password: 'alpine' } });
 }

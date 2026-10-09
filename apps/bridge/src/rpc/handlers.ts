@@ -153,7 +153,8 @@ export const handlers: HandlerMap = {
   'device.screenshot': ({ device, method }, session, ctx) => takeScreenshot(sshFor(session, ctx), device, method ?? 'DISPLAY'),
   'device.hbchannel': ({ device, quiet }, session, ctx) => hbChannelConfig(sshFor(session, ctx, quiet), device),
 
-  'device.disconnect': ({ device }, _s, { pool }) => ({ closed: pool.close(device) }),
+  // Graceful: the same TV may be busy for another page or tab of this browser.
+  'device.disconnect': ({ device }, _s, { pool }) => ({ closed: pool.close(device, { graceful: true }) }),
 
   'cmd.exec': ({ device, command, stdin, timeoutMs }, session, ctx) => sshFor(session, ctx).exec(device, command, { stdin, timeoutMs }),
 

@@ -207,6 +207,17 @@ describe('pool', () => {
     expect(results.map((r) => r.stdout.trim())).toEqual(Array.from({ length: 20 }, (_, i) => String(i)));
   });
 
+  it('a graceful close lets running commands finish, then ends the connection', async () => {
+    const p2 = new SshPool();
+    const d = devmode(devTv);
+    const running = p2.exec(d, "luna-send-pub -n 1 luna://com.palm.systemservice/osInfo/query '{}'");
+    await new Promise((r) => setTimeout(r, 5)); // connecting / running
+    expect(p2.close(d, { graceful: true })).toBe(1);
+    expect((await running).stdout).toContain('webos_release'); // not cut off
+    expect((await p2.exec(d, 'echo fresh')).stdout.trim()).toBe('fresh'); // a new connection
+    p2.close();
+  });
+
   it('a stale idle timer never closes a newer connection', async () => {
     const shortPool = new SshPool(150);
     const d = devmode(devTv);
