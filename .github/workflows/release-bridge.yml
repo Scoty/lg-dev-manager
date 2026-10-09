@@ -1,0 +1,40 @@
+name: Publish bridge to npm
+
+# Pushing a tag bridge-vX.Y.Z publishes apps/bridge as lg-dev-manager-bridge@X.Y.Z, with npm provenance (the package
+# page then links back to this workflow run and commit). Needs the repository secret NPM_TOKEN (an npm "automation"
+# or granular token allowed to publish lg-dev-manager-bridge) — or npm trusted publishing set up for this workflow.
+on:
+  push:
+    tags: ['bridge-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance / trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: Tag matches the package version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(node -p "require('./apps/bridge/package.json').version")
+          test "$TAG" = "bridge-v$version" || { echo "Tag $TAG doesn't match apps/bridge/package.json version $version"; exit 1; }
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm --filter lg-dev-manager-bridge publish --access public --provenance --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

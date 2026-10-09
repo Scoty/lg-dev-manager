@@ -50,8 +50,8 @@ export function BridgeUpdateNotice({ always = false }: { always?: boolean }) {
       >
         Yours is v{status.bridgeVersion}. Stop it (Ctrl+C) and start it again with{' '}
         <span className="mono">npx lg-dev-manager-bridge@latest</span> — or, if you run it from the repository,{' '}
-        <span className="mono">git pull</span>, <span className="mono">pnpm install</span> and{' '}
-        <span className="mono">pnpm dev:bridge</span>. Your pairing stays the same.
+        <span className="mono">git pull</span>, <span className="mono">pnpm install</span>, <span className="mono">pnpm build</span> and{' '}
+        <span className="mono">pnpm bridge</span>. Your pairing stays the same.
       </Alert>
     </div>
   );

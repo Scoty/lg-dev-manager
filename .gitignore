@@ -7,3 +7,7 @@ coverage/
 !.env.example
 playwright-report/
 test-results/
+# Copied in by apps/bridge/scripts/prepack.mjs for the npm package
+apps/bridge/web/
+apps/bridge/LICENSE
+apps/bridge/NOTICE

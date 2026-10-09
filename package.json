@@ -2,7 +2,7 @@
   "name": "lg-dev-manager",
   "private": true,
   "version": "1.0.0",
-  "description": "Web-based Device / Dev Mode Manager for LG webOS TVs",
+  "description": "LG Dev Manager: manage LG webOS TVs in Developer Mode or rooted, from your browser",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.28.0",
   "engines": {
@@ -17,6 +17,7 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r --parallel test",
     "e2e": "pnpm --filter @lgdm/web build && pnpm --filter @lgdm/web e2e",
-    "dev:rig": "pnpm --filter @lgdm/web build && pnpm --filter @lgdm/web e2e:server"
+    "dev:rig": "pnpm --filter @lgdm/web build && pnpm --filter @lgdm/web e2e:server",
+    "bridge": "node apps/bridge/dist/cli.js"
   }
 }

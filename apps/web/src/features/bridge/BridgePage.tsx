@@ -75,22 +75,31 @@ export function BridgePage() {
         <Card eyebrow="Step 1" title="Run the bridge" className="col-6">
           <div className="stack">
             <div>
-              <div className="eyebrow">In a terminal on this computer (Node 22+ and pnpm)</div>
-              <div className="codeblock">{`git clone ${REPO_URL}.git
-cd lg-dev-manager
-pnpm install
-pnpm dev:bridge`}</div>
+              <div className="eyebrow">In a terminal on this computer (Node.js 22 or newer)</div>
+              <div className="codeblock">npx lg-dev-manager-bridge@latest</div>
             </div>
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+              It prints a <strong>pairing token</strong> — paste it below. Keep the terminal open while you use the app; Ctrl+C
+              stops the bridge. It also serves this app at <span className="mono">http://localhost:{DEFAULT_BRIDGE_PORT}</span> if
+              you’d rather not use the website.
+            </p>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
               On macOS, the first time the bridge looks for or connects to your TV, the system asks whether your terminal app may
               find devices on your local network — choose <strong>Allow</strong>.
             </p>
-            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-              The bridge prints a <strong>pairing token</strong> when it starts — paste it below. Already cloned? Run{' '}
-              <span className="mono">git pull</span> and <span className="mono">pnpm install</span> first so the bridge matches this
-              site. No pnpm? Run <span className="mono">corepack enable</span> once. (A one-line{' '}
-              <span className="mono">npx lg-dev-manager-bridge</span> comes with the v1.0 release.)
-            </p>
+            <details className="muted bridge-from-repo">
+              <summary>Run it from the source code instead</summary>
+              <div className="codeblock">{`git clone ${REPO_URL}.git
+cd lg-dev-manager
+corepack enable    # once, for pnpm
+pnpm install
+pnpm build
+pnpm bridge`}</div>
+              <p style={{ margin: 0 }}>
+                Needs Node.js 24. To update later: <span className="mono">git pull</span>, <span className="mono">pnpm install</span>,{' '}
+                <span className="mono">pnpm build</span>, then <span className="mono">pnpm bridge</span> again.
+              </p>
+            </details>
             {/* Once connected the bridge evidently accepts this site. */}
             {status.state !== 'connected' &&
               !([...DEFAULT_ALLOWED_ORIGINS, ...DEV_ALLOWED_ORIGINS] as string[]).includes(origin) &&

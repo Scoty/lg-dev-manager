@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, DEV_ALLOWED_ORIGINS } from '@lgdm/protocol';
@@ -58,6 +59,18 @@ export function loadOrCreateToken(reset = false): string {
   return token;
 }
 
+/**
+ * The web UI that comes with the bridge, served at http://localhost:<port>/ (the "local page"): `web/` in the npm
+ * package, or the repository's own build (apps/web/dist) when run from a clone. None: only lg.scoty.uk is used.
+ */
+export function bundledUi(): string | undefined {
+  for (const rel of ['../web/', '../../web/dist/']) {
+    const dir = fileURLToPath(new URL(rel, import.meta.url));
+    if (existsSync(join(dir, 'index.html'))) return dir;
+  }
+  return undefined;
+}
+
 /** `--allow-origin` values: real http(s) origins only (`null` would let sandboxed frames on any site in). */
 export function parseOrigin(value: string): string {
   let u: URL;
@@ -95,7 +108,7 @@ export function parseArgs(argv: string[]): BridgeConfig {
     port,
     allowedOrigins: [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...(dev ? DEV_ALLOWED_ORIGINS : []), ...self, ...extra])],
     token: loadOrCreateToken(argv.includes('--reset-token')),
-    webRoot: get('web-root') ?? process.env.LGDM_WEB_ROOT,
+    webRoot: argv.includes('--no-ui') ? undefined : (get('web-root') ?? process.env.LGDM_WEB_ROOT ?? bundledUi()),
     repoUrl: process.env.LGDM_REPO_URL,
     lgeUrl: process.env.LGDM_LGE_URL,
     litefinUrl: process.env.LGDM_LITEFIN_URL,

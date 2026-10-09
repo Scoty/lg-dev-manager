@@ -4,9 +4,9 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 (Tauri + Angular + Rust) with the look of [Adminator 2026](https://github.com/puikinsh/adminator-admin-dashboard),
 hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS).
 
-> **Status:** M7 (Debug tools) done — system log, log levels (PmLog), kernel log, crash reports and the luna bus monitor. All of §3 is in place.
-> M8 (Litefin repo) done — every webOS build of the last 5 Litefin releases, installable straight onto the TV.
-> Public preview deploys to lg.scoty.uk on every push to `main`. M9 (phones) is skipped for now: phones and tablets get a notice to use a computer instead. Next: M10 (Ship).
+> **Status:** v1.0.0 released (M10) — full parity with the desktop app (§3), the Litefin repo (M8) and a pre-release
+> security review (§10). The site at lg.scoty.uk deploys from `main` after CI passes; the bridge is on npm.
+> M9 (phones) is skipped for now: phones and tablets get a notice to use a computer instead.
 
 ---
 
@@ -186,7 +186,7 @@ lg-dev-manager/
 | M7 ✅ | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
 | M8 ✅ | Litefin repo | **Apps → Litefin repo**: the last 5 Litefin releases from GitHub, every webOS variant installable straight from the page (see §8). |
 | M9 ⏸ | Phones (research) | **Skipped for now** (owner, Oct 2026). Phones and tablets see a notice that the bridge must run on the same computer, that the phone workarounds are risky, and to use a desktop or laptop instead. The research notes stay in §9 for later. |
-| M10 | Ship | Bridge published to npm (`npx lg-dev-manager-bridge`), README with screenshots, "preview" label removed. |
+| M10 ✅ | Ship | v1.0.0: bridge on npm (`npx lg-dev-manager-bridge`, also serves the local page), README with two demos, "preview" label removed, security review (§10), release process (§11). |
 
 Scope is **full parity before release** (v1.0 at M10). The site at **lg.scoty.uk** is already public as a *preview*:
 every push to `main` deploys it, and it shows which features are still to come.
@@ -314,3 +314,20 @@ so rate limits apply per user. The attack surface is each user's local bridge, c
 **Known, not fixed for 1.0:** SSH host keys aren't checked (the original app doesn't either) — a device on the same
 network that takes over the TV's IP could receive the login. Planned: remember each TV's host key on first use and
 warn when it changes. The remaining audit note (esbuild's dev server on Windows, via tsup) is dev-only and unused.
+
+---
+
+## 11. Releasing
+
+Versions: the web app and the bridge are released together with the same number (`apps/web`, `apps/bridge`,
+`packages/protocol`, `tools/mock-tv` and the root `package.json`, plus `apps/bridge/src/version.ts` — a test checks
+it). The site shows a notice when the connected bridge is older than the one released with it.
+
+1. Bump the versions, update this plan, commit, push; wait for CI and the Pages deploy (the site is live then).
+2. Tag both: `git tag -a web-vX.Y.Z` and `git tag -a bridge-vX.Y.Z`, push the tags.
+3. `bridge-v*` runs **Publish bridge to npm** (`.github/workflows/release-bridge.yml`): checks the tag against the
+   package version, builds, tests and publishes with provenance (secret `NPM_TOKEN`, or npm trusted publishing).
+   By hand instead: `pnpm build`, then `npm login` and `pnpm --filter lg-dev-manager-bridge publish --access public`.
+4. The package contains `dist/cli.js` (protocol bundled), `web/` (the built site, served as the local page),
+   `LICENSE`, `NOTICE` and its README — copied in by `apps/bridge/scripts/prepack.mjs`.
+5. Create GitHub releases for both tags with the notes.

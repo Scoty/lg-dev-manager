@@ -1,22 +1,49 @@
 {
   "name": "lg-dev-manager-bridge",
   "version": "1.0.0",
-  "description": "Local bridge that lets the LG Dev Manager web UI talk to webOS TVs over SSH",
+  "description": "Local bridge for LG Dev Manager: lets the web app at lg.scoty.uk (or its local copy) manage LG webOS TVs over SSH",
   "license": "Apache-2.0",
+  "author": "Scoty (https://github.com/Scoty)",
+  "homepage": "https://lg.scoty.uk",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Scoty/lg-dev-manager.git",
+    "directory": "apps/bridge"
+  },
+  "bugs": {
+    "url": "https://github.com/Scoty/lg-dev-manager/issues"
+  },
+  "keywords": [
+    "webos",
+    "lg",
+    "tv",
+    "homebrew",
+    "developer-mode",
+    "ssh",
+    "bridge"
+  ],
   "type": "module",
   "bin": {
     "lg-dev-manager-bridge": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "web",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
   ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch src/cli.ts --dev",
     "build": "tsup",
     "start": "node dist/cli.js",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepack": "node scripts/prepack.mjs"
   },
   "dependencies": {
     "ssh2": "^1.17.0",
@@ -33,8 +60,5 @@
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vitest": "^4.1.11"
-  },
-  "engines": {
-    "node": ">=22"
   }
 }
