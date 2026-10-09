@@ -139,7 +139,7 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [x] ⌘K command palette (pages + actions; devices once M3 lands)
 - [x] Bridge status indicator + pairing screen + "how to run the bridge" onboarding
 - [x] Version handshake (`system.hello` protocol check)
-- [ ] Update-available notice for the bridge
+- [x] Update-available notice for the bridge (the site knows the bridge released with it; an older bridge gets "how to update")
 
 ---
 

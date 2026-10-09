@@ -1,2 +1,2 @@
-// Replaced at build time is unnecessary; keep in sync with package.json via the release script.
+/** Must equal "version" in package.json (src/version.test.ts checks it). */
 export const BRIDGE_VERSION = '0.1.0';

@@ -40,7 +40,9 @@ for (const theme of ['light', 'dark'] as const) {
 
 test('pairs from the bridge page', async ({ page, errors }) => {
   await page.goto('/#/bridge');
-  await page.getByLabel('Pairing token').fill('e2e-token');
+  const token = page.getByLabel('Pairing token');
+  await expect(token).toHaveAttribute('type', 'password'); // never shown in screen shares unless asked
+  await token.fill('e2e-token');
   await page.getByRole('button', { name: 'Pair' }).click();
   await expect(page.getByText('Bridge connected')).toBeVisible();
   expect(errors).toEqual([]);
@@ -49,6 +51,29 @@ test('pairs from the bridge page', async ({ page, errors }) => {
 test('apps page explains what is missing without a TV', async ({ paired: page }) => {
   await page.goto('/#/apps/installed');
   await expect(page.getByRole('heading', { name: 'Add your TV' })).toBeVisible();
+});
+
+test.describe('with the sidebar as an icon rail', () => {
+  test.use({ viewport: { width: 900, height: 800 } });
+
+  test('opens a submenu only when asked, next to its icon', async ({ paired: page, errors }) => {
+    await page.goto('/#/debug/logs');
+    await expect(page.locator('h1')).toHaveText(/System\s*log/);
+    const debug = page.getByRole('button', { name: 'Debug' });
+    const menu = page.locator('.nav-item-group.is-open .nav-submenu');
+    await expect(menu).toHaveCount(0); // doesn't cover the page
+    await debug.click();
+    await expect(menu).toBeVisible();
+    const [btn, flyout] = [await debug.boundingBox(), await menu.boundingBox()];
+    expect(flyout!.x).toBeGreaterThan(btn!.x + btn!.width);
+    await menu.getByRole('link', { name: 'Crash reports' }).click();
+    await expect(page.locator('h1')).toHaveText(/Crash\s*reports/);
+    await expect(menu).toHaveCount(0); // closes after navigating
+    await debug.click();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
 });
 
 test.describe('on a phone', () => {

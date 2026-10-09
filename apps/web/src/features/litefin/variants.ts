@@ -12,10 +12,10 @@ export interface VariantInfo {
 }
 
 export const KNOWN_VARIANTS: Record<string, VariantInfo> = {
-  Modern: { label: 'Modern', target: 'High-end 2021+ TVs', webos: 'webOS 22+' },
-  Normal: { label: 'Normal', target: 'Most 2019+ TVs', webos: 'webOS 6+' },
-  Legacy: { label: 'Legacy', target: '2017–2018 TVs', webos: 'webOS 4–5' },
-  'Ultra-Legacy': { label: 'Ultra Legacy', target: 'Pre-2017 TVs', webos: 'webOS 1–3' },
+  Modern: { label: 'Modern', target: '2022 and newer TVs, the fastest', webos: 'webOS 22+' },
+  Normal: { label: 'Normal', target: '2021 and newer TVs', webos: 'webOS 6+' },
+  Legacy: { label: 'Legacy', target: '2018–2020 TVs', webos: 'webOS 4–5' },
+  'Ultra-Legacy': { label: 'Ultra Legacy', target: '2014–2017 TVs', webos: 'webOS 1–3' },
   'Ultra-Legacy-NoService': { label: 'Ultra Legacy, no service', target: 'Ultra Legacy without Litefin’s background service — if Ultra Legacy won’t start', webos: '' },
 };
 const ORDER = Object.keys(KNOWN_VARIANTS);

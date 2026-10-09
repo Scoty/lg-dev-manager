@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, REPO_URL } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
 import { PhoneNotice } from '../../shell/PhoneNotice';
+import { BridgeUpdateNotice } from '../../shell/BridgeUpdateNotice';
 import { Card } from '../../components/Card';
 import { Icon } from '../../shell/icons';
 import { useBridge } from '../../bridge/BridgeProvider';
@@ -32,9 +33,10 @@ function StatusAlert() {
 }
 
 export function BridgePage() {
-  const { settings, pair, forget } = useBridge();
+  const { settings, pair, forget, status } = useBridge();
   const [url, setUrl] = useState(settings?.url ?? defaultBridgeUrl());
   const [token, setToken] = useState(settings?.token ?? '');
+  const [showToken, setShowToken] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<BridgeError | null>(null);
 
@@ -63,6 +65,7 @@ export function BridgePage() {
       />
       {/* On the setup page the phone warning can't be dismissed: this is where people try to make it work. */}
       <PhoneNotice always />
+      <BridgeUpdateNotice always />
       <div className="grid">
         <Card eyebrow="Step 1" title="Run the bridge" className="col-6">
           <div className="stack">
@@ -83,7 +86,9 @@ pnpm dev:bridge`}</div>
               site. No pnpm? Run <span className="mono">corepack enable</span> once. (A one-line{' '}
               <span className="mono">npx lg-dev-manager-bridge</span> comes with the v1.0 release.)
             </p>
-            {!(DEFAULT_ALLOWED_ORIGINS as readonly string[]).includes(origin) &&
+            {/* Once connected the bridge evidently accepts this site. */}
+            {status.state !== 'connected' &&
+              !(DEFAULT_ALLOWED_ORIGINS as readonly string[]).includes(origin) &&
               !origin.endsWith(`:${DEFAULT_BRIDGE_PORT}`) && (
                 <Alert kind="warning">
                   This page is served from <span className="mono">{origin}</span>. Start the bridge with{' '}
@@ -103,16 +108,23 @@ pnpm dev:bridge`}</div>
             </div>
             <div className="field">
               <label className="field-label" htmlFor="bridge-token">Pairing token</label>
-              <input
-                id="bridge-token"
-                className="input mono"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="Printed by the bridge on startup"
-                autoComplete="off"
-                spellCheck={false}
-                required
-              />
+              {/* Hidden by default: the saved token is filled in here, and screens get shared and recorded. */}
+              <div className="input-group">
+                <input
+                  id="bridge-token"
+                  className="input mono"
+                  type={showToken ? 'text' : 'password'}
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="Printed by the bridge on startup"
+                  autoComplete="off"
+                  spellCheck={false}
+                  required
+                />
+                <button type="button" className="addon addon--btn" onClick={() => setShowToken((s) => !s)} aria-pressed={showToken}>
+                  {showToken ? 'Hide' : 'Show'}
+                </button>
+              </div>
             </div>
             {error && (
               <Alert kind="danger" title="Pairing failed">{error.message}</Alert>

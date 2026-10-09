@@ -1,3 +1,4 @@
+import { useMedia } from '../../lib/useMedia';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LogSource } from '@lgdm/protocol';
 import { Alert } from '../../components/Alert';
@@ -247,16 +248,7 @@ export function LogView({
 }
 
 function useNarrow(): boolean {
-  const query = '(max-width: 720px)';
-  const [narrow, setNarrow] = useState(() => typeof matchMedia === 'function' && matchMedia(query).matches);
-  useEffect(() => {
-    if (typeof matchMedia !== 'function') return;
-    const m = matchMedia(query);
-    const on = () => setNarrow(m.matches);
-    m.addEventListener('change', on);
-    return () => m.removeEventListener('change', on);
-  }, []);
-  return narrow;
+  return useMedia('(max-width: 720px)');
 }
 
 function LogDetails({ entry, onClose }: { entry: LogEntry; onClose: () => void }) {

@@ -965,5 +965,20 @@ button.log-row:hover { background: var(--bg-hover); }
 .litefin-help-list { margin: 0; padding-left: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 18px; }
 
 /* Phones and tablets: "use a computer" notice above the page. */
-.phone-notice { margin-bottom: 16px; }
-.phone-notice .alert { align-items: flex-start; }
+.phone-notice, .page-notice { margin-bottom: 16px; }
+.phone-notice .alert, .page-notice .alert { align-items: flex-start; }
+
+/* Toolbars wrap instead of squeezing the search box (e.g. the log pages next to a collapsed sidebar). */
+@media (min-width: 721px) {
+  .data-toolbar { flex-wrap: wrap; row-gap: 10px; }
+  .data-toolbar-left { min-width: max-content; }
+  .data-toolbar .input-icon { min-width: 180px; }
+  .data-toolbar-right { flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+}
+
+/* Narrow desktops: keep the bridge pill on one line; the breadcrumb gives way first. */
+.bridge-pill { white-space: nowrap; flex-shrink: 0; }
+.crumbs { min-width: 0; overflow: hidden; }
+@media (max-width: 860px) {
+  .crumbs > span:not(.current), .crumbs .sep { display: none; }
+}

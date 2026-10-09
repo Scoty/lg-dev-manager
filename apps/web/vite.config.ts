@@ -1,6 +1,9 @@
 /// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
+
+const version = (pkg: string) => (JSON.parse(readFileSync(new URL(pkg, import.meta.url), 'utf8')) as { version: string }).version;
 
 /**
  * Strict Content-Security-Policy for production builds: only this site's own code runs, and the page
@@ -34,6 +37,11 @@ function cspPlugin(): Plugin {
 export default defineConfig({
   base: './',
   plugins: [react(), cspPlugin()],
+  // This site's version, and the bridge released with it (a bridge older than that gets an update notice).
+  define: {
+    __WEB_VERSION__: JSON.stringify(version('./package.json')),
+    __BRIDGE_RELEASE__: JSON.stringify(version('../bridge/package.json')),
+  },
   server: { port: 5173, strictPort: true },
   build: { target: 'es2022', sourcemap: true },
   test: { environment: 'jsdom', globals: false, setupFiles: ['./src/test-setup.ts'], include: ['src/**/*.test.{ts,tsx}'] },
