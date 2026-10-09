@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import ssh2 from 'ssh2';
 import type { DeviceTarget, ResultOf } from '@lgdm/protocol';
 import { lunaCall, shellQuote } from '../ssh/luna.js';
-import type { SshPool } from '../ssh/pool.js';
+import type { SshRunner } from '../ssh/pool.js';
 
 // ssh2 is CommonJS: use the default export under native Node ESM.
 const { utils } = ssh2;
@@ -12,7 +12,7 @@ const omitEmpty = <T extends Record<string, unknown>>(o: T) =>
   Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
 
 /** Port of DeviceManagerService.getDeviceInfo (src/app/core/services/device-manager.service.ts). */
-export async function deviceInfo(pool: SshPool, device: DeviceTarget): Promise<ResultOf<'device.info'>> {
+export async function deviceInfo(pool: SshRunner, device: DeviceTarget): Promise<ResultOf<'device.info'>> {
   const systemInfo = await lunaCall(
     pool,
     device,
@@ -51,7 +51,7 @@ export async function deviceInfo(pool: SshPool, device: DeviceTarget): Promise<R
  * `df` of the developer partition (getStorageInfo in device-manager.service.ts). Parses every number after the
  * header so it copes with df wrapping long filesystem names onto their own line.
  */
-export async function storageInfo(pool: SshPool, device: DeviceTarget, mountPoint = '/media/developer') {
+export async function storageInfo(pool: SshRunner, device: DeviceTarget, mountPoint = '/media/developer') {
   const res = await pool.exec(device, `df ${shellQuote(mountPoint)}`, { timeoutMs: 15_000 });
   if (res.exitCode !== 0) return null;
   const lines = res.stdout.trim().split('\n').slice(1).join(' ');

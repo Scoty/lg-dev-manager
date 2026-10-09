@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { Footer } from './Footer';
 import { CommandPalette } from './CommandPalette';
+import { ConsoleDock } from '../console/ConsoleDock';
 
 export function Layout() {
   const [drawer, setDrawer] = useState(false);
@@ -44,6 +45,7 @@ export function Layout() {
           <Outlet />
         </main>
         <Footer />
+        <ConsoleDock />
       </div>
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
     </div>

@@ -1,6 +1,6 @@
 import { DeviceErrorCodes, LunaErrorCodes, type DeviceTarget } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
-import type { SshPool } from './pool.js';
+import type { SshRunner } from './pool.js';
 
 /** Single-quote a string for a POSIX shell (escapeSingleQuoteString in dev-manager-desktop). */
 export function shellQuote(value: string): string {
@@ -15,7 +15,7 @@ export function shellQuote(value: string): string {
  * `luna-send-pub -n 1 <uri> '<json>'`, exit 127 → unsupported, returnValue:false → typed errors.
  */
 export async function lunaCall(
-  pool: SshPool,
+  pool: SshRunner,
   device: DeviceTarget,
   uri: string,
   params: Record<string, unknown> = {},
@@ -61,7 +61,7 @@ export type SubscriptionStep<T> = undefined | { done: T };
  * `returnValue: false` messages fail the subscription unless `onMessage` handles them first.
  */
 export async function lunaSubscribe<T>(
-  pool: SshPool,
+  pool: SshRunner,
   device: DeviceTarget,
   uri: string,
   params: Record<string, unknown>,

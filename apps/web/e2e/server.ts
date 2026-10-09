@@ -1,6 +1,7 @@
 /**
  * Test rig for the Playwright suite (and for trying the UI by hand without a TV):
- *  - a Dev Mode mock TV on 127.0.0.1:9922 with its key server on :9991 (the wizard's fixed ports),
+ *  - a Dev Mode mock TV on 127.0.0.1:9922 with its key server on :9991 (the wizard's fixed ports) and webOS's
+ *    second-screen port :3000 (so the network scan finds it),
  *  - a rooted mock TV with Homebrew Channel on 127.0.0.1:2222 (user root, password "alpine"),
  *  - the bridge on 127.0.0.1:5299 serving the built web UI (apps/web/dist), pairing token "e2e-token".
  * Run with: pnpm --filter @lgdm/web e2e:server
@@ -22,7 +23,9 @@ export const E2E = {
 const here = dirname(fileURLToPath(import.meta.url));
 process.env.LGDM_STATE_DIR = mkdtempSync(join(tmpdir(), 'lgdm-e2e-'));
 
-const devTv = await startMockTv({ sshPort: 9922, keyServerPort: 9991, passphrase: E2E.passphrase });
+// The Dev Mode TV also answers on webOS's second-screen port (3000), so the network scan finds it at 127.0.0.1.
+process.env.LGDM_SCAN_EXTRA_HOSTS ??= '127.0.0.1';
+const devTv = await startMockTv({ sshPort: 9922, keyServerPort: 9991, passphrase: E2E.passphrase, ssapPort: 3000 });
 const rootTv = await startMockTv({ username: 'root', password: 'alpine', hbchannel: true, sshPort: E2E.rootedPort });
 const origins = [`http://127.0.0.1:${E2E.bridgePort}`, `http://localhost:${E2E.bridgePort}`];
 await startServer({

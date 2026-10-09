@@ -2,7 +2,7 @@ import type { SFTPWrapper } from 'ssh2';
 import { AppsErrorCodes, DeviceErrorCodes, type DeviceTarget } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
 import { shellQuote } from './luna.js';
-import type { SshPool } from './pool.js';
+import type { SshRunner } from './pool.js';
 
 /**
  * File transfer to and from the TV. Port of ares-cli-rs `common/connection/src/transfer.rs`:
@@ -13,6 +13,8 @@ const SFTP_CHUNK = 64 * 1024;
 const SFTP_IN_FLIGHT = 4;
 const STREAM_CHUNK = 64 * 1024;
 
+const fmtBytes = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
+
 const transferError = (message: string, detail?: string) => new RpcError(AppsErrorCodes.TransferFailed, message, detail);
 
 function sftpCall<T>(fn: (cb: (err: Error | null | undefined, v: T) => void) => void): Promise<T> {
@@ -20,7 +22,7 @@ function sftpCall<T>(fn: (cb: (err: Error | null | undefined, v: T) => void) => 
 }
 
 /** Make `dir` and every missing parent. As root also chmod it (mkdir_command in transfer.rs). */
-export async function mkdirp(pool: SshPool, device: DeviceTarget, dir: string, mode?: number): Promise<void> {
+export async function mkdirp(pool: SshRunner, device: DeviceTarget, dir: string, mode?: number): Promise<void> {
   const q = shellQuote(dir);
   const res = await pool.exec(device, `mkdir -p ${q}`, { timeoutMs: 20_000 });
   if (res.exitCode !== 0) throw transferError(`Could not create ${dir} on the TV.`, res.stderr.trim());
@@ -30,13 +32,13 @@ export async function mkdirp(pool: SshPool, device: DeviceTarget, dir: string, m
 }
 
 /** Remove a file. Missing files are not an error. */
-export async function rmFile(pool: SshPool, device: DeviceTarget, path: string): Promise<void> {
+export async function rmFile(pool: SshRunner, device: DeviceTarget, path: string): Promise<void> {
   const res = await pool.exec(device, `rm -f ${shellQuote(path)}`, { timeoutMs: 20_000 });
   if (res.exitCode !== 0) throw transferError(`Could not delete ${path} on the TV.`, res.stderr.trim());
 }
 
 /** sha256 of a file on the TV, or null if the TV has no `sha256sum` (the check is then skipped, like ares-install). */
-export async function sha256sum(pool: SshPool, device: DeviceTarget, path: string): Promise<string | null> {
+export async function sha256sum(pool: SshRunner, device: DeviceTarget, path: string): Promise<string | null> {
   const res = await pool.exec(device, `sha256sum ${shellQuote(path)}`, { timeoutMs: 120_000 });
   if (res.exitCode === 127) return null;
   if (res.exitCode !== 0) throw transferError(`Could not checksum ${path} on the TV.`, res.stderr.trim());
@@ -64,7 +66,7 @@ async function putSftp(sftp: SFTPWrapper, path: string, data: Buffer, onProgress
   }
 }
 
-async function putStream(pool: SshPool, device: DeviceTarget, path: string, data: Buffer, onProgress?: (sent: number) => void) {
+async function putStream(pool: SshRunner, device: DeviceTarget, path: string, data: Buffer, onProgress?: (sent: number) => void) {
   const ch = await pool.open(device, `cat > ${shellQuote(path)}`);
   const { stream } = ch;
   const errOut: Buffer[] = [];
@@ -87,7 +89,7 @@ async function putStream(pool: SshPool, device: DeviceTarget, path: string, data
 
 /** Write `data` to `path` on the TV, reporting bytes sent. */
 export async function putFile(
-  pool: SshPool,
+  pool: SshRunner,
   device: DeviceTarget,
   path: string,
   data: Buffer,
@@ -97,7 +99,7 @@ export async function putFile(
   try {
     if (sftp) {
       try {
-        await putSftp(sftp, path, data, onProgress);
+        await pool.traceOp(device, 'sftp', `sftp put ${path} (${fmtBytes(data.length)})`, () => putSftp(sftp, path, data, onProgress));
         return 'sftp';
       } catch (e) {
         throw transferError(`Could not write ${path} on the TV.`, (e as Error).message);
@@ -111,7 +113,7 @@ export async function putFile(
 }
 
 /** Read a whole (small) file from the TV. Fails with file_too_large past `maxBytes`. */
-export async function readFile(pool: SshPool, device: DeviceTarget, path: string, maxBytes: number): Promise<Buffer> {
+export async function readFile(pool: SshRunner, device: DeviceTarget, path: string, maxBytes: number): Promise<Buffer> {
   const tooLarge = () => new RpcError(AppsErrorCodes.FileTooLarge, `${path} is larger than ${maxBytes} bytes.`);
   const { sftp, release } = await pool.sftp(device);
   try {
@@ -120,9 +122,11 @@ export async function readFile(pool: SshPool, device: DeviceTarget, path: string
         throw new RpcError(DeviceErrorCodes.CommandFailed, `Could not read ${path} on the TV.`, e.message);
       });
       if (stats.size > maxBytes) throw tooLarge();
-      return await sftpCall<Buffer>((cb) => sftp.readFile(path, cb)).catch((e: Error) => {
-        throw new RpcError(DeviceErrorCodes.CommandFailed, `Could not read ${path} on the TV.`, e.message);
-      });
+      return await pool
+        .traceOp(device, 'sftp', `sftp get ${path}`, () => sftpCall<Buffer>((cb) => sftp.readFile(path, cb)))
+        .catch((e: Error) => {
+          throw new RpcError(DeviceErrorCodes.CommandFailed, `Could not read ${path} on the TV.`, e.message);
+        });
     }
   } finally {
     release();

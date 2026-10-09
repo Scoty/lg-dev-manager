@@ -142,6 +142,83 @@ export function runCommand(command: string, ctx: CommandContext): CommandResult 
       code: 0,
     };
   }
+  const typed = runTyped(command, ctx);
+  if (typed) return typed;
   const bin = command.split(/\s+/)[0];
   return { stdout: '', stderr: `sh: ${bin}: not found\n`, code: 127 };
+}
+
+/** Children of a directory in the fake filesystem. */
+function listDir(state: MockState, dir: string): string[] | null {
+  const d = posix.normalize(dir);
+  if (!state.dirs.has(d)) return null;
+  const prefix = d === '/' ? '/' : `${d}/`;
+  const names = new Set<string>();
+  for (const p of [...state.dirs, ...state.files.keys()]) {
+    if (p !== d && p.startsWith(prefix)) names.add(p.slice(prefix.length).split('/')[0]!);
+  }
+  return [...names].sort();
+}
+
+/**
+ * Everyday commands someone might type in the console (unquoted arguments), answered like busybox on webOS.
+ */
+function runTyped(command: string, ctx: CommandContext): CommandResult | null {
+  const { state } = ctx;
+  const args = command.trim().split(/\s+/).map(unquote);
+  const [bin, ...rest] = args;
+  const flags = rest.filter((a) => a.startsWith('-'));
+  const paths = rest.filter((a) => !a.startsWith('-'));
+  switch (bin) {
+    case 'uname':
+      return { stdout: flags.includes('-a') ? 'Linux mock-tv 5.4.96-mock #1 SMP PREEMPT Thu Jan 1 00:00:00 UTC 2026 armv7l GNU/Linux\n' : 'Linux\n', code: 0 };
+    case 'uptime':
+      return { stdout: ' 12:00:00 up 3 days,  4:05,  load average: 0.42, 0.37, 0.30\n', code: 0 };
+    case 'date':
+      return { stdout: `${new Date().toUTCString()}\n`, code: 0 };
+    case 'whoami':
+      return { stdout: `${state.username}\n`, code: 0 };
+    case 'id':
+      return { stdout: state.username === 'root' ? 'uid=0(root) gid=0(root)\n' : 'uid=1000(prisoner) gid=1000(prisoner)\n', code: 0 };
+    case 'hostname':
+      return { stdout: 'mock-tv\n', code: 0 };
+    case 'free':
+      return {
+        stdout:
+          '              total        used        free      shared  buff/cache   available\n' +
+          'Mem:        1530000      812000      201000       12000      517000      640000\n' +
+          'Swap:        262140       10240      251900\n',
+        code: 0,
+      };
+    case 'nyx-cmd':
+      return rest.join(' ') === 'OSInfo query webos_release' ? { stdout: '8.0.0\n', code: 0 } : { stdout: '', stderr: 'nyx-cmd: bad query\n', code: 1 };
+    case 'ls': {
+      const dir = paths[0] ?? (state.username === 'root' ? '/home/root' : '/media/developer');
+      const items = listDir(state, dir);
+      if (!items) return { stdout: '', stderr: `ls: ${dir}: No such file or directory\n`, code: 1 };
+      return { stdout: items.length ? `${items.join('\n')}\n` : '', code: 0 };
+    }
+    case 'cat': {
+      if (!paths[0]) return null;
+      const p = posix.normalize(paths[0]);
+      if (p === '/etc/os-release') {
+        return { stdout: 'ID=rdk\nNAME="webOS TV"\nVERSION="8.0.0"\nVERSION_ID=8.0.0\nPRETTY_NAME="webOS TV 8.0.0"\n', code: 0 };
+      }
+      const f = state.files.get(p);
+      return f ? { stdout: f, code: 0 } : { stdout: '', stderr: `cat: can't open '${p}': No such file or directory\n`, code: 1 };
+    }
+    case 'df': {
+      const { total, available } = state.diskKb;
+      const human = flags.includes('-h');
+      const f = (kb: number) => (human ? `${(kb / 1024 / 1024).toFixed(1)}G` : String(kb));
+      return {
+        stdout:
+          `Filesystem                Size      Used Available Use% Mounted on\n` +
+          `/dev/mapper/developer ${f(total)} ${f(total - available)} ${f(available)} ${Math.round(((total - available) / total) * 100)}% /media/developer\n`,
+        code: 0,
+      };
+    }
+    default:
+      return null;
+  }
 }

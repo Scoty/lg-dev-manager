@@ -3,6 +3,7 @@ import { addDevModeTv, addRootedTv, expect, ipkFile, test } from './fixtures';
 test.describe('Dev Mode TV', () => {
   test('wizard: port check, wrong passphrase, then success', async ({ paired: page, errors }) => {
     await page.goto('/#/devices/new');
+    await page.getByRole('radio', { name: /Developer Mode/ }).click();
     await page.getByRole('button', { name: 'Next' }).click();
     await expect(page.getByRole('button', { name: /Prepare an LG developer account/ })).toBeVisible();
     await page.getByRole('button', { name: 'Skip' }).click();

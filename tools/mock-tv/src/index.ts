@@ -31,6 +31,8 @@ export interface MockTvOptions {
   forwarding?: boolean;
   /** Apps present at start (default MOCK_APPS). */
   apps?: MockApp[];
+  /** Also listen on this port like webOS's second-screen service (3000), so network scans find the TV. */
+  ssapPort?: number;
 }
 
 export interface MockTv {
@@ -44,6 +46,8 @@ export interface MockTv {
   privateKey: string;
   /** Live state (apps, files, launches) for assertions. */
   state: MockState;
+  /** Port of the second-screen stand-in, if started. */
+  ssapPort?: number;
   /** Extra public keys (OpenSSH line) accepted for login, e.g. an app-generated key. */
   authorize(publicKeyLine: string): void;
   close(): Promise<void>;
@@ -166,6 +170,9 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
 
   const sshPort = await listen(ssh as never, opts.sshPort ?? 0);
   const keyServerPort = await listen(keySrv, opts.keyServerPort ?? 0);
+  // Second-screen stand-in: accepts TCP connections and closes them (only its being open matters).
+  const ssap: NetServer | null = opts.ssapPort === undefined ? null : createNetServer((s) => s.end());
+  const ssapPort = ssap ? await listen(ssap, opts.ssapPort!) : undefined;
 
   return {
     host,
@@ -176,6 +183,7 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
     passphrase,
     privateKey,
     state,
+    ssapPort,
     authorize(line: string) {
       const k = utils.parseKey(line);
       if (k instanceof Error) throw k;
@@ -183,6 +191,7 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
     },
     close: () => {
       for (const f of forwards) f.close();
+      ssap?.close();
       return Promise.all([
         new Promise<void>((r) => ssh.close(() => r())),
         new Promise<void>((r) => keySrv.close(() => r())),

@@ -1,8 +1,14 @@
 import { timingSafeEqual } from 'node:crypto';
 import { platform } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import {
+  CMD_LOG_EVENT,
+  CMD_OUTPUT_EVENT,
   ErrorCodes,
+  KEY_SERVER_PORT,
   OP_PROGRESS_EVENT,
+  type CmdLog,
+  type CmdOutput,
   PROTOCOL_VERSION,
   type MethodName,
   type OpProgress,
@@ -11,7 +17,9 @@ import {
 } from '@lgdm/protocol';
 import { RpcError } from './errors.js';
 import { BRIDGE_VERSION } from '../version.js';
-import type { SshPool } from '../ssh/pool.js';
+import type { Channel, SshPool } from '../ssh/pool.js';
+import { LoggedSsh } from '../ssh/logged.js';
+import { scanNetwork } from '../devices/scan.js';
 import { lunaCall } from '../ssh/luna.js';
 import { verifyKey } from '../devices/keys.js';
 import { fetchKey } from '../devices/keyserver.js';
@@ -26,6 +34,34 @@ export interface Session {
   emit(event: string, data?: unknown): void;
   /** Files this client has sent, held in memory until used or the connection closes. */
   uploads: UploadStore;
+  /** Console commands this client is running (cmd.stream), by opId. Closed when the connection closes. */
+  streams: Map<string, RunningCommand>;
+}
+
+/** A console command; `cancel` may arrive before its channel has finished opening. */
+export interface RunningCommand {
+  ch?: Channel;
+  cancelled: boolean;
+  cancel(): void;
+}
+
+/** The SSH pool as this client sees it: everything it runs shows up in its console (`cmd.log`). */
+const sshFor = (session: Session, ctx: Context, quiet = false) =>
+  new LoggedSsh(ctx.pool, (e: CmdLog) => session.emit(CMD_LOG_EVENT, e), quiet);
+
+/** Log a non-SSH step (the key server fetch) in the console. Output is never included. */
+async function traceHttp<T>(session: Session, target: string, command: string, fn: () => Promise<T>): Promise<T> {
+  const id = randomUUID();
+  const at = Date.now();
+  session.emit(CMD_LOG_EVENT, { id, phase: 'start', target, command, kind: 'http', at } satisfies CmdLog);
+  try {
+    const r = await fn();
+    session.emit(CMD_LOG_EVENT, { id, phase: 'end', target, command, kind: 'http', at: Date.now(), durationMs: Date.now() - at, exitCode: 0 } satisfies CmdLog);
+    return r;
+  } catch (e) {
+    session.emit(CMD_LOG_EVENT, { id, phase: 'end', target, command, kind: 'http', at: Date.now(), durationMs: Date.now() - at, error: (e as Error).message } satisfies CmdLog);
+    throw e;
+  }
 }
 
 /** Progress reporter for one operation, sent as `op.progress` events. */
@@ -69,45 +105,85 @@ export const handlers: HandlerMap = {
 
   'device.checkConnection': ({ host }) => checkConnection(host),
 
-  'device.fetchKey': async ({ host, passphrase }) => {
-    const privateKey = await fetchKey(host);
+  'device.scan': async (params) => ({ tvs: await scanNetwork({ timeoutMs: params?.timeoutMs }) }),
+
+  'device.fetchKey': async ({ host, passphrase }, session) => {
+    const privateKey = await traceHttp(session, `${host}:${KEY_SERVER_PORT}`, `GET http://${host}:${KEY_SERVER_PORT}/webos_rsa (Dev Mode key server)`, () =>
+      fetchKey(host),
+    );
     const { fingerprint } = verifyKey(privateKey, passphrase);
     return { privateKey, fingerprint };
   },
 
   'device.verifyKey': ({ privateKey, passphrase }) => verifyKey(privateKey, passphrase),
 
-  'device.test': async ({ device }, _s, { pool }) => {
+  'device.test': async ({ device }, session, ctx) => {
     const started = Date.now();
-    const res = await pool.exec(device, 'id -u', { timeoutMs: 20_000 });
+    const res = await sshFor(session, ctx).exec(device, 'id -u', { timeoutMs: 20_000 });
     return { latencyMs: Date.now() - started, root: res.stdout.trim() === '0' };
   },
 
-  'device.info': ({ device }, _s, { pool }) => deviceInfo(pool, device),
-  'device.storage': ({ device }, _s, { pool }) => storageInfo(pool, device),
+  'device.info': ({ device }, session, ctx) => deviceInfo(sshFor(session, ctx), device),
+  'device.storage': ({ device }, session, ctx) => storageInfo(sshFor(session, ctx), device),
   'device.generateKey': ({ comment }) => generateKey(comment),
 
   'device.disconnect': ({ device }, _s, { pool }) => ({ closed: pool.close(device) }),
 
-  'cmd.exec': ({ device, command, stdin, timeoutMs }, _s, { pool }) => pool.exec(device, command, { stdin, timeoutMs }),
+  'cmd.exec': ({ device, command, stdin, timeoutMs }, session, ctx) => sshFor(session, ctx).exec(device, command, { stdin, timeoutMs }),
 
-  'luna.call': ({ device, uri, params, public: pub, falseAsError }, _s, { pool }) =>
-    lunaCall(pool, device, uri, params ?? {}, pub ?? true, falseAsError ?? true),
+  'luna.call': ({ device, uri, params, public: pub, falseAsError }, session, ctx) =>
+    lunaCall(sshFor(session, ctx), device, uri, params ?? {}, pub ?? true, falseAsError ?? true),
 
-  'apps.list': async ({ device }, _s, { pool }) => ({ apps: await listApps(pool, device) }),
-  'apps.launch': async ({ device, id, params }, _s, { pool }) => {
-    await launchApp(pool, device, id, params);
+  'cmd.stream': async ({ device, command, opId }, session, { pool }) => {
+    if (session.streams.has(opId)) throw new RpcError(ErrorCodes.BadRequest, 'That operation id is already running.');
+    const run: RunningCommand = {
+      cancelled: false,
+      cancel() {
+        this.cancelled = true;
+        this.ch?.close();
+      },
+    };
+    // Registered before the channel opens, so a quick Stop isn't lost.
+    session.streams.set(opId, run);
+    try {
+      // Not logged as cmd.log: the console already shows the commands the user types, with live output.
+      const ch = await pool.open(device, command);
+      run.ch = ch;
+      const send = (stream: CmdOutput['stream']) => (c: Buffer) =>
+        session.emit(CMD_OUTPUT_EVENT, { opId, stream, data: c.toString('utf8') } satisfies CmdOutput);
+      ch.stream.on('data', send('stdout'));
+      ch.stream.stderr.on('data', send('stderr'));
+      const exit = new Promise<number | null>((resolve) => ch.stream.on('close', (code: number | null) => resolve(typeof code === 'number' ? code : null)));
+      if (run.cancelled) ch.close();
+      else ch.stream.end(); // no stdin: commands like `cat` finish instead of waiting
+      const exitCode = await exit;
+      return { exitCode: run.cancelled ? null : exitCode, cancelled: run.cancelled };
+    } finally {
+      session.streams.delete(opId);
+      run.ch?.close();
+    }
+  },
+  'cmd.cancel': ({ opId }, session) => {
+    const run = session.streams.get(opId);
+    if (!run) return { cancelled: false };
+    run.cancel();
+    return { cancelled: true };
+  },
+
+  'apps.list': async ({ device }, session, ctx) => ({ apps: await listApps(sshFor(session, ctx), device) }),
+  'apps.launch': async ({ device, id, params }, session, ctx) => {
+    await launchApp(sshFor(session, ctx), device, id, params);
     return {};
   },
-  'apps.icon': ({ device, path }, _s, { pool }) => appIcon(pool, device, path),
-  'apps.remove': async ({ device, id, opId }, session, { pool }) => {
-    await removeApp(pool, device, id, progressFor(session, opId));
+  'apps.icon': ({ device, path }, session, ctx) => appIcon(sshFor(session, ctx, true), device, path),
+  'apps.remove': async ({ device, id, opId }, session, ctx) => {
+    await removeApp(sshFor(session, ctx), device, id, progressFor(session, opId));
     return {};
   },
-  'apps.install': async ({ device, uploadId, opId }, session, { pool }) => {
+  'apps.install': async ({ device, uploadId, opId }, session, ctx) => {
     const { name, data, done } = session.uploads.take(uploadId);
     try {
-      return await installIpk(pool, device, name, data, progressFor(session, opId));
+      return await installIpk(sshFor(session, ctx), device, name, data, progressFor(session, opId));
     } finally {
       done();
     }

@@ -4,7 +4,7 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 (Tauri + Angular + Rust) with the look of [Adminator 2026](https://github.com/puikinsh/adminator-admin-dashboard),
 hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS).
 
-> **Status:** M3 (Devices + Apps) done — add-device wizard, device switcher, installed apps with launch / uninstall / IPK install.
+> **Status:** M3 (Devices + Apps) done — add-device wizard with network scan, device switcher, installed apps with launch / uninstall / IPK install, console panel.
 > Public preview deploys to lg.scoty.uk on every push to `main`. Next: M4 (Homebrew repository).
 
 ---
@@ -78,7 +78,9 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 
 ### Devices
 - [x] Device list, select active device (sidebar switcher + ⌘K)
-- [x] Add-device wizard: mode select (Dev Mode / rooted / manual), Dev Mode checklist, connection check (ports 22, 9922, 9991), verify (key → login → device info), “save anyway”
+- [x] Network scan for LG TVs (SSDP + /24 sweep of the webOS port 3000/3001), pick a TV to fill the address — `device.scan`
+- [x] “SSH is off” guidance: TV answers on its webOS port but not on 22 → turn on SSH in Homebrew Channel and restart the TV
+- [x] Add-device wizard: mode select (rooted — recommended and preselected — / Dev Mode / manual), Dev Mode checklist, connection check (ports 22, 9922, 9991), verify (key → login → device info), “save anyway”
 - [x] Bridge: port check (22, 9922, 9991) — `device.checkConnection`
 - [x] Bridge: fetch private key from the Dev Mode **key server** (9991) with passphrase check — `device.fetchKey`, `device.verifyKey`
 - [x] Bridge: test login (key or password) — `device.test`
@@ -119,6 +121,10 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [ ] Log reader (streaming), dmesg
 - [ ] Crash reports list + details
 - [ ] Luna-service (ls-monitor) traffic monitor + details
+
+### Console (not in the original)
+- [x] Console panel at the bottom: every SSH command, transfer and tunnel the bridge runs for this tab, live and past (`cmd.log`)
+- [x] “Send commands” checkbox: type commands for the active TV with streaming output, Stop, history (`cmd.stream` / `cmd.cancel`)
 
 ### App-level
 - [x] Light / dark / system theme (Adminator toggle)

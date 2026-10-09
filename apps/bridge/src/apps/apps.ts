@@ -10,7 +10,7 @@ import {
 } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
 import { lunaCall, lunaSubscribe, type SubscriptionStep } from '../ssh/luna.js';
-import type { SshPool } from '../ssh/pool.js';
+import type { SshRunner } from '../ssh/pool.js';
 import { serveToDevice } from '../ssh/serve.js';
 import { mkdirp, putFile, readFile, rmFile, sha256sum } from '../ssh/transfer.js';
 import { readIpkControl } from './ipk.js';
@@ -32,7 +32,7 @@ const ICON_TYPES: Record<string, string> = {
   '.bmp': 'image/bmp',
 };
 
-export async function listApps(pool: SshPool, device: DeviceTarget): Promise<AppInfo[]> {
+export async function listApps(pool: SshRunner, device: DeviceTarget): Promise<AppInfo[]> {
   const resp = await lunaCall(pool, device, 'luna://com.webos.applicationManager/dev/listApps').catch((e: RpcError) => {
     if (e.code === LunaErrorCodes.UnknownMethod) {
       return lunaCall(pool, device, 'luna://com.webos.applicationManager/listApps', {}, false);
@@ -46,11 +46,11 @@ export async function listApps(pool: SshPool, device: DeviceTarget): Promise<App
   });
 }
 
-export async function launchApp(pool: SshPool, device: DeviceTarget, id: string, params?: Record<string, unknown>) {
+export async function launchApp(pool: SshRunner, device: DeviceTarget, id: string, params?: Record<string, unknown>) {
   await lunaCall(pool, device, 'luna://com.webos.applicationManager/launch', { id, subscribe: false, params }, true);
 }
 
-export async function appIcon(pool: SshPool, device: DeviceTarget, path: string) {
+export async function appIcon(pool: SshRunner, device: DeviceTarget, path: string) {
   const mime = ICON_TYPES[posix.extname(path).toLowerCase()];
   if (!mime) throw new RpcError('bad_request', 'Only image files can be read as app icons.');
   const data = await readFile(pool, device, path, ICON_MAX_BYTES);
@@ -92,7 +92,7 @@ function percentOf(msg: Record<string, unknown>, state: string): number | undefi
   return m ? Math.min(100, Number(m[1])) : undefined;
 }
 
-export async function removeApp(pool: SshPool, device: DeviceTarget, id: string, progress?: Progress) {
+export async function removeApp(pool: SshRunner, device: DeviceTarget, id: string, progress?: Progress) {
   progress?.({ stage: 'remove', text: 'Removing…' });
   await lunaSubscribe(pool, device, 'luna://com.webos.appInstallService/dev/remove', { id, subscribe: true }, (msg) =>
     appinstalldStep(msg, /removed/i, AppsErrorCodes.RemoveFailed, (state) => progress?.({ stage: 'remove', text: state })),
@@ -102,14 +102,14 @@ export async function removeApp(pool: SshPool, device: DeviceTarget, id: string,
   });
 }
 
-async function hasHbChannel(pool: SshPool, device: DeviceTarget): Promise<boolean> {
+async function hasHbChannel(pool: SshRunner, device: DeviceTarget): Promise<boolean> {
   return lunaCall(pool, device, 'luna://org.webosbrew.hbchannel.service/getConfiguration', {})
     .then(() => true)
     .catch(() => false);
 }
 
 /** Copy the IPK to the developer partition and run appinstalld's dev install (tempDownloadIpk + devInstall). */
-async function devInstall(pool: SshPool, device: DeviceTarget, data: Buffer, sha256: string, progress?: Progress) {
+async function devInstall(pool: SshRunner, device: DeviceTarget, data: Buffer, sha256: string, progress?: Progress) {
   await mkdirp(pool, device, TEMP_IPK_DIR, 0o777);
   const path = `${TEMP_IPK_DIR}/devman_dl_${Date.now()}_${sha256.slice(0, 8)}.ipk`;
   try {
@@ -148,8 +148,20 @@ async function devInstall(pool: SshPool, device: DeviceTarget, data: Buffer, sha
 }
 
 /** Homebrew Channel install from a URL served over a reverse tunnel (hbChannelInstall + serveLocal). */
-async function hbInstall(pool: SshPool, device: DeviceTarget, name: string, data: Buffer, sha256: string, progress?: Progress) {
+async function hbInstall(pool: SshRunner, device: DeviceTarget, name: string, data: Buffer, sha256: string, progress?: Progress) {
   const served = await serveToDevice(pool, device, name, data);
+  return pool.traceOp(device, 'tunnel', `serve ${name} to the TV at ${served.url} (SSH reverse tunnel)`, () =>
+    hbInstallVia(pool, device, served, sha256, progress),
+  );
+}
+
+async function hbInstallVia(
+  pool: SshRunner,
+  device: DeviceTarget,
+  served: Awaited<ReturnType<typeof serveToDevice>>,
+  sha256: string,
+  progress?: Progress,
+) {
   try {
     progress?.({ stage: 'install', text: 'Homebrew Channel is installing…' });
     await lunaSubscribe(
@@ -191,7 +203,7 @@ async function hbInstall(pool: SshPool, device: DeviceTarget, name: string, data
  * Homebrew Channel path needs, falls back to the dev install.
  */
 export async function installIpk(
-  pool: SshPool,
+  pool: SshRunner,
   device: DeviceTarget,
   name: string,
   data: Buffer,

@@ -131,7 +131,7 @@ export function createState(opts: { username: string; hbchannel?: boolean; apps?
     hbchannel: opts.hbchannel ?? false,
     apps: [],
     files: new Map(),
-    dirs: new Set(['/', '/tmp', '/media', '/media/developer']),
+    dirs: new Set(['/', '/tmp', '/media', '/media/developer', '/home', '/home/root', '/etc']),
     launched: [],
     diskKb: { total: 1_843_200, available: 1_204_400 },
   };

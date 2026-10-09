@@ -1,13 +1,15 @@
 import { z } from 'zod';
 import { DeviceTarget } from './device';
 import { AppId, AppInfo, MAX_CHUNK_BYTES, MAX_UPLOAD_BYTES } from './apps';
+import { ScanResult } from './console';
 
 /**
  * Bumped when the wire contract changes in a way an older peer can't handle (including new methods the
  * UI depends on), so a stale bridge gets a clear "update" message instead of unknown_method errors.
  *  v2 — M3: device.info/storage/generateKey, apps.*, upload.*
+ *  v3 — device.scan, checkConnection.webos, cmd.stream/cmd.cancel, cmd.log events
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 const base64 = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/, 'Not base64');
 /** Absolute POSIX path without `..` segments. */
@@ -44,10 +46,21 @@ export const Methods = {
     result: z.object({ now: z.number() }),
   },
 
-  /** Which of the TV's SSH (22, 9922) and Dev Mode key server (9991) ports answer. */
+  /**
+   * Which of the TV's SSH (22, 9922) and Dev Mode key server (9991) ports answer, and whether it looks like a
+   * webOS TV at all (LG's second-screen port 3000/3001 — open even when SSH is off).
+   */
   'device.checkConnection': {
     params: z.object({ host: z.string().min(1).max(255) }),
-    result: z.object({ ssh22: z.boolean(), ssh9922: z.boolean(), keyServer: z.boolean() }),
+    result: z.object({ ssh22: z.boolean(), ssh9922: z.boolean(), keyServer: z.boolean(), webos: z.boolean() }),
+  },
+  /**
+   * Look for LG TVs on the local network: SSDP discovery plus a quick port sweep of this computer's /24
+   * networks. Reads nothing from the TVs beyond their public SSDP description.
+   */
+  'device.scan': {
+    params: z.object({ timeoutMs: z.number().int().min(500).max(15_000).optional() }).optional(),
+    result: z.object({ tvs: z.array(ScanResult) }),
   },
   /**
    * Fetch the Dev Mode private key from the TV's key server (port 9991) and check the passphrase
@@ -109,6 +122,19 @@ export const Methods = {
       timeoutMs: z.number().int().min(100).max(600_000).optional(),
     }),
     result: z.object({ stdout: z.string(), stderr: z.string(), exitCode: z.number().nullable() }),
+  },
+
+  /**
+   * Run a command typed by the user in the console, streaming its output as `cmd.output` events (same opId).
+   * Resolves when it exits; `cmd.cancel` closes it early.
+   */
+  'cmd.stream': {
+    params: z.object({ device: DeviceTarget, command: z.string().min(1).max(8192), opId: z.string().max(64) }),
+    result: z.object({ exitCode: z.number().nullable(), cancelled: z.boolean() }),
+  },
+  'cmd.cancel': {
+    params: z.object({ opId: z.string().max(64) }),
+    result: z.object({ cancelled: z.boolean() }),
   },
 
   /**

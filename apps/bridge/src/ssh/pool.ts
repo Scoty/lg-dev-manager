@@ -50,6 +50,22 @@ export interface ExecOptions {
   maxOutput?: number;
 }
 
+export type TraceKind = 'sftp' | 'tunnel' | 'http';
+
+/**
+ * What the SSH helpers need. `SshPool` is the shared implementation; `LoggedSsh` wraps it per client so the
+ * client's console sees every command.
+ */
+export interface SshRunner {
+  acquire(t: DeviceTarget): Promise<{ client: Client; release: () => void }>;
+  execRaw(t: DeviceTarget, command: string, opts?: ExecOptions): Promise<RawExecResult>;
+  exec(t: DeviceTarget, command: string, opts?: ExecOptions): Promise<ExecResult>;
+  open(t: DeviceTarget, command: string): Promise<Channel>;
+  sftp(t: DeviceTarget): Promise<{ sftp: SFTPWrapper | null; release: () => void }>;
+  /** Report a non-exec operation (file transfer, tunnel) around `fn`. */
+  traceOp<T>(t: DeviceTarget, kind: TraceKind, label: string, fn: () => Promise<T>): Promise<T>;
+}
+
 /** A running command whose output is consumed as it arrives (e.g. a luna subscription). */
 export interface Channel {
   stream: ClientChannel;
@@ -81,7 +97,7 @@ function mapConnectError(e: Error & { level?: string; code?: string }, t: Device
  * Keeps one SSH connection per device open for a while so repeated calls are fast.
  * Credentials live only in memory, inside the ssh2 client, for as long as the connection is pooled.
  */
-export class SshPool {
+export class SshPool implements SshRunner {
   private entries = new Map<string, Entry>();
 
   constructor(private readonly idleMs = IDLE_MS) {}
@@ -291,6 +307,10 @@ export class SshPool {
       });
     });
     return { sftp: await e.sftp, release };
+  }
+
+  traceOp<T>(_t: DeviceTarget, _kind: TraceKind, _label: string, fn: () => Promise<T>): Promise<T> {
+    return fn();
   }
 
   /** Close the pooled connection for one device, or all of them. Returns how many were closed. */

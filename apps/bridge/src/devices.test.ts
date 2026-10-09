@@ -74,8 +74,8 @@ describe('key verification', () => {
 
 describe('port check', () => {
   it('sees open and closed ports', async () => {
-    const res = await checkConnection(tv.host, { ssh22: 1, ssh9922: tv.sshPort, keyServer: tv.keyServerPort }, 2000);
-    expect(res).toEqual({ ssh22: false, ssh9922: true, keyServer: true });
+    const res = await checkConnection(tv.host, { ssh22: 1, ssh9922: tv.sshPort, keyServer: tv.keyServerPort, webos: [1] }, 2000);
+    expect(res).toEqual({ ssh22: false, ssh9922: true, keyServer: true, webos: false });
   });
 });
 

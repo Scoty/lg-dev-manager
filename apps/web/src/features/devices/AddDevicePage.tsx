@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { DeviceErrorCodes } from '@lgdm/protocol';
+import { DeviceErrorCodes, type ScanResult } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
 import { Alert } from '../../components/Alert';
 import { ErrorAlert, describeError } from '../../components/ErrorAlert';
@@ -10,7 +10,8 @@ import { useRpc } from '../../bridge/useRpc';
 import { addDevice, setActiveDeviceId } from '../../devices/store';
 import { useDevices } from '../../devices/useDevices';
 import { AuthFields } from './AuthFields';
-import { PortCheck, type PortResult } from './PortCheck';
+import { PortCheck, SshOffHint, type PortResult } from './PortCheck';
+import { ScanPanel, tvLabel } from './ScanPanel';
 import { STEP_LABELS, verifyDevice, type VerifyState, type VerifyStepId } from './verify';
 import { MODE_DEFAULTS, authProblems, emptyAuth, hostProblem, type AuthDraft, type AuthKind, type SetupMode } from './auth';
 
@@ -18,17 +19,17 @@ type Step = 'mode' | 'prepare' | 'details' | 'verify';
 
 const MODES: { id: SetupMode; icon: IconName; title: string; text: string; badge?: string }[] = [
   {
-    id: 'devmode',
-    icon: 'tv',
-    title: 'Developer Mode',
-    text: 'For any LG TV with the Developer Mode app. Uses SSH on port 9922 and the key from the app’s key server.',
+    id: 'rooted',
+    icon: 'shield',
+    title: 'Rooted (Homebrew Channel)',
+    text: 'For rooted TVs with Homebrew Channel’s SSH server turned on. Logs in as root on port 22 — full access, no session to renew.',
     badge: 'Recommended',
   },
   {
-    id: 'rooted',
-    icon: 'shield',
-    title: 'Rooted (Homebrew Channel SSH)',
-    text: 'For rooted TVs with Homebrew Channel’s SSH server turned on. Logs in as root on port 22.',
+    id: 'devmode',
+    icon: 'tv',
+    title: 'Developer Mode',
+    text: 'For TVs that aren’t rooted. Uses the Developer Mode app: SSH on port 9922 and the key from its key server.',
   },
   {
     id: 'manual',
@@ -100,16 +101,16 @@ export function AddDevicePage() {
   const names = useMemo(() => (devices ?? []).map((d) => d.name), [devices]);
 
   const [step, setStep] = useState<Step>('mode');
-  const [mode, setMode] = useState<SetupMode>('devmode');
+  const [mode, setMode] = useState<SetupMode>('rooted');
   const [prepared, setPrepared] = useState<boolean[]>(PREPARE.map(() => false));
   const [openPrepare, setOpenPrepare] = useState(0);
 
   const [name, setName] = useState('');
   const [host, setHost] = useState('');
-  const [port, setPort] = useState(MODE_DEFAULTS.devmode.port);
-  const [username, setUsername] = useState(MODE_DEFAULTS.devmode.username);
+  const [port, setPort] = useState(MODE_DEFAULTS.rooted.port);
+  const [username, setUsername] = useState(MODE_DEFAULTS.rooted.username);
   const [description, setDescription] = useState('');
-  const [auth, setAuth] = useState<AuthDraft>(emptyAuth('devkey'));
+  const [auth, setAuth] = useState<AuthDraft>(emptyAuth('password'));
   const [keyUsable, setKeyUsable] = useState(true);
   const [showErrors, setShowErrors] = useState(false);
 
@@ -140,6 +141,14 @@ export function AddDevicePage() {
   };
 
   const onKeyCheck = useCallback((usable: boolean) => setKeyUsable(usable), []);
+
+  /** A TV picked from the network scan: fill in its address (and name), and show its ports right away. */
+  const pickTv = (tv: ScanResult) => {
+    setHost(tv.host);
+    if (!name.trim() && (tv.name || tv.modelName)) setName(tvLabel(tv).slice(0, 64));
+    setPorts({ ssh22: tv.ports.ssh22, ssh9922: tv.ports.ssh9922, keyServer: tv.ports.keyServer, webos: tv.ports.webos });
+    setPortsFor(tv.host);
+  };
 
   const trimmedName = (name || suggestName(names)).trim();
   const nameProblem = !trimmedName
@@ -179,6 +188,8 @@ export function AddDevicePage() {
     try {
       const res = await verifyDevice(call, { host: host.trim(), port, username, auth }, setVerify);
       if (!res.error) await save(res);
+      // A refused login: check the ports to tell "SSH is off" apart from "wrong address".
+      else if (res.failedAt === 'login') checkPorts();
     } catch (e) {
       toast({ kind: 'danger', title: 'Could not save the TV', text: describeError(e).message });
     } finally {
@@ -207,6 +218,13 @@ export function AddDevicePage() {
     if (detailsValid) runVerify();
   };
 
+  // Root SSH refused, but the TV itself answers on its webOS port: Homebrew Channel's SSH server is off.
+  const loginUnreachable =
+    verify?.failedAt === 'login' &&
+    ([DeviceErrorCodes.Unreachable, DeviceErrorCodes.Timeout] as string[]).includes(describeError(verify.error).code);
+  const sshOff =
+    loginUnreachable && mode !== 'devmode' && port === 22 && portsFor === host.trim() && !!ports?.webos && !ports.ssh22 && !checking;
+
   const prev = () => {
     const i = steps.findIndex((s) => s.id === step);
     if (i > 0) setStep(steps[i - 1]!.id);
@@ -227,7 +245,7 @@ export function AddDevicePage() {
 
           {step === 'mode' && (
             <div className="wizard-body">
-              <p className="muted wizard-lead">If your TV isn’t rooted, or you’re not sure, choose Developer Mode.</p>
+              <p className="muted wizard-lead">If your TV is rooted with Homebrew Channel, choose Rooted. If it isn’t rooted, or you’re not sure, choose Developer Mode.</p>
               <div className="choice-grid" role="radiogroup" aria-label="Connection type">
                 {MODES.map((m) => (
                   <button
@@ -298,6 +316,7 @@ export function AddDevicePage() {
 
           {step === 'details' && (
             <form className="wizard-body" onSubmit={onDetailsSubmit} noValidate>
+              <ScanPanel selected={host.trim()} onPick={pickTv} />
               <div className="form-grid">
                 <div className="field">
                   <label className="field-label" htmlFor="dev-name">Name <span className="req">*</span></label>
@@ -429,9 +448,10 @@ export function AddDevicePage() {
                 <ErrorAlert
                   error={verify.error}
                   title={verify.failedAt === 'key' ? 'Couldn’t get the key from the TV' : verify.failedAt === 'login' ? 'Couldn’t log in' : 'Logged in, but couldn’t read the TV’s details'}
-                  hint={<VerifyHint error={verify.error} step={verify.failedAt} mode={mode} />}
+                  hint={sshOff ? null : <VerifyHint error={verify.error} step={verify.failedAt} mode={mode} />}
                 />
               )}
+              {sshOff && <SshOffHint />}
 
               {saved && !verify.info && (
                 <Alert kind="success" title={`${trimmedName} was saved`}>Saved in this browser and set as the active TV.</Alert>

@@ -46,6 +46,7 @@ export function startServer(config: BridgeConfig, pool = new SshPool()): Promise
         if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ event, data }));
       },
       uploads: new UploadStore(),
+      streams: new Map(),
     };
     // Unpaired sockets get a short window to authenticate.
     const authTimer = setTimeout(() => {
@@ -63,6 +64,8 @@ export function startServer(config: BridgeConfig, pool = new SshPool()): Promise
     ws.on('close', () => {
       clearTimeout(authTimer);
       session.uploads.clear();
+      for (const run of session.streams.values()) run.cancel();
+      session.streams.clear();
     });
   });
 

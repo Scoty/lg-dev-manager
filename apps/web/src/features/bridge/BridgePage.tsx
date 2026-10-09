@@ -68,6 +68,10 @@ export function BridgePage() {
               <div className="codeblock">npx lg-dev-manager-bridge</div>
             </div>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+              On macOS, the first time the bridge looks for or connects to your TV, the system asks whether your terminal app may
+              find devices on your local network — choose <strong>Allow</strong>.
+            </p>
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
               The bridge prints a <strong>pairing token</strong> when it starts. Publishing to npm happens at release;
               until then run it from the repo with <span className="mono">pnpm dev:bridge</span>.
             </p>

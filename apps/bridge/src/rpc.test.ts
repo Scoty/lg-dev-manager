@@ -148,3 +148,62 @@ describe('upload budget', () => {
     expect(() => b.take(id2)).toThrow(expect.objectContaining({ code: 'upload_not_found' }));
   });
 });
+
+describe('console: cmd.log and cmd.stream', () => {
+  const dev = () => device('S3cr3t-pa55');
+  const events = (from: number, name: string) =>
+    frames.slice(from).map((f) => JSON.parse(f)).filter((m) => m.event === name).map((m) => m.data);
+
+  it('reports every SSH command a call runs, without credentials', async () => {
+    const before = frames.length;
+    await call('apps.list', { device: dev() });
+    const logs = events(before, 'cmd.log');
+    expect(logs.map((l) => l.phase)).toEqual(['start', 'end']);
+    expect(logs[0]).toMatchObject({ kind: 'exec', target: `root@${tv.host}:${tv.sshPort}` });
+    expect(logs[0].command).toContain('luna://com.webos.applicationManager/dev/listApps');
+    expect(logs[1]).toMatchObject({ exitCode: 0 });
+    expect(logs[1].output).toContain('com.example.hello');
+    expect(JSON.stringify(logs)).not.toContain('S3cr3t-pa55');
+  });
+
+  it('marks icon reads as quiet', async () => {
+    const before = frames.length;
+    await call('apps.icon', { device: dev(), path: '/media/developer/apps/usr/palm/applications/com.example.hello/icon.png' });
+    const logs = events(before, 'cmd.log');
+    expect(logs.length).toBeGreaterThan(0);
+    expect(logs.every((l) => l.quiet === true)).toBe(true);
+  });
+
+  it('streams a typed command and its output', async () => {
+    const before = frames.length;
+    const res = await call('cmd.stream', { device: dev(), command: 'uname -a', opId: 'c1' });
+    expect(res.result).toEqual({ exitCode: 0, cancelled: false });
+    const out = events(before, 'cmd.output');
+    expect(out.map((o) => o.data).join('')).toContain('Linux mock-tv');
+    expect(out.every((o) => o.opId === 'c1' && o.stream === 'stdout')).toBe(true);
+    expect(events(before, 'cmd.log')).toEqual([]); // typed commands aren't duplicated in the log
+  });
+
+  it('reports failing commands and stderr', async () => {
+    const before = frames.length;
+    const res = await call('cmd.stream', { device: dev(), command: 'nosuchcommand', opId: 'c2' });
+    expect(res.result.exitCode).toBe(127);
+    expect(events(before, 'cmd.output')).toEqual([{ opId: 'c2', stream: 'stderr', data: 'sh: nosuchcommand: not found\n' }]);
+  });
+
+  it('cancels a long-running command', async () => {
+    const running = call('cmd.stream', { device: dev(), command: 'sleep 1000', opId: 'c3' });
+    await new Promise((r) => setTimeout(r, 300));
+    expect((await call('cmd.cancel', { opId: 'c3' })).result).toEqual({ cancelled: true });
+    expect((await running).result).toMatchObject({ cancelled: true });
+    expect((await call('cmd.cancel', { opId: 'c3' })).result).toEqual({ cancelled: false });
+  });
+});
+
+describe('console: early cancel', () => {
+  it('honours a cancel sent before the channel is open', async () => {
+    const running = call('cmd.stream', { device: device('S3cr3t-pa55'), command: 'sleep 1000', opId: 'c9' });
+    expect((await call('cmd.cancel', { opId: 'c9' })).result).toEqual({ cancelled: true });
+    expect((await running).result).toEqual({ exitCode: null, cancelled: true });
+  });
+});

@@ -1,7 +1,7 @@
 import type { ClientChannel, TcpConnectionDetails } from 'ssh2';
 import { AppsErrorCodes, type DeviceTarget } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
-import type { SshPool } from './pool.js';
+import type { SshRunner } from './pool.js';
 
 export interface Served {
   /** URL that works from the TV itself, e.g. http://127.0.0.1:41234/app.ipk */
@@ -19,7 +19,7 @@ const HEADER_LIMIT = 16 * 1024;
  * in dev-manager-desktop. Only answers GET/HEAD for the file's path.
  */
 export async function serveToDevice(
-  pool: SshPool,
+  pool: SshRunner,
   device: DeviceTarget,
   name: string,
   data: Buffer,
