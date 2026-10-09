@@ -48,8 +48,6 @@ const describeRun = (cmd: string, r: { exitCode: number | null; stdout: string; 
 /**
  * One-shot luna call over SSH. Port of RemoteLunaService.call (src/app/core/services/remote-luna.service.ts):
  * `luna-send-pub -n 1 <uri> '<json>'`, exit 127 → unsupported, returnValue:false → typed errors.
- * On rooted TVs, if luna-send-pub gives no usable answer, retries with `luna-send` (the private bus, which
- * Homebrew Channel itself uses as root).
  */
 export async function lunaCall(
   pool: SshRunner,
@@ -59,22 +57,14 @@ export async function lunaCall(
   pub = true,
   falseAsError = true,
 ): Promise<Record<string, unknown>> {
-  const run = (cmd: string) => pool.exec(device, `${cmd} -n 1 ${uri} ${shellQuote(JSON.stringify(params))}`, { timeoutMs: 60_000 });
-  let cmd = pub ? 'luna-send-pub' : 'luna-send';
-  let res = await run(cmd);
-  let typed = parseLunaOutput(res.stdout);
-  const runs = [describeRun(cmd, res)];
-  if (!typed && pub && device.username === 'root') {
-    cmd = 'luna-send';
-    res = await run(cmd);
-    typed = parseLunaOutput(res.stdout);
-    runs.push(describeRun(cmd, res));
+  const cmd = pub ? 'luna-send-pub' : 'luna-send';
+  const res = await pool.exec(device, `${cmd} -n 1 ${uri} ${shellQuote(JSON.stringify(params))}`, { timeoutMs: 60_000 });
+  if (res.exitCode === 127) {
+    throw new RpcError(LunaErrorCodes.Unsupported, `Failed to find command ${cmd}. Is this really a webOS device?`, describeRun(cmd, res));
   }
-  if (!typed && res.exitCode === 127) {
-    throw new RpcError(LunaErrorCodes.Unsupported, `Failed to find command ${cmd}. Is this really a webOS device?`, runs.join('\n\n'));
-  }
+  const typed = parseLunaOutput(res.stdout);
   if (!typed) {
-    throw new RpcError(LunaErrorCodes.BadResponse, `Unexpected response from ${uri}.`, runs.join('\n\n'));
+    throw new RpcError(LunaErrorCodes.BadResponse, `Unexpected response from ${uri}.`, describeRun(cmd, res));
   }
   if (typed.returnValue === false) {
     const err = lunaFailure(uri, typed);
@@ -111,26 +101,6 @@ export async function lunaSubscribe<T>(
   onMessage: (msg: Record<string, unknown>) => SubscriptionStep<T>,
   opts: { public?: boolean; timeoutMs?: number } = {},
 ): Promise<T> {
-  try {
-    return await subscribeOnce(pool, device, uri, params, onMessage, opts);
-  } catch (e) {
-    // Same quirk as lunaCall: on a rooted TV whose luna-send-pub says nothing at all, use luna-send.
-    const silent = e instanceof RpcError && e.code === LunaErrorCodes.BadResponse && (e as RpcError & { silent?: boolean }).silent;
-    if (silent && opts.public !== false && device.username === 'root') {
-      return subscribeOnce(pool, device, uri, params, onMessage, { ...opts, public: false });
-    }
-    throw e;
-  }
-}
-
-async function subscribeOnce<T>(
-  pool: SshRunner,
-  device: DeviceTarget,
-  uri: string,
-  params: Record<string, unknown>,
-  onMessage: (msg: Record<string, unknown>) => SubscriptionStep<T>,
-  opts: { public?: boolean; timeoutMs?: number },
-): Promise<T> {
   const cmd = opts.public === false ? 'luna-send' : 'luna-send-pub';
   const ch = await pool.open(device, `${cmd} -i ${uri} ${shellQuote(JSON.stringify(params))}`);
   const { stream } = ch;
@@ -139,7 +109,6 @@ async function subscribeOnce<T>(
       let buf = '';
       let stderr = '';
       let settled = false;
-      let gotMessage = false;
       const finish = (fn: () => void) => {
         if (settled) return;
         settled = true;
@@ -160,7 +129,6 @@ async function subscribeOnce<T>(
           const line = buf.slice(0, nl).trim();
           buf = buf.slice(nl + 1);
           if (!line) continue;
-          gotMessage = true;
           let msg: Record<string, unknown>;
           try {
             msg = JSON.parse(line);
@@ -181,15 +149,9 @@ async function subscribeOnce<T>(
         if (code === 127) {
           finish(() => reject(new RpcError(LunaErrorCodes.Unsupported, `Failed to find command ${cmd}. Is this really a webOS device?`)));
         }
-        finish(() => {
-          const err = new RpcError(
-            LunaErrorCodes.BadResponse,
-            `${uri} ended without a result.`,
-            describeRun(cmd, { exitCode: code, stdout: buf, stderr }),
-          ) as RpcError & { silent?: boolean };
-          err.silent = !gotMessage && !buf.trim() && !stderr.trim();
-          reject(err);
-        });
+        finish(() =>
+          reject(new RpcError(LunaErrorCodes.BadResponse, `${uri} ended without a result.`, describeRun(cmd, { exitCode: code, stdout: buf, stderr }))),
+        );
       });
     });
   } finally {

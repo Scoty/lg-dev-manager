@@ -154,8 +154,8 @@ export const handlers: HandlerMap = {
       ch.stream.on('data', send('stdout'));
       ch.stream.stderr.on('data', send('stderr'));
       const exit = new Promise<number | null>((resolve) => ch.stream.on('close', (code: number | null) => resolve(typeof code === 'number' ? code : null)));
+      // stdin stays open (luna-send quits on EOF); a command that waits for input runs until Stop.
       if (run.cancelled) ch.close();
-      else ch.stream.end(); // no stdin: commands like `cat` finish instead of waiting
       const exitCode = await exit;
       return { exitCode: run.cancelled ? null : exitCode, cancelled: run.cancelled };
     } finally {

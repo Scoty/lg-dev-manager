@@ -249,8 +249,9 @@ export class SshPool implements SshRunner {
             }
             resolve({ stdout: Buffer.concat(out), stderr: Buffer.concat(errOut), exitCode: typeof code === 'number' ? code : null });
           });
+          // Only close stdin when we have input to send (like dev-manager-desktop's execute_command). Some
+          // commands watch stdin and quit on EOF — luna-send exits silently before the TV has answered.
           if (opts.stdin !== undefined) stream.end(opts.stdin);
-          else stream.end();
         });
       });
     } finally {

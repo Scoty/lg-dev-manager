@@ -26,8 +26,7 @@ process.env.LGDM_STATE_DIR = mkdtempSync(join(tmpdir(), 'lgdm-e2e-'));
 // The Dev Mode TV also answers on webOS's second-screen port (3000), so the network scan finds it at 127.0.0.1.
 process.env.LGDM_SCAN_EXTRA_HOSTS ??= '127.0.0.1';
 const devTv = await startMockTv({ sshPort: 9922, keyServerPort: 9991, passphrase: E2E.passphrase, ssapPort: 3000 });
-// Like a real rooted TV we've seen: luna-send-pub prints nothing, so the bridge must fall back to luna-send.
-const rootTv = await startMockTv({ username: 'root', password: 'alpine', hbchannel: true, sshPort: E2E.rootedPort, lunaPubSilent: true });
+const rootTv = await startMockTv({ username: 'root', password: 'alpine', hbchannel: true, sshPort: E2E.rootedPort });
 const origins = [`http://127.0.0.1:${E2E.bridgePort}`, `http://localhost:${E2E.bridgePort}`];
 await startServer({
   host: '127.0.0.1',

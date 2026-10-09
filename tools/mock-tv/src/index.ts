@@ -3,7 +3,7 @@ import { createServer as createHttpServer, type Server as HttpServer } from 'nod
 import { createServer as createNetServer, type AddressInfo, type Server as NetServer } from 'node:net';
 import ssh2 from 'ssh2';
 import { WebSocketServer } from 'ws';
-import { isSubscription, runCommand, runSubscription } from './shell.js';
+import { isLunaOnce, isSubscription, readsStdin, runCommand, runSubscription } from './shell.js';
 import { serveSftp } from './sftp.js';
 import { createState, type MockApp, type MockState } from './state.js';
 
@@ -34,8 +34,6 @@ export interface MockTvOptions {
   apps?: MockApp[];
   /** Also listen on this port like webOS's second-screen service (3000), so network scans find the TV. */
   ssapPort?: number;
-  /** luna-send-pub prints nothing and exits 0, like on one real rooted TV; luna-send still answers. */
-  lunaPubSilent?: boolean;
 }
 
 export interface MockTv {
@@ -73,7 +71,6 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
   const username = opts.username ?? 'prisoner';
   const passphrase = opts.passphrase ?? 'A1B2C3';
   const state = createState({ username, hbchannel: opts.hbchannel, apps: opts.apps });
-  state.lunaPubSilent = opts.lunaPubSilent;
   const hostKey = pem().privateKey;
   // Dev Mode keys are passphrase-protected traditional PEM ("Proc-Type: 4,ENCRYPTED").
   const { privateKey } = pem('aes-128-cbc', passphrase);
@@ -145,16 +142,38 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
             });
             return;
           }
-          const stdin: Buffer[] = [];
-          stream.on('data', (c: Buffer) => stdin.push(c));
-          stream.on('end', () => {
-            const res = runCommand(info.command, { state, stdin: Buffer.concat(stdin) });
-            if (res.code === -1) return; // hang
+          const finish = (res: { stdout: string | Buffer; stderr?: string; code: number }) => {
+            if (res.code === -1 || !stream.writable) return; // hang, or already closed
             if (res.stdout.length) stream.write(res.stdout);
             if (res.stderr) stream.stderr.write(res.stderr);
             stream.exit(res.code);
             stream.end();
-          });
+          };
+          const stdin: Buffer[] = [];
+          stream.on('data', (c: Buffer) => stdin.push(c));
+          if (readsStdin(info.command)) {
+            // `cat`, `cat > file`: run once the client has sent everything (EOF).
+            stream.on('end', () => finish(runCommand(info.command, { state, stdin: Buffer.concat(stdin) })));
+          } else if (isLunaOnce(info.command)) {
+            // Like the real luna-send: it watches stdin and quits — silently, exit 0 — if stdin closes before the
+            // reply arrives. (A bridge that sends EOF right away gets nothing back.)
+            let quit = false;
+            stream.on('end', () => {
+              if (!quit) {
+                quit = true;
+                finish({ stdout: '', code: 0 });
+              }
+            });
+            setTimeout(() => {
+              if (!quit) {
+                quit = true;
+                finish(runCommand(info.command, { state, stdin: Buffer.alloc(0) }));
+              }
+            }, 15);
+          } else {
+            // Everything else doesn't read stdin: run now, like a real shell.
+            setImmediate(() => finish(runCommand(info.command, { state, stdin: Buffer.alloc(0) })));
+          }
         });
       });
     });

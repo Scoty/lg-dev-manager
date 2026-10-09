@@ -56,6 +56,16 @@ function parseLuna(cmd: string, rest: string, state: MockState): { params: Recor
   }
 }
 
+/** One-shot `luna-send(-pub) -n 1`. */
+export function isLunaOnce(command: string): boolean {
+  return LUNA_ONCE.test(command);
+}
+
+/** Commands that read stdin until EOF before doing anything. */
+export function readsStdin(command: string): boolean {
+  return command === 'cat' || command.startsWith("cat > '");
+}
+
 /** True if the command is a luna subscription, which must start before stdin closes. */
 export function isSubscription(command: string): boolean {
   return LUNA_SUB.test(command);
@@ -72,7 +82,6 @@ export async function runSubscription(
   signal: AbortSignal,
 ): Promise<CommandResult> {
   const [, cmd, uri, rest] = LUNA_SUB.exec(command)!;
-  if (cmd === 'luna-send-pub' && state.lunaPubSilent) return { stdout: '', code: 0 };
   const parsed = parseLuna(cmd!, rest!, state);
   if (!('params' in parsed)) return parsed;
   const sub = SUBSCRIPTIONS[uri!];
@@ -95,8 +104,7 @@ export function runCommand(command: string, ctx: CommandContext): CommandResult 
   const luna = LUNA_ONCE.exec(command);
   if (luna) {
     const [, cmd, uri, rest] = luna;
-    if (cmd === 'luna-send-pub' && state.lunaPubSilent) return { stdout: '', code: 0 };
-    const parsed = parseLuna(cmd!, rest!, state);
+      const parsed = parseLuna(cmd!, rest!, state);
     if (!('params' in parsed)) return parsed;
     return { stdout: `${JSON.stringify(handleLuna(uri!, parsed.params, state))}\n`, code: 0 };
   }
