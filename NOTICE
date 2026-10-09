@@ -1,0 +1,15 @@
+LG Dev Manager (web)
+
+This project is a re-implementation inspired by and porting behaviour from:
+
+  Device/DevMode Manager for webOS TV (dev-manager-desktop)
+  https://github.com/webosbrew/dev-manager-desktop
+  Copyright webOS Homebrew Team
+  Licensed under the Apache License, Version 2.0
+
+Its visual design is based on:
+
+  Adminator Admin Dashboard
+  https://github.com/puikinsh/adminator-admin-dashboard
+  Copyright (c) 2018 Aigars Silkalns
+  Licensed under the MIT License
