@@ -116,7 +116,8 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 | v1 scope | **Full parity** with the desktop app (all of PLAN.md §3, incl. Debug tools) before the public release | Decided |
 | Device/key storage | **Browser only** (IndexedDB + export/import); bridge is stateless and never writes device details to disk | Decided (owner, Oct 2026) |
 | Repo license | Apache-2.0 (proposed) | Default |
-| Hosting | GitHub Pages with custom domain **lg.scoty.uk** (Cloudflare DNS), public preview from now, v1.0 at M8 | Decided |
+| Hosting | GitHub Pages with custom domain **lg.scoty.uk** (Cloudflare DNS), public preview from now, v1.0 at M10 | Decided |
 | Repository | **github.com/Scoty/lg-dev-manager** | Decided |
 | Test devices | Owner tests on both Dev Mode (SSH 9922) and rooted (SSH 22) TVs | Decided |
+| Milestone order | M8 Litefin repo (all webOS variants of the last 5 releases), M9 phone research, M10 ship (owner, Oct 2026) | Decided |
 | Homebrew repo access | The **bridge** fetches repo.webosbrew.org (index, descriptions, icons, IPKs) so the site's CSP needs no new hosts; descriptions are rendered from an allow-list, never as raw HTML | Decided (M4) |

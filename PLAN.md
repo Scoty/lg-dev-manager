@@ -5,7 +5,7 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS).
 
 > **Status:** M7 (Debug tools) done — system log, log levels (PmLog), kernel log, crash reports and the luna bus monitor. All of §3 is in place.
-> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M8 (Ship).
+> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M8 (Litefin repo), then M9 (phones), then M10 (Ship).
 
 ---
 
@@ -183,9 +183,11 @@ lg-dev-manager/
 | M5 ✅ | Files + Terminal | SFTP browser with upload/download; xterm PTY. |
 | M6 ✅ | Info + Dev Mode renew + screenshot | TV details, session countdown + renew, screenshots. |
 | M7 ✅ | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
-| M8 | Ship | Bridge published to npm (`npx lg-dev-manager-bridge`), README with screenshots, "preview" label removed. |
+| M8 | Litefin repo | **Apps → Litefin repo**: the last 5 Litefin releases from GitHub, every webOS variant installable straight from the page (see §8). |
+| M9 | Phones (research) | Find out how the site could be used from a phone without Node/npx — options, trade-offs, a recommendation for the owner to pick (see §9). No code until a choice is made. |
+| M10 | Ship | Bridge published to npm (`npx lg-dev-manager-bridge`), README with screenshots, "preview" label removed. |
 
-Scope is **full parity before release** (v1.0 at M8). The site at **lg.scoty.uk** is already public as a *preview*:
+Scope is **full parity before release** (v1.0 at M10). The site at **lg.scoty.uk** is already public as a *preview*:
 every push to `main` deploys it, and it shows which features are still to come.
 
 **Browsers:** lg.scoty.uk talking to the bridge on the same computer (`ws://127.0.0.1`) works in Chrome, Edge and Firefox. Where a browser blocks that, open the bridge-served copy at `http://localhost:5199` instead.
@@ -211,3 +213,71 @@ every push to `main` deploys it, and it shows which features are still to come.
 ## 7. Decisions
 
 Recorded in the AGENTS.md "Decisions" table.
+
+---
+
+## 8. M8 — Litefin repo
+
+**Why.** [Litefin](https://github.com/MoazSalem/litefin) (a lightweight Jellyfin client) publishes several webOS builds per
+release — `Litefin-<version>-webOS-Modern.ipk`, `…-Normal.ipk`, `…-Legacy.ipk`, `…-Ultra-Legacy-NoService.ipk` — but the
+Homebrew repository can only carry one (the current Normal build). Older TVs need Legacy / Ultra Legacy, newer ones run
+Modern best, and sometimes an older version is wanted.
+
+**What.**
+- New sidebar entry **Apps → Litefin repo** (`/apps/litefin`), next to Installed and Homebrew repo.
+- The **last 5 releases**, newest first, from `https://github.com/MoazSalem/litefin/releases` — published releases only
+  (no drafts, no pre-releases).
+- One row per release (version, date, release notes link), one **column per variant**: Modern · Normal · Legacy ·
+  Ultra Legacy (other webOS variants that show up, e.g. `-NoService`, get their own column or a note; Tizen `.wgt` files
+  are ignored). A cell is empty when that release has no such build.
+- Each cell: **Install** straight onto the active TV (no download to the computer first), plus the file size. The bridge
+  downloads the IPK and installs it the same way as Homebrew repo installs (Dev Mode installer, or Homebrew Channel on
+  rooted TVs), with the same progress dialog.
+- Variant help from the release notes: Modern — webOS 22+ (2021+ sets); Normal — webOS 6+ (2019+), *try this first*;
+  Legacy — webOS 3+ (2017/2018); Ultra Legacy — webOS 1/2 (pre-2017). The TV's own webOS version (known from
+  `device.info`) highlights the suggested column.
+- Shows which Litefin version is installed on the TV (`apps.list`), and marks that version as installed. All variants share
+  one app id, so installing another variant replaces the current one — the UI says so before installing.
+
+**How (bridge, keeping the security rules).**
+- New RPCs `litefin.list` and `litefin.install` (or `apps.installFromUrl` restricted to this source). The bridge fetches
+  `api.github.com/repos/MoazSalem/litefin/releases` itself — the site's CSP needs no new hosts, and the browser never
+  sends the bridge an arbitrary URL: the bridge only downloads asset URLs it got from that API, and only from
+  `github.com/MoazSalem/litefin/releases/download/…` (following GitHub's redirect to its release-asset host).
+- Cache the release list in memory for ~10 minutes (GitHub allows 60 unauthenticated API calls per hour per IP).
+- Verify each download against the asset's `digest` (sha256) when GitHub provides one, and check it is an IPK
+  (`ar` archive with a `control.tar.gz`) before installing — same checks as Homebrew repo installs.
+- Mock: a fake GitHub releases API in `tools/mock-tv` (`LGDM_LITEFIN_URL`), with pre-releases, drafts, missing variants,
+  a bad checksum and more than 5 releases, so the filtering is tested.
+- Tests: bridge integration tests (filtering, variant parsing, checksum, install) and a Playwright test of the page.
+
+**To decide while building.** Whether to make the source configurable (other GitHub projects with several builds) —
+default: Litefin only, built so another source can be added later.
+
+---
+
+## 9. M9 — Phones (research)
+
+**The problem.** A phone's browser can open lg.scoty.uk, but it still needs a bridge to speak SSH to the TV, and today
+the bridge is a Node program (`npx`) on the same computer as the browser. Phones can't run that normally.
+
+**Options to evaluate** (each with: does it work on Android / iOS, setup effort, security, what it changes in the rules):
+1. **Bridge on the phone itself** — Android: Termux (`pkg install nodejs`, then `npx lg-dev-manager-bridge`); the phone's
+   Chrome reaches it at `127.0.0.1` like a computer does. iOS: no real equivalent (iSH / a-Shell are limited) — check
+   whether Node and the bridge actually run there.
+2. **Bridge on the TV** (rooted TVs) — a Homebrew app running the bridge so any device on the network can use it.
+   Conflicts with two current decisions (bridge only on 127.0.0.1, no on-TV bridge) and would need a new security design
+   (pairing, LAN exposure).
+3. **Bridge on a computer, used from the phone over the LAN** — conflicts with "127.0.0.1 only / no LAN mode"; would need
+   TLS or a pairing scheme that survives untrusted networks.
+4. **SSH in the browser over a tiny relay** — SSH implemented in the page (WebAssembly/JS), with only a dumb
+   WebSocket-to-TCP relay somewhere (on the TV for rooted TVs). Moves key handling into the page; check the effort and the
+   security impact.
+5. **An existing phone app as the transport** (Termius, JuiceSSH, Shortcuts on iOS, Tasker on Android…) — check whether any
+   of them can be driven from a web page at all (URL schemes, intents) and whether that could cover more than "open a shell".
+6. **Packaging** — e.g. a PWA can't open sockets; a small native wrapper could, but that is the "app" the owner ruled out
+   for desktop — note it only for completeness.
+
+**Output.** A short write-up with a recommendation and what it would take, for the owner to choose before any code.
+The mobile layout of the site itself already works (all pages are checked at phone width).
+
