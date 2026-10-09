@@ -330,4 +330,4 @@ it). The site shows a notice when the connected bridge is older than the one rel
    By hand instead: `pnpm build`, then `npm login` and `pnpm --filter lg-dev-manager-bridge publish --access public`.
 4. The package contains `dist/cli.js` (protocol bundled), `web/` (the built site, served as the local page),
    `LICENSE`, `NOTICE` and its README — copied in by `apps/bridge/scripts/prepack.mjs`.
-5. Create GitHub releases for both tags with the notes.
+5. Create GitHub releases for both tags with the notes from `CHANGELOG.md`.
