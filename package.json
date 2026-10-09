@@ -15,7 +15,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test",
+    "test": "pnpm -r --parallel test",
     "e2e": "pnpm --filter @lgdm/web build && pnpm --filter @lgdm/web e2e",
     "dev:rig": "pnpm --filter @lgdm/web build && pnpm --filter @lgdm/web e2e:server"
   }

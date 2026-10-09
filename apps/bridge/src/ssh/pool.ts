@@ -126,7 +126,12 @@ export class SshPool implements SshRunner {
     const client = new Client();
     const key = keyOf(t);
     const ready = new Promise<Client>((resolve, reject) => {
-      client.once('ready', () => resolve(client));
+      client.once('ready', () => {
+        // Small request/response traffic: without this, Nagle + delayed ACKs add up to ~200 ms per command
+        // (macOS). OpenSSH sets TCP_NODELAY for the same reason.
+        client.setNoDelay(true);
+        resolve(client);
+      });
       client.once('error', (e) => {
         this.forget(entry);
         reject(mapConnectError(e, t));

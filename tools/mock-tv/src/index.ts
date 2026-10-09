@@ -82,6 +82,8 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
 
   // webOS's SSH servers (Dev Mode and Homebrew Channel) are dropbear; the network scan looks for that banner.
   const ssh = new SshServer({ hostKeys: [hostKey], ident: 'dropbear_2022.83' }, (client) => {
+    // Missing from @types/ssh2's Connection, but present at runtime (lib/server.js).
+    (client as unknown as { setNoDelay(on: boolean): void }).setNoDelay(true);
     client.on('authentication', (ctx) => {
       if (ctx.username !== username) return ctx.reject();
       if (ctx.method === 'publickey') {

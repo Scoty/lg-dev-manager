@@ -1,3 +1,4 @@
+import { cpus } from 'node:os';
 import { defineConfig, devices } from '@playwright/test';
 
 const port = Number(process.env.E2E_BRIDGE_PORT ?? 5299);
@@ -9,8 +10,11 @@ const port = Number(process.env.E2E_BRIDGE_PORT ?? 5299);
 export default defineConfig({
   testDir: './e2e',
   timeout: 60_000,
-  fullyParallel: false,
-  workers: 1,
+  // Tests share one rig (bridge + mock TVs) but not state: each has its own browser storage and uses its own
+  // app ids, so they can run side by side.
+  fullyParallel: true,
+  // The tests mostly wait on the bridge and mock TVs rather than compute, so run at least 4 at once.
+  workers: Math.min(8, Math.max(4, cpus().length)),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
   use: {
