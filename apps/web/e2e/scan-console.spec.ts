@@ -29,18 +29,16 @@ test.describe('add-device wizard: rooted first and network scan', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a TV that is already added is marked, not offered again', async ({ paired: page, errors }) => {
+  test('a TV that is already added is marked, and can be added again with another login', async ({ paired: page, errors }) => {
     await addRootedTv(page, 'Den TV');
     await page.goto('/#/devices/new');
     await page.getByRole('button', { name: 'Next' }).click();
     const found = page.getByRole('option', { name: /127\.0\.0\.1/ });
     await expect(found).toBeVisible({ timeout: 20_000 });
     await expect(found).toContainText('Already added as Den TV');
-    await expect(found).toHaveAttribute('aria-disabled', 'true');
-    await found.click({ force: true });
-    await expect(page.getByLabel('IP address')).toHaveValue(''); // nothing picked
-    // Typing the address by hand still works, with a note.
-    await page.getByLabel('IP address').fill('127.0.0.1');
+    await expect(found).toContainText('Added');
+    await found.click();
+    await expect(page.getByLabel('IP address')).toHaveValue('127.0.0.1');
     await expect(page.getByText('This TV is already added as Den TV')).toBeVisible();
     expect(errors).toEqual([]);
   });

@@ -413,10 +413,8 @@ button.dd-menu-item { width: 100%; text-align: left; background: none; border: 0
 .scan-badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .scan-badges .badge:not(.success):not(.info) { background: var(--bg-muted); color: var(--t-muted); }
 .scan-badges .badge svg { width: 11px; height: 11px; stroke: currentColor; stroke-width: 2.5; fill: none; margin-right: 3px; }
-/* A TV that is already saved: shown, but not offered again. */
-.scan-item.is-added { cursor: default; background: var(--bg-muted); border-style: dashed; }
-.scan-item.is-added:hover { border-color: var(--border); }
-.scan-item.is-added .device-av { opacity: 0.6; }
+/* A TV that is already saved (still pickable, to add it with another login). */
+.scan-item.is-added:not(.is-selected) { background: var(--bg-muted); }
 .scan-item-added { font-size: 11.5px; color: var(--success); }
 .field-warning { display: flex; align-items: flex-start; gap: 5px; font-size: 11.5px; color: var(--warning); line-height: 1.45; }
 .field-warning svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 1px; stroke: currentColor; stroke-width: 2; fill: none; }

@@ -20,7 +20,7 @@ export const savedAt = (saved: readonly SavedDevice[], host: string) => saved.fi
 
 /**
  * Finds LG TVs on the network (device.scan) and lets the user pick one. Runs once on mount, then on demand.
- * TVs already saved in this browser are shown as added and can't be picked again.
+ * TVs already saved in this browser are marked as added; they can still be picked, to add one with another login.
  */
 export function ScanPanel({ selected, onPick, saved }: { selected: string; onPick: (tv: ScanResult) => void; saved: readonly SavedDevice[] }) {
   const { ready, call } = useRpc();
@@ -57,13 +57,11 @@ export function ScanPanel({ selected, onPick, saved }: { selected: string; onPic
           <div className="field-help">
             {scanning
               ? 'Looking for LG TVs…'
-              : tvs?.length && tvs.every((tv) => savedAt(saved, tv.host).length)
-                ? 'The TVs found are already added. To add another, type its address below.'
-                : tvs?.length
-                  ? 'Pick your TV, or type its address below.'
-                  : tvs
-                    ? 'No LG TVs found. Make sure the TV is on and on the same network, or type its address below.'
-                    : 'The bridge can look for LG TVs that are switched on.'}
+              : tvs?.length
+                ? 'Pick your TV, or type its address below.'
+                : tvs
+                  ? 'No LG TVs found. Make sure the TV is on and on the same network, or type its address below.'
+                  : 'The bridge can look for LG TVs that are switched on.'}
           </div>
         </div>
         <button type="button" className="btn btn--sm btn--ghost" onClick={scan} disabled={!ready || scanning}>
@@ -89,27 +87,18 @@ export function ScanPanel({ selected, onPick, saved }: { selected: string; onPic
                 </span>
               </>
             );
-            if (added.length) {
-              return (
-                <div key={tv.host} role="option" aria-selected={false} aria-disabled="true" className="scan-item is-added">
-                  {text}
-                  <span className="scan-badges">
-                    <span className="badge success"><Icon name="check" /> Added</span>
-                  </span>
-                </div>
-              );
-            }
             return (
               <button
                 key={tv.host}
                 type="button"
                 role="option"
                 aria-selected={selected === tv.host}
-                className={`scan-item${selected === tv.host ? ' is-selected' : ''}`}
+                className={`scan-item${selected === tv.host ? ' is-selected' : ''}${added.length ? ' is-added' : ''}`}
                 onClick={() => onPick(tv)}
               >
                 {text}
                 <span className="scan-badges">
+                  {added.length > 0 && <span className="badge success"><Icon name="check" /> Added</span>}
                   <span className={`badge ${tv.ports.ssh22 ? 'success' : ''}`}>{tv.ports.ssh22 ? 'Root SSH on' : 'Root SSH off'}</span>
                   {tv.ports.ssh9922 && <span className="badge info">Dev Mode</span>}
                   {tv.ports.keyServer && <span className="badge info">Key server</span>}
@@ -121,8 +110,8 @@ export function ScanPanel({ selected, onPick, saved }: { selected: string; onPic
       )}
       {tvs?.some((tv) => savedAt(saved, tv.host).length) && (
         <div className="field-help">
-          TVs marked “Added” are already in <Link to="/devices">Devices</Link>. To connect to one in another way (e.g. as root
-          after rooting it), edit it there or type its address below.
+          TVs marked “Added” are already in <Link to="/devices">Devices</Link>. You can still pick one to add it again with another
+          login, e.g. as root after rooting it.
         </div>
       )}
     </div>
