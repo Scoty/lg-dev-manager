@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { TvName } from '../../components/TvName';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MAX_UPLOAD_BYTES, type FileItem } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
@@ -39,7 +40,7 @@ export function FilesPage() {
       <PageHeader
         eyebrow="Device"
         title="Files"
-        sub={active ? <>Browse <b>{active.name}</b> over SFTP. Drop files on this page to upload them to the folder you’re in.</> : 'Browse your TV’s files.'}
+        sub={active ? <>Browse <TvName device={active} /> over SFTP. Drop files on this page to upload them to the folder you’re in.</> : 'Browse your TV’s files.'}
       />
       <div className="grid">
         <NeedsDevice device={active}>{active && <FileBrowser key={`${active.id}:${active.updatedAt}`} device={active} />}</NeedsDevice>

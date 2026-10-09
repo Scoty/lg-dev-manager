@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { TvName } from '../../components/TvName';
 import { PageHeader } from '../../components/PageHeader';
 import { NeedsDevice } from '../../components/NeedsDevice';
 import { Alert } from '../../components/Alert';
@@ -25,7 +26,7 @@ export function LunaMonitorPage() {
         eyebrow="Debug"
         title="Luna"
         accent="monitor"
-        sub={<>Every call on the luna service bus{active ? <> of <b>{active.name}</b></> : null}, with its replies — what apps ask the system and what it answers.</>}
+        sub={<>Every call on the luna service bus{active ? <> of <TvName device={active} /></> : null}, with its replies — what apps ask the system and what it answers.</>}
       />
       <div className="grid">
         <NeedsDevice device={active}>{active && <Monitor key={active.id} device={active} />}</NeedsDevice>

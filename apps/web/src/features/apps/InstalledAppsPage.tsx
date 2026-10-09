@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react';
+import { TvName } from '../../components/TvName';
 import { Link } from 'react-router-dom';
 import type { AppInfo } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
@@ -12,7 +13,6 @@ import type { SavedDevice } from '../../devices/store';
 import { AppIcon } from './AppIcon';
 import { useAppOperations } from './operations';
 import { useInstalledApps, useStorage } from './queries';
-import { modelLabel } from '../../devices/model';
 import { useRepoApps, type RepoAppView } from '../repo/useRepoApps';
 import { RepoDetails } from '../repo/RepoDetails';
 
@@ -91,16 +91,13 @@ export function InstalledAppsPage() {
 
   const canInstall = !!active && !busy;
 
-  // The model in brackets, unless the TV is already named after it (a TV called "LG C4" would read "LG C4 (LG C4)").
-  const modelText = active?.info?.modelName ? modelLabel(active.info.modelName) : undefined;
-  const model = modelText && modelText.trim().toLowerCase() !== active?.name.trim().toLowerCase() ? modelText : undefined;
   return (
     <div className="drop-zone-page" {...dropHandlers}>
       <PageHeader
         eyebrow="Apps"
         title="Installed"
         accent="apps"
-        sub={active ? <>Apps on <b>{active.name}</b>{model && <> ({model})</>}. Drop an <span className="mono">.ipk</span> anywhere on this page to install it.</> : 'Apps on your TV.'}
+        sub={active ? <>Apps on <TvName device={active} />. Drop an <span className="mono">.ipk</span> anywhere on this page to install it.</> : 'Apps on your TV.'}
         actions={
           active && (
             <>

@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
+import { TvName } from '../../components/TvName';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PmLogContext, type PmLogLevel } from '@lgdm/protocol';
@@ -34,7 +35,7 @@ export function PmLogPage() {
         eyebrow="Debug"
         title="Log"
         accent="levels"
-        sub={<>How much each PmLog context writes to the <Link to="/debug/logs">system log</Link>{active ? <> on <b>{active.name}</b></> : null}. Changes last until the TV restarts.</>}
+        sub={<>How much each PmLog context writes to the <Link to="/debug/logs">system log</Link>{active ? <> on <TvName device={active} /></> : null}. Changes last until the TV restarts.</>}
       />
       <div className="grid">
         <NeedsDevice device={active}>

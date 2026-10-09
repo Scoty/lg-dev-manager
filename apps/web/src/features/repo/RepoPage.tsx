@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { TvName } from '../../components/TvName';
 import { PageHeader } from '../../components/PageHeader';
 import { ErrorAlert, describeError } from '../../components/ErrorAlert';
 import { NeedsDevice } from '../../components/NeedsDevice';
@@ -84,7 +85,7 @@ export function RepoPage() {
             {active && (
               <>
                 {' '}
-                for <b>{active.name}</b>
+                for <TvName device={active} />
               </>
             )}
             . Homebrew apps aren’t reviewed by LG — install what you trust.

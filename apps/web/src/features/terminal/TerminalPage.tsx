@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { TvName } from '../../components/TvName';
 import '@xterm/xterm/css/xterm.css';
 import { PageHeader } from '../../components/PageHeader';
 import { NeedsDevice } from '../../components/NeedsDevice';
@@ -167,7 +168,7 @@ export function TerminalPage() {
                 <div className="empty-state">
                   <div className="empty-icon"><Icon name="terminal" /></div>
                   <h3>No terminal open</h3>
-                  <p>Open a shell on {active ? <b>{active.name}</b> : 'a TV'} to run commands on it.</p>
+                  <p>Open a shell on {active ? <TvName device={active} /> : 'a TV'} to run commands on it.</p>
                   {active && (
                     <button type="button" className="btn btn--primary" onClick={() => openOn(active)} disabled={!ready}>
                       <Icon name="terminal" /> Open a terminal on {active.name}

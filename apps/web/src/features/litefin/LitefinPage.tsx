@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { TvName } from '../../components/TvName';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { LITEFIN_APP_ID, LITEFIN_RELEASE_COUNT, LITEFIN_RELEASES_PAGE, type LitefinRelease } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
@@ -119,14 +120,14 @@ function Releases({ device }: { device: SavedDevice }) {
               <span className="muted">Checking {device.name}…</span>
             ) : installed ? (
               <>
-                Litefin <b className="mono">v{installed.version}</b> is installed on <b>{device.name}</b>
+                Litefin <b className="mono">v{installed.version}</b> is installed on <TvName device={device} />
                 {latest && installed.version && compareVersions(latest.version, installed.version) > 0 && (
                   <span className="badge warning litefin-badge">v{latest.version} available</span>
                 )}
               </>
             ) : (
               <>
-                Litefin isn’t installed on <b>{device.name}</b>
+                Litefin isn’t installed on <TvName device={device} />
               </>
             )}
             {suggested && (

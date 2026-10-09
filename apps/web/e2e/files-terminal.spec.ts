@@ -9,6 +9,7 @@ import { addDevModeTv, addRootedTv, expect, NO_PTY_PORT, test } from './fixtures
 test('files: browse, new folder, upload, replace, preview, download, rename, delete', async ({ paired: page, errors }) => {
   await addDevModeTv(page, 'Files Dev');
   await page.goto('/#/files');
+  await expect(page.locator('.hero-sub')).toContainText('Browse Files Dev (LG C3) over SFTP.', { timeout: 30_000 });
   const table = page.locator('.files-table');
   await expect(table.getByRole('button', { name: 'notes.txt' })).toBeVisible({ timeout: 30_000 });
   await expect(table.getByText('→ /media/developer/apps')).toBeVisible();

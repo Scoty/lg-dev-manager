@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { TvName } from '../../components/TvName';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CrashReportFile } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
@@ -24,7 +25,7 @@ export function CrashesPage() {
         eyebrow="Debug"
         title="Crash"
         accent="reports"
-        sub={<>When a native app or service crashes{active ? <> on <b>{active.name}</b></> : null}, its report shows up here. They are kept in the TV’s /tmp, so a restart clears them.</>}
+        sub={<>When a native app or service crashes{active ? <> on <TvName device={active} /></> : null}, its report shows up here. They are kept in the TV’s /tmp, so a restart clears them.</>}
       />
       <div className="grid">
         <NeedsDevice device={active}>{active && <Crashes key={active.id} device={active} />}</NeedsDevice>

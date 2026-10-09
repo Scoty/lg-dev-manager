@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { TvName } from '../../components/TvName';
 import { PageHeader } from '../../components/PageHeader';
 import { NeedsDevice } from '../../components/NeedsDevice';
 import { Alert } from '../../components/Alert';
@@ -35,7 +36,7 @@ export function SyslogPage() {
         sub={
           <>
             Live <span className="mono">/var/log/messages</span>
-            {active ? <> from <b>{active.name}</b></> : null}. Developer logging is switched on when it starts. Set what gets logged in{' '}
+            {active ? <> from <TvName device={active} /></> : null}. Developer logging is switched on when it starts. Set what gets logged in{' '}
             <Link to="/debug/pmlog">Log levels</Link>.
           </>
         }
@@ -67,7 +68,7 @@ export function DmesgPage() {
         eyebrow="Debug"
         title="Kernel"
         accent="log"
-        sub={<>The kernel ring buffer (<span className="mono">dmesg</span>){active ? <> of <b>{active.name}</b></> : null}, followed live.</>}
+        sub={<>The kernel ring buffer (<span className="mono">dmesg</span>){active ? <> of <TvName device={active} /></> : null}, followed live.</>}
       />
       <div className="grid">
         <NeedsDevice device={active}>
