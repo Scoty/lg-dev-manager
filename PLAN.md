@@ -4,7 +4,7 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 (Tauri + Angular + Rust) with the look of [Adminator 2026](https://github.com/puikinsh/adminator-admin-dashboard),
 hosted on GitHub Pages.
 
-> **Status:** planning. Decisions marked **❓** are waiting on the owner.
+> **Status:** M1 (skeleton) done — shell, theming, bridge pairing. Next: M2 (bridge core).
 
 ---
 
@@ -50,7 +50,7 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 | Layer | Choice | Why |
 |---|---|---|
 | Monorepo | **pnpm workspaces** | Shares one typed protocol between UI and bridge. |
-| Web UI | **Vite + React 19 + TypeScript**, React Router, TanStack Query | Mainstream, fast, easy to host statically. **❓ framework** |
+| Web UI | **Vite + React 19 + TypeScript**, React Router, TanStack Query | Mainstream, fast, easy to host statically. |
 | Styling | **Port of Adminator 2026 SCSS tokens + components** (no Bootstrap) | Same CSS variables, light/dark via `data-theme`, shell/sidebar/topbar. |
 | Terminal | **xterm.js** (+ fit, search, web-links addons) | Same as original. |
 | Bridge | **Node 22 + TypeScript**, `ws`, `ssh2` (SSH + SFTP) | Pure JS SSH, no native build step; runs anywhere incl. Docker on ARM/x86. |
@@ -99,10 +99,11 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [ ] Luna-service (ls-monitor) traffic monitor + details
 
 ### App-level
-- [ ] Light / dark / system theme (Adminator toggle)
-- [ ] ⌘K command palette (Adminator has one — map to pages, devices, actions)
-- [ ] Bridge status indicator + pairing screen + "how to run the bridge" onboarding
-- [ ] Update check for the bridge (version handshake)
+- [x] Light / dark / system theme (Adminator toggle)
+- [x] ⌘K command palette (pages + actions; devices once M3 lands)
+- [x] Bridge status indicator + pairing screen + "how to run the bridge" onboarding
+- [x] Version handshake (`system.hello` protocol check)
+- [ ] Update-available notice for the bridge
 
 ---
 
@@ -139,16 +140,18 @@ lg-dev-manager/
 | # | Milestone | Done when |
 |---|---|---|
 | M0 | Plan + AGENTS.md + decisions | Owner answers the open questions. |
-| M1 | Skeleton | Monorepo builds; Adminator shell renders (sidebar, topbar, theme toggle) with empty pages; CI green. |
+| M1 ✅ | Skeleton | Monorepo builds; Adminator shell renders (sidebar, topbar, theme toggle) with empty pages; CI green. |
 | M2 | Bridge core | Pairing, origin check, device store, connection check, key-server key fetch, exec + luna. Mock TV in tests. |
-| M3 | Devices + Apps | Add-device wizard end to end; installed apps; launch/remove; install IPK from file. **← first "usable" build** |
+| M3 | Devices + Apps | Add-device wizard end to end; installed apps; launch/remove; install IPK from file. First build worth trying on a real TV. |
 | M4 | Homebrew repo | Browse/search/install/update from repo.webosbrew.org. |
 | M5 | Files + Terminal | SFTP browser with upload/download; xterm PTY. |
 | M6 | Info + Dev Mode renew + screenshot | |
 | M7 | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
 | M8 | Ship | GitHub Pages deploy, Docker image, `npx` bridge, README with screenshots. |
 
-After M3 we create the GitHub Pages site (per the owner's request).
+Scope is **full parity before release**: the public GitHub Pages site goes live at M8. Before that, preview builds run locally (`pnpm dev`) or from the bridge.
+
+**NAS note:** the Docker bridge serves the UI itself on the LAN (`http://<nas>:5199`). Using the *GitHub Pages* UI with the NAS bridge needs the bridge on HTTPS (e.g. a hostname behind Cloudflare Access); plain LAN `ws://` is blocked from an https page.
 
 ---
 
@@ -161,6 +164,6 @@ After M3 we create the GitHub Pages site (per the owner's request).
 
 ---
 
-## 7. Open questions
+## 7. Decisions
 
-See the chat / AGENTS.md "Decisions" table. Defaults are used if not answered.
+Recorded in the AGENTS.md "Decisions" table.

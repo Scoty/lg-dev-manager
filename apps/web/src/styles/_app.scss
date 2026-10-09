@@ -1,0 +1,71 @@
+/* ============ App-specific additions on top of Adminator ============ */
+/* Only CSS variables from _tokens.scss — no hard-coded colours (see AGENTS.md). */
+
+#root { min-height: 100vh; }
+
+.nav-submenu a.is-active { color: var(--primary); font-weight: 600; }
+
+/* Bridge status pill in the topbar */
+.bridge-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-card);
+  font-size: 12px; font-weight: 600;
+  color: var(--t-muted);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+.bridge-pill:hover { border-color: var(--t-light); box-shadow: var(--shadow-sm); }
+.bridge-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--t-light); }
+.bridge-pill.is-connected .dot { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.bridge-pill.is-connecting .dot { background: var(--warning); animation: pulse-dot 1.2s ease-in-out infinite; }
+.bridge-pill.is-error .dot { background: var(--danger); }
+@keyframes pulse-dot { 50% { opacity: 0.35; } }
+
+/* Empty / placeholder state used by not-yet-built pages */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 10px;
+  padding: 48px 24px;
+  color: var(--t-muted);
+}
+.empty-state .empty-icon {
+  width: 52px; height: 52px; border-radius: 14px;
+  display: grid; place-items: center;
+  background: var(--primary-soft); color: var(--primary);
+}
+.empty-state .empty-icon svg { width: 24px; height: 24px; stroke: currentColor; stroke-width: 1.8; fill: none; }
+.empty-state h3 { margin: 4px 0 0; color: var(--t-base); font-size: 15px; font-weight: 700; }
+.empty-state p { margin: 0; max-width: 52ch; font-size: 13px; line-height: 1.6; }
+
+/* Code blocks / commands in onboarding */
+.codeblock {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12.5px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--t-base);
+}
+
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.muted { color: var(--t-muted); }
+.col-4 { grid-column: span 4; }
+.col-8 { grid-column: span 8; }
+@media (max-width: 1100px) { .col-4, .col-8 { grid-column: span 12; } }
+
+/* Device chooser in the sidebar footer (re-uses Adminator .workspace) */
+.workspace { width: 100%; text-align: left; }
+.workspace-avatar svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+button.nav-link { width: 100%; text-align: left; }
+.workspace-chev { width: 14px; height: 14px; flex-shrink: 0; }
+.workspace-text { flex: 1; }
+.workspace-name, .workspace-role { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-title .accent { white-space: nowrap; }
+@media (max-width: 520px) { .bridge-pill span:not(.dot) { display: none; } .bridge-pill { padding: 9px; } }

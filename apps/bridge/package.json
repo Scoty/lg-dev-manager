@@ -1,0 +1,31 @@
+{
+  "name": "lg-dev-manager-bridge",
+  "version": "0.1.0",
+  "description": "Local bridge that lets the LG Dev Manager web UI talk to webOS TVs over SSH",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": { "lg-dev-manager-bridge": "./dist/cli.js" },
+  "files": ["dist"],
+  "scripts": {
+    "dev": "tsx watch src/cli.ts --dev",
+    "build": "tsup",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@lgdm/protocol": "workspace:*",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  },
+  "engines": { "node": ">=22" }
+}

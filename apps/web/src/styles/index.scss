@@ -1,0 +1,17 @@
+/*!
+ * Visual design ported from Adminator 2026 — https://github.com/puikinsh/adminator-admin-dashboard
+ * Copyright (c) 2018 Aigars Silkalns — MIT License. See NOTICE.
+ */
+@use 'adminator/tokens';
+@use 'adminator/base';
+@use 'adminator/animations';
+@use 'adminator/shell';
+@use 'adminator/dropdowns';
+@use 'adminator/components';
+@use 'adminator/forms';
+@use 'adminator/ui';
+@use 'adminator/data';
+@use 'adminator/error';
+@use 'adminator/palette';
+@use 'adminator/responsive';
+@use 'app';

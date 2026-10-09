@@ -84,9 +84,10 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 | Topic | Decision | Status |
 |---|---|---|
 | Browser↔TV transport | Local bridge over authenticated WebSocket | Decided (technical necessity) |
-| Where the bridge runs | — | ❓ |
-| UI framework | React + Vite + TS (proposed) | ❓ |
-| v1 scope | All of PLAN.md §3, delivered by milestone | ❓ |
+| Where the bridge runs | Both: `npx`/binary on the user's computer (for the Pages site → localhost) **and** a Docker image for a NAS that also serves the UI on the LAN | Decided |
+| UI framework | React 19 + Vite + TypeScript | Decided |
+| v1 scope | **Full parity** with the desktop app (all of PLAN.md §3, incl. Debug tools) before the public release | Decided |
 | Device/key storage | Bridge side, ares-cli compatible (proposed) | Default |
 | Repo license | Apache-2.0 (proposed) | Default |
-| Hosting | GitHub Pages after M3 | Decided |
+| Hosting | GitHub Pages at release (after M7) | Decided |
+| Test devices | Owner tests on both Dev Mode (SSH 9922) and rooted (SSH 22) TVs | Decided |
