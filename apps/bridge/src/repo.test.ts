@@ -285,3 +285,11 @@ describe('install from the repository', () => {
     expect(await code(installFromRepo(pool, client, devmode(devTv), 'com.example.unknown', 'stable'))).toBe('repo_not_found');
   });
 });
+
+describe('pinned connections', () => {
+  it('refuse a host name that resolves to this computer at connect time', async () => {
+    const { publicLookup } = await import('./repo/repo.js');
+    const err = await new Promise<NodeJS.ErrnoException | null>((r) => publicLookup('localhost', {}, (e) => r(e)));
+    expect(err?.code).toBe('EPRIVATE');
+  });
+});

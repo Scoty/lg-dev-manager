@@ -102,11 +102,13 @@ async function seedDevice(page: Page, device: SeedDevice) {
   await page.goto('/#/devices');
   await page.evaluate(async (d) => {
     // Wait for the app to have created its database (it opens it on start).
-    for (let i = 0; i < 100; i++) {
+    let ready = false;
+    for (let i = 0; i < 100 && !ready; i++) {
       const dbs = await indexedDB.databases();
-      if (dbs.some((x) => x.name === 'lgdm' && (x.version ?? 0) >= 2)) break;
-      await new Promise((r) => setTimeout(r, 50));
+      ready = dbs.some((x) => x.name === 'lgdm' && (x.version ?? 0) >= 2);
+      if (!ready) await new Promise((r) => setTimeout(r, 50));
     }
+    if (!ready) throw new Error('seedDevice: the app did not create its "lgdm" IndexedDB database (version ≥ 2) within 5 s — did the page load?');
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const r = indexedDB.open('lgdm');
       r.onsuccess = () => resolve(r.result);

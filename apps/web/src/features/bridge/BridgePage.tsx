@@ -1,12 +1,12 @@
 import { useState, type FormEvent } from 'react';
-import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, REPO_URL } from '@lgdm/protocol';
+import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, DEV_ALLOWED_ORIGINS, REPO_URL } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
 import { PhoneNotice } from '../../shell/PhoneNotice';
 import { BridgeUpdateNotice } from '../../shell/BridgeUpdateNotice';
 import { Card } from '../../components/Card';
 import { Icon } from '../../shell/icons';
 import { useBridge } from '../../bridge/BridgeProvider';
-import { defaultBridgeUrl } from '../../bridge/settings';
+import { bridgeUrlProblem, defaultBridgeUrl } from '../../bridge/settings';
 import { BridgeError } from '../../bridge/client';
 import { Alert } from '../../components/Alert';
 
@@ -42,8 +42,13 @@ export function BridgePage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setBusy(true);
     setError(null);
+    const problem = bridgeUrlProblem(url);
+    if (problem) {
+      setError(new BridgeError('bad_url', problem));
+      return;
+    }
+    setBusy(true);
     try {
       await pair({ url: url.trim(), token: token.trim() });
     } catch (err) {
@@ -88,7 +93,7 @@ pnpm dev:bridge`}</div>
             </p>
             {/* Once connected the bridge evidently accepts this site. */}
             {status.state !== 'connected' &&
-              !(DEFAULT_ALLOWED_ORIGINS as readonly string[]).includes(origin) &&
+              !([...DEFAULT_ALLOWED_ORIGINS, ...DEV_ALLOWED_ORIGINS] as string[]).includes(origin) &&
               !origin.endsWith(`:${DEFAULT_BRIDGE_PORT}`) && (
                 <Alert kind="warning">
                   This page is served from <span className="mono">{origin}</span>. Start the bridge with{' '}
@@ -103,8 +108,16 @@ pnpm dev:bridge`}</div>
             <StatusAlert />
             <div className="field">
               <label className="field-label" htmlFor="bridge-url">Bridge address</label>
-              <input id="bridge-url" className="input mono" value={url} onChange={(e) => setUrl(e.target.value)} required />
-              <span className="field-help">Default: {defaultBridgeUrl()}</span>
+              <input
+                id="bridge-url"
+                className="input mono"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                aria-invalid={error?.code === 'bad_url' || undefined}
+                aria-describedby="bridge-url-help"
+                required
+              />
+              <span className="field-help" id="bridge-url-help">Default: {defaultBridgeUrl()}. Always on this computer (ws://127.0.0.1 or ws://localhost).</span>
             </div>
             <div className="field">
               <label className="field-label" htmlFor="bridge-token">Pairing token</label>

@@ -7,16 +7,19 @@ const version = (pkg: string) => (JSON.parse(readFileSync(new URL(pkg, import.me
 
 /**
  * Strict Content-Security-Policy for production builds: only this site's own code runs, and the page
- * may only open connections to itself and to a bridge (ws/wss). Device settings never leave the
- * browser except to the paired bridge. Not applied in dev, where Vite/React inject inline scripts.
+ * may only open connections to itself and to a bridge on this computer (ws://127.0.0.1 / ws://localhost,
+ * matching bridgeUrlProblem in src/bridge/settings.ts). Device settings never leave the browser except to
+ * the paired bridge. Images are only data: / blob: (repo images come through the bridge). Not applied in dev,
+ * where Vite/React inject inline scripts. Framing can't be forbidden from a <meta> CSP (frame-ancestors is
+ * ignored there) and GitHub Pages can't send headers, so public/theme-init.js refuses to run in a frame.
  */
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
+  "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' ws: wss:",
+  "connect-src 'self' ws://127.0.0.1:* ws://localhost:*",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'none'",

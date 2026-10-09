@@ -151,6 +151,19 @@ describe('upload budget', () => {
     expect(budget.inUse).toBe(0);
     expect(() => b.take(id2)).toThrow(expect.objectContaining({ code: 'upload_not_found' }));
   });
+
+  it('limits how many uploads one tab keeps open, and drops idle ones', async () => {
+    const { UploadBudget, UploadStore, MAX_PENDING_UPLOADS } = await import('./rpc/uploads.js');
+    const budget = new UploadBudget(1000);
+    const store = new UploadStore(budget, 50);
+    const ids = Array.from({ length: MAX_PENDING_UPLOADS }, (_, i) => store.begin(`${i}.ipk`, 10));
+    expect(() => store.begin('more.ipk', 10)).toThrow(/At most/);
+    expect(budget.inUse).toBe(10 * MAX_PENDING_UPLOADS);
+    await new Promise((r) => setTimeout(r, 120));
+    expect(budget.inUse).toBe(0); // nobody sent a chunk: all expired
+    expect(() => store.chunk(ids[0]!, 0, 'AA==')).toThrow(expect.objectContaining({ code: 'upload_not_found' }));
+    store.begin('again.ipk', 10); // room again
+  });
 });
 
 describe('console: cmd.log and cmd.stream', () => {

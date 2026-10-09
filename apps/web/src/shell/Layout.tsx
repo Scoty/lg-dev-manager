@@ -8,6 +8,7 @@ import { ConsoleDock } from '../console/ConsoleDock';
 import { useTvInfoRefresh } from '../devices/useTvInfoRefresh';
 import { PhoneNotice } from './PhoneNotice';
 import { BridgeUpdateNotice } from './BridgeUpdateNotice';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 export function Layout() {
   const [drawer, setDrawer] = useState(false);
@@ -52,7 +53,9 @@ export function Layout() {
               <BridgeUpdateNotice />
             </>
           )}
-          <Outlet />
+          <ErrorBoundary resetKey={pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
         <Footer />
         <ConsoleDock />

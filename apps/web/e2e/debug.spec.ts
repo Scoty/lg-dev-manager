@@ -108,6 +108,13 @@ test('luna monitor: capture, filter, details, save and open', async ({ paired: p
   await page.locator('input[type=file]').setInputFiles(saved);
   await expect(page.locator('.log-card .log-status')).toHaveText(basename(saved)); // the file's name
   await expect(list).toContainText('getConfigs');
+
+  // A second live capture works too (the first ls-monitor was stopped on the TV, so the bus name is free).
+  await page.getByRole('button', { name: 'Start capture' }).click(); // "Start", as a file is open
+  await expect(page.locator('.log-card .log-status')).toHaveText('Capturing');
+  await expect(list).toContainText('getConfigs', { timeout: 30_000 });
+  await expect(page.getByText('The capture stopped')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Stop' }).click();
   expect(errors).toEqual([]);
 });
 

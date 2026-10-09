@@ -257,7 +257,7 @@ function CallDetails({ entry, onClose }: { entry: CallEntry; onClose: () => void
         {entry.messages.map((m, i) => (
           <li key={i}>
             <button type="button" className={`monitor-msg${i === index ? ' is-selected' : ''}`} onClick={() => setIndex(i)} aria-pressed={i === index}>
-              <span className="monitor-arrow" role="img" aria-label={m.type === 'call' ? 'Call' : m.type === 'return' ? 'Reply' : m.type === 'callCancel' ? 'Cancel' : m.type}>{ARROW[m.type] ?? '•'}</span>
+              <span className="monitor-arrow" role="img" aria-label={m.type === 'call' ? 'Call' : m.type === 'return' ? 'Reply' : m.type === 'callCancel' ? 'Cancel' : m.type}>{(Object.hasOwn(ARROW, m.type) ? ARROW[m.type] : undefined) ?? '•'}</span>
               <span className="mono">{m.information || '(no payload)'}</span>
             </button>
           </li>

@@ -37,4 +37,10 @@ describe('SafeHtml', () => {
     expect(out).toBe('<div><i>A</i><a href="https://repo.example/api/apps/more" target="_blank" rel="noopener noreferrer">more</a></div>');
     expect(html('<p>a<img src="https://example.com/a.png">b</p>')).toBe('<div><p>ab</p></div>');
   });
+
+  it('treats tag names that are Object.prototype keys as unknown tags', () => {
+    // Used to look up KEEP["constructor"] → Object, rendered as a component, and crash the page.
+    // (Tag names are lower-cased, so "constructor" is the one that matters.)
+    expect(html('<constructor>a</constructor><p><constructor>b</constructor></p><toString>c</toString>')).toBe('<div>a<p>b</p>c</div>');
+  });
 });

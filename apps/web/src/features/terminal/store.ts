@@ -4,6 +4,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SHELL_EXIT_EVENT, SHELL_OUTPUT_EVENT, ShellExit, ShellOutput, type DeviceTarget } from '@lgdm/protocol';
 import type { BridgeClient } from '../../bridge/client';
 import { describeError } from '../../components/ErrorAlert';
+import { openTerminalLink } from './links';
 
 /**
  * Open terminals, kept outside React so tabs (and their scrollback) survive moving between pages — the
@@ -255,10 +256,12 @@ class TerminalStore {
       cursorBlink: true,
       allowProposedApi: false,
       theme: terminalTheme(),
+      // OSC 8 hyperlinks from the TV: http(s) only (xterm's default confirms, then opens any scheme).
+      linkHandler: { activate: (_e, uri) => openTerminalLink(uri), allowNonHttpProtocols: false },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.loadAddon(new WebLinksAddon((_e, uri) => window.open(uri, '_blank', 'noopener,noreferrer')));
+    term.loadAddon(new WebLinksAddon((_e, uri) => openTerminalLink(uri)));
     term.open(tab.host);
     // Copy with Ctrl+Shift+C (Ctrl+C goes to the shell), like the original's PtyComponent.sendKey.
     term.attachCustomKeyEventHandler((e) => {

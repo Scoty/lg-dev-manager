@@ -231,6 +231,9 @@ function AutoRenewDialog({ open, onClose, device, token }: { open: boolean; onCl
   const { toast } = useFeedback();
   const url = resetUrl(token);
   const script = useMemo(() => renewScript(device), [device]);
+  // Shown with the key hidden until asked: screens get shared and recorded. Copy / download use the full script.
+  const [showKey, setShowKey] = useState(false);
+  const shownScript = useMemo(() => (showKey ? script : renewScript(device, { redact: true })), [showKey, script, device]);
   const fileName = `renew-devmode-${device.name.replace(/[^A-Za-z0-9._-]+/g, '-') || 'tv'}.sh`;
   return (
     <Modal open={open} onClose={onClose} size="lg" title="Renew Developer Mode automatically">
@@ -264,8 +267,11 @@ function AutoRenewDialog({ open, onClose, device, token }: { open: boolean; onCl
                 <span className="mono">sh {fileName}</span>, or <span className="mono">chmod 700</span> it first).
               </p>
               <Alert kind="danger" title="Contains this TV’s private key">Keep the script private — it can log in to the TV.</Alert>
-              <pre className="file-preview-text renew-script">{script}</pre>
+              <pre className="file-preview-text renew-script">{shownScript}</pre>
               <div className="row">
+                <button type="button" className="btn btn--ghost" onClick={() => setShowKey((v) => !v)} aria-pressed={showKey}>
+                  <Icon name="key" /> {showKey ? 'Hide key' : 'Show key'}
+                </button>
                 <button
                   type="button"
                   className="btn btn--ghost"
@@ -284,7 +290,10 @@ function AutoRenewDialog({ open, onClose, device, token }: { open: boolean; onCl
               </div>
             </>
           ) : (
-            <Alert kind="info">The script needs the TV’s SSH key in the usual PEM / OpenSSH form, and this TV doesn’t have one saved. Use the renew URL instead.</Alert>
+            <Alert kind="info">
+              The script needs the TV’s SSH key in the usual PEM / OpenSSH form, and an address and user name the add-TV form accepts. This TV’s
+              saved settings don’t have that — edit the TV, or use the renew URL instead.
+            </Alert>
           ))}
         {tab === 'ifttt' && (
           <>

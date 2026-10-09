@@ -37,10 +37,17 @@ export const bridgeUploadBudget = new UploadBudget();
 interface Upload {
   name: string;
   size: number;
-  chunks: Buffer[];
+  /** Allocated at the first chunk and filled in place (no second copy when the upload is taken). */
+  data?: Buffer;
   received: number;
   free: () => void;
+  timer?: NodeJS.Timeout;
 }
+
+/** Unfinished uploads one connection may have open at once. */
+export const MAX_PENDING_UPLOADS = 4;
+/** An upload that gets no chunk for this long is dropped, and its share of the budget freed. */
+export const UPLOAD_IDLE_MS = 2 * 60_000;
 
 /**
  * Files sent from the browser, held in memory for one WebSocket connection only. Nothing is written to disk;
@@ -49,13 +56,27 @@ interface Upload {
 export class UploadStore {
   private uploads = new Map<string, Upload>();
 
-  constructor(private readonly budget: UploadBudget = bridgeUploadBudget) {}
+  constructor(
+    private readonly budget: UploadBudget = bridgeUploadBudget,
+    private readonly idleMs = UPLOAD_IDLE_MS,
+  ) {}
 
   begin(name: string, size: number): string {
+    if (this.uploads.size >= MAX_PENDING_UPLOADS) {
+      throw new RpcError(AppsErrorCodes.UploadTooLarge, `At most ${MAX_PENDING_UPLOADS} uploads can be in progress at once.`);
+    }
     const free = this.budget.reserve(size);
     const id = randomUUID();
-    this.uploads.set(id, { name, size, chunks: [], received: 0, free });
+    const u: Upload = { name, size, received: 0, free };
+    this.uploads.set(id, u);
+    this.touch(id, u);
     return id;
+  }
+
+  private touch(id: string, u: Upload) {
+    clearTimeout(u.timer);
+    u.timer = setTimeout(() => this.discard(id), this.idleMs);
+    u.timer.unref();
   }
 
   /** Chunks must arrive in order. Returns bytes received so far. */
@@ -68,8 +89,10 @@ export class UploadStore {
     if (offset + bytes.length > u.size) {
       throw new RpcError(AppsErrorCodes.UploadTooLarge, 'The upload is larger than announced.');
     }
-    u.chunks.push(bytes);
+    u.data ??= Buffer.allocUnsafe(u.size);
+    bytes.copy(u.data, offset);
     u.received += bytes.length;
+    this.touch(id, u);
     return u.received;
   }
 
@@ -83,8 +106,9 @@ export class UploadStore {
       throw new RpcError(AppsErrorCodes.UploadIncomplete, `The upload is incomplete (${u.received} of ${u.size} bytes).`);
     }
     this.uploads.delete(id);
-    const data = Buffer.concat(u.chunks, u.size);
-    u.chunks = [];
+    clearTimeout(u.timer);
+    const data = u.data ?? Buffer.alloc(0);
+    u.data = undefined;
     return { name: u.name, data, done: u.free };
   }
 
@@ -92,6 +116,8 @@ export class UploadStore {
     const u = this.uploads.get(id);
     if (!u) return;
     this.uploads.delete(id);
+    clearTimeout(u.timer);
+    u.data = undefined;
     u.free();
   }
 

@@ -16,6 +16,7 @@ import { PortCheck, SshOffHint, type PortResult } from './PortCheck';
 import { ScanPanel, savedAt, tvLabel } from './ScanPanel';
 import { STEP_LABELS, verifyDevice, type VerifyState, type VerifyStepId } from './verify';
 import { MODE_DEFAULTS, authProblems, emptyAuth, hostProblem, type AuthDraft, type AuthKind, type SetupMode } from './auth';
+import { isValidUsername } from '../../devices/validate';
 
 type Step = 'mode' | 'prepare' | 'details' | 'verify';
 
@@ -172,7 +173,7 @@ export function AddDevicePage() {
   const hostErr = hostProblem(host);
   const alreadySaved = host.trim() && !hostErr ? savedAt(devices ?? [], host) : [];
   const portProblem = !Number.isInteger(port) || port < 1 || port > 65535 ? 'Port must be 1–65535.' : null;
-  const userProblem = !/^[a-z_][a-z0-9_-]{0,31}$/.test(username) ? 'Not a valid user name.' : null;
+  const userProblem = !isValidUsername(username) ? 'Not a valid user name.' : null;
   const detailsValid =
     !nameProblem && !hostErr && !portProblem && !userProblem && Object.keys(authProblems(auth)).length === 0 && (auth.kind !== 'key' || keyUsable);
 

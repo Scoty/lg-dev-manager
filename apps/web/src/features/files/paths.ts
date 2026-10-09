@@ -69,10 +69,23 @@ export function sortItems(items: FileItem[], key: SortKey, dir: 'asc' | 'desc'):
 }
 
 /** Text files worth previewing inline, by name. Everything else is checked by content. */
-const TEXT_EXT = /\.(txt|log|json|conf|cfg|ini|sh|js|mjs|ts|css|html?|xml|md|csv|yml|yaml|properties|service|desktop|prefs|list|py|lua)$/i;
-const IMAGE_EXT: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml', ico: 'image/x-icon' };
+const TEXT_EXT = /\.(txt|log|json|conf|cfg|ini|sh|js|mjs|ts|css|html?|xml|md|csv|yml|yaml|properties|service|desktop|prefs|list|py|lua|svg)$/i;
+/**
+ * Raster images previewed inline (as blob: URLs). Not SVG: it is a document that can run script, and a blob: URL
+ * has this site's origin, so "open image in new tab" would run the TV's SVG as this site. SVGs show as text.
+ * A Map, so names like "x.constructor" don't hit Object.prototype.
+ */
+const IMAGE_EXT = new Map<string, string>([
+  ['png', 'image/png'],
+  ['jpg', 'image/jpeg'],
+  ['jpeg', 'image/jpeg'],
+  ['gif', 'image/gif'],
+  ['webp', 'image/webp'],
+  ['bmp', 'image/bmp'],
+  ['ico', 'image/x-icon'],
+]);
 
-export const imageType = (name: string) => IMAGE_EXT[name.split('.').pop()?.toLowerCase() ?? ''];
+export const imageType = (name: string): string | undefined => (name.includes('.') ? IMAGE_EXT.get(name.split('.').pop()!.toLowerCase()) : undefined);
 export const looksLikeText = (name: string) => TEXT_EXT.test(name) || !name.includes('.');
 
 /** True when a buffer is plausibly UTF-8 text (no NULs, few control bytes). */

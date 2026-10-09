@@ -8,18 +8,26 @@ export const DeviceAuth = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('key'),
     /** PEM / OpenSSH private key, as fetched from the Dev Mode key server or pasted by the user. */
-    privateKey: z.string().min(1),
-    passphrase: z.string().optional(),
+    privateKey: z.string().min(1).max(64 * 1024),
+    passphrase: z.string().max(1024).optional(),
   }),
-  z.object({ kind: z.literal('password'), password: z.string() }),
+  z.object({ kind: z.literal('password'), password: z.string().max(1024) }),
 ]);
 export type DeviceAuth = z.infer<typeof DeviceAuth>;
 
+/** POSIX-style user names. Never starts with "-", so it can't be read as an option anywhere it ends up. */
+export const USERNAME_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
+/** Host names, IPv4 and IPv6 (optionally in brackets). None of these can start with "-" or hold a path or port. */
+export const HOST_RE = /^(\[[0-9a-fA-F:.]+\]|[0-9a-fA-F:.]+|[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*)$/;
+
+export const HostName = z.string().min(1).max(255).regex(HOST_RE, 'Not an IP address or host name');
+export const UserName = z.string().regex(USERNAME_RE, 'Not a valid user name');
+
 /** Everything the bridge needs to reach one TV. */
 export const DeviceTarget = z.object({
-  host: z.string().min(1).max(255),
+  host: HostName,
   port: z.number().int().min(1).max(65535),
-  username: z.string().min(1).max(64),
+  username: UserName,
   auth: DeviceAuth,
 });
 export type DeviceTarget = z.infer<typeof DeviceTarget>;

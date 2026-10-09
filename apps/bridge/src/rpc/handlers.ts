@@ -1,3 +1,4 @@
+import { StringDecoder } from 'node:string_decoder';
 import { timingSafeEqual } from 'node:crypto';
 import { platform } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -42,6 +43,8 @@ export interface Session {
   authed: boolean;
   /** Push an unsolicited event to this client. */
   emit(event: string, data?: unknown): void;
+  /** Null while the client keeps up; otherwise resolves once it has caught up (a chatty command waits, not piles up). */
+  waitForRoom(): Promise<void> | null;
   /** Files this client has sent, held in memory until used or the connection closes. */
   uploads: UploadStore;
   /** Console commands this client is running (cmd.stream), by opId. Closed when the connection closes. */
@@ -92,7 +95,16 @@ export interface Context {
   litefin: LitefinClient;
   /** LG's Developer Mode session service (LGDM_LGE_URL overrides, for tests). */
   lgeUrl?: string;
+  /** Started with --dev: unexpected errors include their stack trace. */
+  dev?: boolean;
 }
+
+/** Console commands and followed logs one tab may run at once. */
+const MAX_STREAMS = 16;
+const startStream = (session: Session, opId: string) => {
+  if (session.streams.has(opId)) throw new RpcError(ErrorCodes.BadRequest, 'That operation id is already running.');
+  if (session.streams.size >= MAX_STREAMS) throw new RpcError(ErrorCodes.BadRequest, `At most ${MAX_STREAMS} commands and logs can run at once. Stop one first.`);
+};
 
 type Handler<M extends MethodName> = (
   params: ParamsOf<M>,
@@ -166,7 +178,7 @@ export const handlers: HandlerMap = {
     lunaCall(sshFor(session, ctx), device, uri, params ?? {}, pub ?? true, falseAsError ?? true),
 
   'cmd.stream': async ({ device, command, opId }, session, { pool }) => {
-    if (session.streams.has(opId)) throw new RpcError(ErrorCodes.BadRequest, 'That operation id is already running.');
+    startStream(session, opId);
     const run: RunningCommand = {
       cancelled: false,
       cancel() {
@@ -180,8 +192,25 @@ export const handlers: HandlerMap = {
       // Not logged as cmd.log: the console already shows the commands the user types, with live output.
       const ch = await pool.open(device, command);
       run.ch = ch;
-      const send = (stream: CmdOutput['stream']) => (c: Buffer) =>
-        session.emit(CMD_OUTPUT_EVENT, { opId, stream, data: c.toString('utf8') } satisfies CmdOutput);
+      // One decoder per stream: a character split across two chunks stays whole.
+      const decoders = { stdout: new StringDecoder('utf8'), stderr: new StringDecoder('utf8') };
+      let waiting = false;
+      const send = (stream: CmdOutput['stream']) => (c: Buffer) => {
+        const data = decoders[stream].write(c);
+        if (data) session.emit(CMD_OUTPUT_EVENT, { opId, stream, data } satisfies CmdOutput);
+        // `yes` or `cat /dev/urandom` outpaces a browser tab: pause the TV's output until the tab catches up.
+        if (waiting) return;
+        const room = session.waitForRoom();
+        if (!room) return;
+        waiting = true;
+        ch.stream.pause();
+        ch.stream.stderr.pause();
+        void room.then(() => {
+          waiting = false;
+          ch.stream.resume();
+          ch.stream.stderr.resume();
+        });
+      };
       ch.stream.on('data', send('stdout'));
       ch.stream.stderr.on('data', send('stderr'));
       const exit = new Promise<number | null>((resolve) => ch.stream.on('close', (code: number | null) => resolve(typeof code === 'number' ? code : null)));
@@ -196,7 +225,7 @@ export const handlers: HandlerMap = {
   },
   'logs.stream': async ({ device, source, opId, lines }, session, ctx) => {
     requireRoot(device, source === 'lsmonitor' ? 'The luna monitor' : source === 'dmesg' ? 'dmesg' : 'The system log');
-    if (session.streams.has(opId)) throw new RpcError(ErrorCodes.BadRequest, 'That operation id is already running.');
+    startStream(session, opId);
     const run: RunningCommand = {
       cancelled: false,
       cancel() {

@@ -11,9 +11,18 @@ import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import './styles/index.scss';
 import { App } from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { FramedNotice, isFramed } from './shell/FramedNotice';
 
+// Inside another site's frame (flag set by public/theme-init.js): don't start the app or contact the bridge.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {isFramed() ? (
+      <FramedNotice />
+    ) : (
+      <ErrorBoundary fullPage>
+        <App />
+      </ErrorBoundary>
+    )}
   </StrictMode>,
 );

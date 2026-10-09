@@ -16,6 +16,12 @@ const MAX_OUTPUT = 32 * 1024 * 1024;
  * and a page full of app icons would otherwise open dozens of `cat` channels on TVs without SFTP.
  */
 const MAX_CHANNELS = 6;
+/**
+ * Long-lived channels (followed logs, console commands, installs that wait for the TV) get their own few slots, so
+ * they can never use up the exec channels every other page needs. More than this run on a connection of their own.
+ * 6 + 3 (+ SFTP) stays under OpenSSH's MaxSessions of 10.
+ */
+const MAX_STREAMS = 3;
 
 interface Entry {
   key: string;
@@ -28,6 +34,8 @@ interface Entry {
   /** Exec channels in use, and callers waiting for one. */
   channels: number;
   waiting: (() => void)[];
+  /** Long-lived channels (`open`) on this connection. */
+  streams: number;
   /** Forgotten by `close({ graceful })`: end the connection once its running commands finish. */
   closing?: boolean;
 }
@@ -147,7 +155,7 @@ export class SshPool implements SshRunner {
         client.on('keyboard-interactive', (_n, _i, _l, prompts, finish) => finish(prompts.map(() => pw)));
       }
     });
-    const entry: Entry = { key, client, ready, busy: 0, channels: 0, waiting: [] };
+    const entry: Entry = { key, client, ready, busy: 0, channels: 0, waiting: [], streams: 0 };
     client.on('close', () => this.forget(entry));
     client.on('error', () => {}); // later errors surface on the in-flight operation / close
     client.connect(config);
@@ -160,9 +168,25 @@ export class SshPool implements SshRunner {
     if (this.entries.get(e.key) === e) this.entries.delete(e.key);
   }
 
-  /** Wait for a free exec channel on this connection. Returns the function that frees it. */
-  private async channel(e: Entry): Promise<() => void> {
-    if (e.channels >= MAX_CHANNELS) await new Promise<void>((r) => e.waiting.push(r));
+  /**
+   * Wait for a free exec channel on this connection, at most `timeoutMs` (a command the user has given up on must
+   * not run later). Returns the function that frees it.
+   */
+  private async channel(e: Entry, timeoutMs: number): Promise<() => void> {
+    if (e.channels >= MAX_CHANNELS) {
+      await new Promise<void>((resolve, reject) => {
+        const turn = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          const i = e.waiting.indexOf(turn);
+          if (i >= 0) e.waiting.splice(i, 1);
+          reject(new RpcError(DeviceErrorCodes.Timeout, 'The TV is busy with other commands. Try again in a moment.'));
+        }, timeoutMs);
+        e.waiting.push(turn);
+      });
+    }
     e.channels++;
     let freed = false;
     return () => {
@@ -204,9 +228,7 @@ export class SshPool implements SshRunner {
             clearTimeout(e.idle);
             // The timer only ever closes this same entry, and only if nobody picked it up again meanwhile.
             e.idle = setTimeout(() => {
-              if (e.busy === 0 && e.closing) {
-            e.client.end();
-          } else if (e.busy === 0 && this.entries.get(e.key) === e) {
+              if (e.busy === 0 && this.entries.get(e.key) === e) {
                 this.forget(e);
                 e.client.end();
               }
@@ -224,7 +246,17 @@ export class SshPool implements SshRunner {
   async execRaw(t: DeviceTarget, command: string, opts: ExecOptions = {}): Promise<RawExecResult> {
     const { client, entry, release } = await this.acquire(t);
     const limit = opts.maxOutput ?? MAX_OUTPUT;
-    const freeChannel = await this.channel(entry);
+    const timeoutMs = opts.timeoutMs ?? 120_000;
+    const queued = Date.now();
+    let freeChannel: () => void;
+    try {
+      freeChannel = await this.channel(entry, timeoutMs);
+    } catch (e) {
+      release();
+      throw e;
+    }
+    // Time spent waiting for a channel counts towards the command's timeout.
+    const remaining = Math.max(1_000, timeoutMs - (Date.now() - queued));
     try {
       return await new Promise<RawExecResult>((resolve, reject) => {
         client.exec(command, (err, stream) => {
@@ -238,8 +270,8 @@ export class SshPool implements SshRunner {
           let overflow = false;
           const timer = setTimeout(() => {
             stream.close();
-            reject(new RpcError(DeviceErrorCodes.Timeout, `Command timed out after ${opts.timeoutMs ?? 120_000} ms.`));
-          }, opts.timeoutMs ?? 120_000);
+            reject(new RpcError(DeviceErrorCodes.Timeout, `Command timed out after ${timeoutMs} ms.`));
+          }, remaining);
           const push = (arr: Buffer[]) => (c: Buffer) => {
             size += c.length;
             if (size > limit) {
@@ -282,22 +314,34 @@ export class SshPool implements SshRunner {
    */
   async open(t: DeviceTarget, command: string): Promise<Channel> {
     const { client, entry, release } = await this.acquire(t);
-    const freeChannel = await this.channel(entry);
+    if (entry.streams >= MAX_STREAMS) {
+      // All stream slots taken (three logs followed in other tabs…): this one gets a connection of its own.
+      release();
+      const own = await this.dedicated(t);
+      try {
+        const ch = await this.execChannel(own, command);
+        ch.stream.on('close', () => own.end());
+        return { stream: ch.stream, close: () => (ch.close(), own.end()) };
+      } catch (e) {
+        own.end();
+        throw e;
+      }
+    }
+    entry.streams++;
+    let freed = false;
     const done = () => {
-      freeChannel();
+      if (freed) return;
+      freed = true;
+      entry.streams--;
       release();
     };
     try {
-      const stream = await new Promise<ClientChannel>((resolve, reject) => {
-        client.exec(command, (err, s) =>
-          err ? reject(new RpcError(DeviceErrorCodes.CommandFailed, 'The TV did not accept the command.', err.message)) : resolve(s),
-        );
-      });
-      stream.on('close', done);
+      const ch = await this.execChannel(client, command);
+      ch.stream.on('close', done);
       return {
-        stream,
+        stream: ch.stream,
         close: () => {
-          stream.close();
+          ch.close();
           done();
         },
       };
@@ -305,6 +349,15 @@ export class SshPool implements SshRunner {
       done();
       throw e;
     }
+  }
+
+  private async execChannel(client: Client, command: string): Promise<{ stream: ClientChannel; close: () => void }> {
+    const stream = await new Promise<ClientChannel>((resolve, reject) => {
+      client.exec(command, (err, s) =>
+        err ? reject(new RpcError(DeviceErrorCodes.CommandFailed, 'The TV did not accept the command.', err.message)) : resolve(s),
+      );
+    });
+    return { stream, close: () => stream.close() };
   }
 
   /**

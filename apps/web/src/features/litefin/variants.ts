@@ -20,7 +20,7 @@ export const KNOWN_VARIANTS: Record<string, VariantInfo> = {
 };
 const ORDER = Object.keys(KNOWN_VARIANTS);
 
-export const variantInfo = (v: string): VariantInfo => KNOWN_VARIANTS[v] ?? { label: v.replace(/-/g, ' '), target: '', webos: '' };
+export const variantInfo = (v: string): VariantInfo => (Object.hasOwn(KNOWN_VARIANTS, v) ? KNOWN_VARIANTS[v] : undefined) ?? { label: v.replace(/-/g, ' '), target: '', webos: '' };
 
 /** Every variant in these releases, in the release notes' order (newest hardware first), unknown ones after. */
 export function variantColumns(releases: readonly LitefinRelease[]): string[] {

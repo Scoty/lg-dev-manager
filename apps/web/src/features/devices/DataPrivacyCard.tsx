@@ -2,7 +2,8 @@ import { useRef, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Alert } from '../../components/Alert';
 import { Icon } from '../../shell/icons';
-import { clearAllDevices, exportDevices, importDevices } from '../../devices/store';
+import { BackupError, clearAllDevices, exportDevices, importDevices } from '../../devices/store';
+import { saveBlob } from '../files/transfer';
 import { useDevices } from '../../devices/useDevices';
 import { useFeedback } from '../../components/Feedback';
 
@@ -21,19 +22,15 @@ export function DataPrivacyCard() {
     });
     if (!ok) return;
     const blob = new Blob([JSON.stringify(await exportDevices(), null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `lg-dev-manager-devices-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    saveBlob(blob, `lg-dev-manager-devices-${new Date().toISOString().slice(0, 10)}.json`);
   };
 
   const doImport = async (file: File) => {
     try {
       const n = await importDevices(JSON.parse(await file.text()));
       setMsg({ kind: 'success', text: `Imported ${n} device${n === 1 ? '' : 's'}.` });
-    } catch {
-      setMsg({ kind: 'danger', text: 'That file is not an LG Dev Manager device backup.' });
+    } catch (e) {
+      setMsg({ kind: 'danger', text: e instanceof BackupError ? e.message : 'That file is not an LG Dev Manager device backup.' });
     }
   };
 

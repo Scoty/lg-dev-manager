@@ -13,7 +13,7 @@ interface Target {
   path: string;
 }
 
-/** Resolve a Location header. Only plain http on the same host is followed — the key must come from the device the user named. */
+/** Resolve a Location header. Only plain http on the same host and port is followed — the key must come from the device the user named. */
 export function resolveRedirect(from: Target, location: string): Target {
   const loc = location.split('#')[0] ?? '';
   if (loc.startsWith('//')) return resolveRedirect(from, `http:${loc}`);
@@ -23,7 +23,12 @@ export function resolveRedirect(from: Target, location: string): Target {
     if (host.toLowerCase() !== from.host.toLowerCase()) {
       throw new RpcError(DeviceErrorCodes.KeyServerUnreachable, `The key server redirected to another host: ${loc}`);
     }
-    return { host: from.host, port: url.port ? Number(url.port) : 80, path: `${url.pathname}${url.search}` };
+    // …and the same port: a redirect mustn't turn the key fetch into a probe of the TV's (or this computer's) other ports.
+    const port = url.port ? Number(url.port) : 80;
+    if (port !== from.port) {
+      throw new RpcError(DeviceErrorCodes.KeyServerUnreachable, `The key server redirected to another port: ${loc}`);
+    }
+    return { host: from.host, port, path: `${url.pathname}${url.search}` };
   }
   if (loc.includes('://')) {
     throw new RpcError(DeviceErrorCodes.KeyServerUnreachable, `The key server redirected to a URL that is not plain HTTP: ${loc}`);

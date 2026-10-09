@@ -7,7 +7,8 @@ import { createElement, type ReactNode } from 'react';
  * against `baseUrl`. Images are drawn by `renderImage` (the repository page loads them through the bridge);
  * without it they are left out. Headings are shifted down so they fit inside the details dialog.
  */
-const KEEP: Record<string, string> = {
+/** Tag → what it becomes. A Map, so names like "constructor" or "__proto__" don't hit Object.prototype. */
+const KEEP = new Map<string, string>(Object.entries({
   p: 'p',
   br: 'br',
   hr: 'hr',
@@ -35,7 +36,7 @@ const KEEP: Record<string, string> = {
   td: 'td',
   a: 'a',
   img: 'img',
-};
+}));
 const DROP = new Set(['script', 'style', 'iframe', 'frame', 'object', 'embed', 'template', 'noscript', 'svg', 'math', 'form', 'input', 'button', 'select', 'textarea', 'link', 'meta', 'base', 'head', 'title']);
 const VOID = new Set(['br', 'hr', 'img']);
 const MAX_NODES = 5000;
@@ -69,7 +70,7 @@ export function sanitizeToReact(html: string, opts: { baseUrl?: string; renderIm
       const el = child as Element;
       const tag = el.tagName.toLowerCase();
       if (DROP.has(tag)) continue;
-      const as = KEEP[tag];
+      const as = KEEP.get(tag);
       if (!as) {
         out.push(...walk(el));
         continue;

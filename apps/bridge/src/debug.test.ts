@@ -69,7 +69,7 @@ describe('logs.stream', () => {
     // The console saw the commands.
     const cmds = frames.filter((m) => m.event === 'cmd.log' && m.data.phase === 'start').map((m) => m.data.command as string);
     expect(cmds.some((c) => c.includes('config/setConfigs'))).toBe(true);
-    expect(cmds).toContain('tail -f -n 5 /var/log/messages');
+    expect(cmds.some((c) => c.includes('{ tail -f -n 5 /var/log/messages; }'))).toBe(true);
     expect((await call('logs.stop', { opId: 's1' })).result).toEqual({ stopped: false });
   });
 
@@ -83,6 +83,24 @@ describe('logs.stream', () => {
     await call('logs.stop', { opId: 'd1' });
     await call('logs.stop', { opId: 'm1' });
     expect((await d).result.stopped).toBe(true);
+    expect((await m).result.stopped).toBe(true);
+  });
+
+  it('captures the luna bus again after stopping, and takes over from a leftover ls-monitor', async () => {
+    for (const opId of ['again1', 'again2']) {
+      const m = call('logs.stream', { device: rooted(), source: 'lsmonitor', opId });
+      await until(() => lines(opId).length >= 2);
+      await call('logs.stop', { opId });
+      const res = await m;
+      expect(res.error).toBeUndefined();
+      expect(res.result.stopped).toBe(true);
+      await until(() => !root.state.debug.monitorRunning); // the wrapper ended it on the TV
+    }
+    // One left running on the TV (an older bridge didn't stop it): the next capture still starts.
+    root.state.debug.monitorRunning = true;
+    const m = call('logs.stream', { device: rooted(), source: 'lsmonitor', opId: 'again3' });
+    await until(() => lines('again3').length >= 2);
+    await call('logs.stop', { opId: 'again3' });
     expect((await m).result.stopped).toBe(true);
   });
 

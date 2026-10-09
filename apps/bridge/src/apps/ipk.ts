@@ -32,6 +32,7 @@ function arMember(buf: Buffer, name: RegExp): Buffer | null {
     const size = Number.parseInt(header.slice(48, 58).trim(), 10);
     if (!Number.isFinite(size) || size < 0) return null;
     const start = off + 60;
+    if (start + size > buf.length) return null;
     if (name.test(member)) return buf.subarray(start, start + size);
     off = start + size + (size % 2);
   }
@@ -45,8 +46,11 @@ function tarMember(buf: Buffer, name: RegExp): Buffer | null {
     if (header.every((b) => b === 0)) return null;
     const entry = header.subarray(0, 100).toString('utf8').replace(/\0.*$/s, '');
     const size = Number.parseInt(header.subarray(124, 136).toString('latin1').replace(/\0.*$/s, '').trim() || '0', 8);
+    // A negative or garbage size would never move `off` forward (a crafted IPK hung the whole bridge).
+    if (!Number.isFinite(size) || size < 0) return null;
     const type = String.fromCharCode(header[156] ?? 48);
     const start = off + 512;
+    if (start + size > buf.length) return null;
     if ((type === '0' || type === '\0') && name.test(entry)) return buf.subarray(start, start + size);
     off = start + Math.ceil(size / 512) * 512;
   }

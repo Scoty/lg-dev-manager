@@ -38,6 +38,8 @@ export async function dispatch(raw: string, session: Session, ctx: Context): Pro
   } catch (e) {
     if (e instanceof RpcError) return { id, error: e.toBody() };
     const err = e as Error;
-    return { id, error: { code: ErrorCodes.Internal, message: 'Unexpected bridge error.', detail: err?.stack ?? String(e) } };
+    // The stack shows paths on this computer (home folder, user name): only for a bridge started with --dev.
+    const detail = ctx.dev ? (err?.stack ?? String(e)) : (err?.message ?? String(e));
+    return { id, error: { code: ErrorCodes.Internal, message: 'Unexpected bridge error.', detail } };
   }
 }

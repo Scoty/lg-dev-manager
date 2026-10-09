@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DeviceTarget } from './device';
+import { DeviceTarget, HostName } from './device';
 import { AppId, AppInfo, MAX_CHUNK_BYTES, MAX_UPLOAD_BYTES } from './apps';
 import { ScanResult } from './console';
 import { RepoPackage, WebUrl } from './repo';
@@ -54,7 +54,7 @@ export const Methods = {
    * webOS TV at all (LG's second-screen port 3000/3001 — open even when SSH is off).
    */
   'device.checkConnection': {
-    params: z.object({ host: z.string().min(1).max(255) }),
+    params: z.object({ host: HostName }),
     result: z.object({ ssh22: z.boolean(), ssh9922: z.boolean(), keyServer: z.boolean(), webos: z.boolean() }),
   },
   /**
@@ -70,12 +70,12 @@ export const Methods = {
    * shown in the Developer Mode app. Errors: passphrase_required, bad_passphrase, key_not_found, key_server_unreachable.
    */
   'device.fetchKey': {
-    params: z.object({ host: z.string().min(1).max(255), passphrase: z.string().optional() }),
+    params: z.object({ host: HostName, passphrase: z.string().max(1024).optional() }),
     result: z.object({ privateKey: z.string(), fingerprint: z.string() }),
   },
   /** Check that a private key parses with the given passphrase. */
   'device.verifyKey': {
-    params: z.object({ privateKey: z.string().min(1), passphrase: z.string().optional() }),
+    params: z.object({ privateKey: z.string().min(1).max(64 * 1024), passphrase: z.string().max(1024).optional() }),
     result: z.object({ fingerprint: z.string(), type: z.string() }),
   },
   /** Log in once and report who we are — used by the add-device wizard. */
@@ -121,8 +121,8 @@ export const Methods = {
   'cmd.exec': {
     params: z.object({
       device: DeviceTarget,
-      command: z.string().min(1),
-      stdin: z.string().optional(),
+      command: z.string().min(1).max(64 * 1024),
+      stdin: z.string().max(4 * 1024 * 1024).optional(),
       timeoutMs: z.number().int().min(100).max(600_000).optional(),
     }),
     result: z.object({ stdout: z.string(), stderr: z.string(), exitCode: z.number().nullable() }),
@@ -449,7 +449,10 @@ export const UNAUTHENTICATED_METHODS: readonly MethodName[] = ['system.hello'];
 /** Where the public web UI is hosted. */
 export const PUBLIC_WEB_ORIGIN = 'https://lg.scoty.uk';
 
-/** Origins the bridge always accepts: the public site and the Vite dev server. */
-export const DEFAULT_ALLOWED_ORIGINS = [PUBLIC_WEB_ORIGIN, 'http://localhost:5173', 'http://127.0.0.1:5173'] as const;
+/** Origins the bridge always accepts: the public site (and its own address, when it serves the UI itself). */
+export const DEFAULT_ALLOWED_ORIGINS = [PUBLIC_WEB_ORIGIN] as const;
+
+/** The Vite dev server, accepted only by a bridge started with --dev (any program could listen on that port). */
+export const DEV_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'] as const;
 
 export const REPO_URL = 'https://github.com/Scoty/lg-dev-manager';

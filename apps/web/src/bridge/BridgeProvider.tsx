@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BridgeClient, BridgeError } from './client';
-import { loadSettings, saveSettings, type BridgeSettings } from './settings';
+import { bridgeUrlProblem, loadSettings, saveSettings, type BridgeSettings } from './settings';
 
 export type BridgeStatus =
   | { state: 'unpaired' }
@@ -89,6 +89,9 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       settings,
       client,
       pair: async (s) => {
+        // Checked before anything is saved or sent: the token (and later TV logins) only ever go to this computer.
+        const problem = bridgeUrlProblem(s.url);
+        if (problem) throw new BridgeError('bad_url', problem);
         client?.close();
         saveSettings(s);
         setSettings(s);

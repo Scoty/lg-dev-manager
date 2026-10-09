@@ -283,3 +283,34 @@ the bridge is a Node program (`npx`) on the same computer as the browser. Phones
 **Output.** A short write-up with a recommendation and what it would take, for the owner to choose before any code.
 The mobile layout of the site itself already works (all pages are checked at phone width).
 
+
+---
+
+## 10. Pre-release security review (M10, Oct 2026)
+
+Three independent reviews (bridge network surface, bridge handlers, web app) before v1.0. Fixed:
+
+- **Bridge crashes from outside:** a bad WebSocket frame (too big / invalid UTF-8) or a malformed URL on the
+  `--web-root` server ended the process. Both now end only that request; last-resort error logging in the CLI.
+- **Bridge hangs:** an IPK with a negative tar size looped forever; SFTP reads of files reporting size 0
+  (`/dev/zero` links, FIFOs) ignored the size limit — now chunked, capped, regular files only, with a timeout.
+  Long-running channels (logs, console, installs) have their own slots or connection, and queued commands time out.
+- **Origins and hosts:** the Vite dev origins are only accepted with `--dev`; `--allow-origin` takes real http(s)
+  origins only; HTTP and WebSocket requests must name 127.0.0.1/localhost (DNS rebinding); repo downloads check
+  the address at connect time.
+- **Limits:** uploads per tab (4, idle ones expire), streams per tab (16), output back-pressure for console commands,
+  heartbeat for dead connections, size limits on keys, stdin and commands; rejected-origin warnings are rate-limited.
+- **Secrets:** token file and folder created owner-only; stack traces only with `--dev`; the pairing token and the
+  renew script's private key are masked on screen.
+- **Web:** prototype-key crash in repo descriptions (and an error boundary), backup import applies the same user name
+  and host rules as the forms (they could reach the renew script's `ssh` line), CSP `connect-src` limited to the local
+  bridge and the pairing address to this computer, frame protection, http(s)-only terminal links, SVG shown as text.
+- **CI:** Pages deploys only after CI passes, with deploy permissions on the deploy job only. vitest 4.1.11+.
+
+**DDoS:** the site is static on GitHub Pages (GitHub's CDN), makes no third-party calls from the browser, and has
+no backend — there is nothing of ours to overload. Homebrew / GitHub / LG requests come from each user's own bridge,
+so rate limits apply per user. The attack surface is each user's local bridge, covered above.
+
+**Known, not fixed for 1.0:** SSH host keys aren't checked (the original app doesn't either) — a device on the same
+network that takes over the TV's IP could receive the login. Planned: remember each TV's host key on first use and
+warn when it changes. The remaining audit note (esbuild's dev server on Windows, via tsup) is dev-only and unused.

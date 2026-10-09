@@ -7,6 +7,7 @@ import { updateDevice, type SavedDevice } from '../../devices/store';
 import { useDevices } from '../../devices/useDevices';
 import { AuthFields } from './AuthFields';
 import { authProblems, describeLogin, hostProblem, toDeviceAuth, type AuthDraft, type AuthKind } from './auth';
+import { isValidUsername } from '../../devices/validate';
 
 /** Inline device editor (devices/inline-editor in the original): rename, change address, replace the login. */
 export function EditDeviceDialog({ device, onClose }: { device: SavedDevice | null; onClose: () => void }) {
@@ -51,7 +52,7 @@ export function EditDeviceDialog({ device, onClose }: { device: SavedDevice | nu
       : null;
   const hostErr = hostProblem(host);
   const portProblem = !Number.isInteger(port) || port < 1 || port > 65535 ? 'Port must be 1–65535.' : null;
-  const userProblem = !/^[a-z_][a-z0-9_-]{0,31}$/.test(username) ? 'Not a valid user name.' : null;
+  const userProblem = !isValidUsername(username) ? 'Not a valid user name.' : null;
   const valid = !nameProblem && !hostErr && !portProblem && !userProblem && Object.keys(authProblems(auth)).length === 0 && (auth.kind !== 'key' || keyUsable);
 
   const submit = async (e: FormEvent) => {

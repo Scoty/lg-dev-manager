@@ -18,6 +18,11 @@ export interface DebugState {
   every: number;
   /** Sequence number for generated lines (makes them distinct). */
   seq: number;
+  /**
+   * An ls-monitor holds the bus name com.webos.monitor. Like on a real TV, one started without the bridge's
+   * "stop when the channel closes" wrapper keeps running after the client goes away.
+   */
+  monitorRunning: boolean;
 }
 
 export const SYSLOG = '/var/log/messages';
@@ -58,7 +63,7 @@ const KERNEL: [string, string, string][] = [
 ];
 
 export function createDebugState(root: boolean): DebugState {
-  const d: DebugState = { dmesg: [], pmlog: new Map(PMLOG_CONTEXTS), devLogs: false, every: 400, seq: 0 };
+  const d: DebugState = { dmesg: [], pmlog: new Map(PMLOG_CONTEXTS), devLogs: false, every: 400, seq: 0, monitorRunning: false };
   for (let i = 0; i < KERNEL.length; i++) {
     const [facility, level, msg] = KERNEL[i]!;
     d.dmesg.push({ facility, level, t: 1.5 + i * 0.75, msg });
@@ -126,10 +131,23 @@ export function runDebugCommand(command: string, state: MockState): { stdout: st
 const TAIL = /^tail -f -n (\d+) \/var\/log\/messages$/;
 const DMESG_FOLLOW = 'dmesg -w -x || dmesg';
 const LS_MONITOR = 'ls-monitor -j';
+/** The bridge's untilChannelCloses() wrapper around a followed command (apps/bridge/src/debug/debug.ts). */
+const WRAPPED = /^exec 3<&0; \{ (.+); \} <\/dev\/null & p=\$!; \( cat <&3; pkill -P \$p; kill \$p \) >\/dev\/null 2>&1 & w=\$!; wait \$p; s=\$\?; kill \$w 2>\/dev\/null; exit \$s$/;
+/** …and the stop-a-leftover-monitor prefix. */
+const STOP_MONITOR = 'if killall ls-monitor 2>/dev/null || pkill -x ls-monitor 2>/dev/null; then sleep 1; fi; ';
+
+/** A followed command, with what wraps it: `stopStale` kills a leftover ls-monitor, `wrapped` ends with the channel. */
+function parseStream(command: string): { inner: string; wrapped: boolean; stopStale: boolean } {
+  const stopStale = command.startsWith(STOP_MONITOR);
+  const rest = stopStale ? command.slice(STOP_MONITOR.length) : command;
+  const m = WRAPPED.exec(rest);
+  return { inner: m ? m[1]! : rest, wrapped: !!m, stopStale };
+}
 
 /** Commands that keep running and print as they go (followed logs). */
 export function isDebugStream(command: string): boolean {
-  return TAIL.test(command) || command === DMESG_FOLLOW || command === LS_MONITOR;
+  const { inner } = parseStream(command);
+  return TAIL.test(inner) || inner === DMESG_FOLLOW || inner === LS_MONITOR;
 }
 
 const wait = (ms: number, signal: AbortSignal) =>
@@ -148,6 +166,8 @@ export async function runDebugStream(
 ): Promise<number> {
   const root = state.username === 'root';
   const d = state.debug;
+  const { inner, wrapped, stopStale } = parseStream(command);
+  command = inner;
   const tail = TAIL.exec(command);
   if (tail) {
     if (!root) {
@@ -187,6 +207,14 @@ export async function runDebugStream(
     err('ls-monitor: Unable to register on the hub: Permission denied\n');
     return 1;
   }
+  if (stopStale) d.monitorRunning = false;
+  if (d.monitorRunning) {
+    err('LUNASERVICE ERROR -1028: Attempted to register for a service name that already exists: com.webos.monitor (_LSTransportRequestName @ transport.c:2178)\n');
+    return 1;
+  }
+  d.monitorRunning = true;
+  // Closing the channel only stops it when the bridge wrapped it (no PTY → no SIGHUP on a real TV).
+  signal.addEventListener('abort', () => wrapped && (d.monitorRunning = false), { once: true });
   const CALLS = [
     { sender: 'com.webos.surfacemanager', destination: 'com.webos.service.applicationmanager', category: '/', method: 'getForegroundAppInfo', payload: { subscribe: false }, reply: { returnValue: true, appId: 'com.webos.app.home' } },
     { sender: 'com.webos.app.home', destination: 'com.webos.service.config', category: '/', method: 'getConfigs', payload: { configNames: ['system.collectDevLogs'] }, reply: { returnValue: true, configs: { 'system.collectDevLogs': d.devLogs } } },

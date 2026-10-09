@@ -55,7 +55,9 @@ describe('key server', () => {
 
   it('resolves relative redirects', () => {
     expect(resolveRedirect({ host: 'tv', port: 9991, path: '/dir/webos_rsa?x=1' }, 'key#part')).toEqual({ host: 'tv', port: 9991, path: '/dir/key' });
-    expect(resolveRedirect({ host: 'tv', port: 9991, path: '/webos_rsa' }, '//tv:9922')).toEqual({ host: 'tv', port: 9922, path: '/' });
+    expect(resolveRedirect({ host: 'tv', port: 9991, path: '/webos_rsa' }, '//tv:9991')).toEqual({ host: 'tv', port: 9991, path: '/' });
+    expect(() => resolveRedirect({ host: 'tv', port: 9991, path: '/webos_rsa' }, '//tv:9922')).toThrow(/another port/);
+    expect(() => resolveRedirect({ host: 'tv', port: 9991, path: '/webos_rsa' }, 'http://tv/key')).toThrow(/another port/);
   });
 
   it('reports an unreachable key server', async () => {

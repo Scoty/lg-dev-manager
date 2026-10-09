@@ -73,15 +73,8 @@ export function toDeviceAuth(a: AuthDraft): DeviceAuth | null {
   }
 }
 
-/** Host names, IPv4 and IPv6 (optionally in brackets). Not a full validator — the port check is the real test. */
-export function hostProblem(host: string): string | null {
-  const h = host.trim();
-  if (!h) return 'Enter the TV’s IP address.';
-  if (h.length > 255 || !/^(\[[0-9a-fA-F:.]+\]|[0-9a-fA-F:.]+|[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*)$/.test(h)) {
-    return 'That doesn’t look like an IP address or host name.';
-  }
-  return null;
-}
+/** Shared with backup import and the renew script (devices/validate.ts). */
+export { hostProblem } from '../../devices/validate';
 
 export function describeLogin(auth: DeviceAuth): string {
   return auth.kind === 'password' ? 'password' : auth.passphrase ? 'key + passphrase' : 'private key';

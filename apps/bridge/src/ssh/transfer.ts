@@ -112,20 +112,58 @@ export async function putFile(
   return 'stream';
 }
 
-/** Read a whole (small) file from the TV. Fails with file_too_large past `maxBytes`. */
+const READ_TIMEOUT_MS = 60_000;
+const READ_CHUNK = 32 * 1024;
+
+/**
+ * Read up to `maxBytes` of a regular file over SFTP, in chunks. Not ssh2's `readFile`: for files that report size 0
+ * (/proc, /sys, and anything linked to /dev/zero or a FIFO) it reads until EOF, past any limit or forever.
+ */
+async function sftpReadBounded(sftp: SFTPWrapper, path: string, maxBytes: number, tooLarge: () => Error): Promise<Buffer> {
+  const handle = await sftpCall<Buffer>((cb) => sftp.open(path, 'r', cb));
+  const deadline = Date.now() + READ_TIMEOUT_MS;
+  const parts: Buffer[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      if (Date.now() > deadline) throw new Error('timed out');
+      const want = Math.min(READ_CHUNK, maxBytes + 1 - total);
+      const buf = Buffer.allocUnsafe(want);
+      const n = await new Promise<number>((resolve, reject) =>
+        sftp.read(handle, buf, 0, want, total, (err, bytesRead) => {
+          // EOF arrives as an error with code 1 (SSH_FX_EOF).
+          if (err) return (err as Error & { code?: number }).code === 1 ? resolve(0) : reject(err);
+          resolve(bytesRead);
+        }),
+      );
+      if (n === 0) break;
+      parts.push(buf.subarray(0, n));
+      total += n;
+      if (total > maxBytes) throw tooLarge();
+    }
+  } finally {
+    sftp.close(handle, () => {});
+  }
+  return Buffer.concat(parts, total);
+}
+
+/** Read a whole (small) regular file from the TV. Fails with file_too_large past `maxBytes`. */
 export async function readFile(pool: SshRunner, device: DeviceTarget, path: string, maxBytes: number): Promise<Buffer> {
   const tooLarge = () => new RpcError(AppsErrorCodes.FileTooLarge, `${path} is larger than ${maxBytes} bytes.`);
+  const failed = (detail: string) => new RpcError(DeviceErrorCodes.CommandFailed, `Could not read ${path} on the TV.`, detail);
   const { sftp, release } = await pool.sftp(device);
   try {
     if (sftp) {
-      const stats = await sftpCall<{ size: number }>((cb) => sftp.stat(path, cb)).catch((e: Error) => {
-        throw new RpcError(DeviceErrorCodes.CommandFailed, `Could not read ${path} on the TV.`, e.message);
+      const stats = await sftpCall<{ size: number; isFile(): boolean }>((cb) => sftp.stat(path, cb)).catch((e: Error) => {
+        throw failed(e.message);
       });
+      // Devices, FIFOs and sockets never end (or block): only regular files.
+      if (!stats.isFile()) throw failed('Not a regular file.');
       if (stats.size > maxBytes) throw tooLarge();
       return await pool
-        .traceOp(device, 'sftp', `sftp get ${path}`, () => sftpCall<Buffer>((cb) => sftp.readFile(path, cb)))
+        .traceOp(device, 'sftp', `sftp get ${path}`, () => sftpReadBounded(sftp, path, maxBytes, tooLarge))
         .catch((e: Error) => {
-          throw new RpcError(DeviceErrorCodes.CommandFailed, `Could not read ${path} on the TV.`, e.message);
+          throw e instanceof RpcError ? e : failed(e.message);
         });
     }
   } finally {

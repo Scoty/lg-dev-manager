@@ -21,8 +21,10 @@ It has two parts (see `PLAN.md` §1 for why):
 
 1. **The browser never talks to the TV directly.** Every TV operation is a typed RPC in
    `packages/protocol`, implemented in the bridge. No generic "open socket to host:port" RPC — ever.
-2. **Bridge security stays on.** Bind `127.0.0.1` only (no LAN mode), Origin allowlist, pairing token required.
-   Don't add flags that disable these without an explicit, documented reason.
+2. **Bridge security stays on.** Bind `127.0.0.1` only (no LAN mode), Origin allowlist, pairing token required,
+   Host header checked. The Vite dev origins are accepted only with `--dev` (`pnpm dev:bridge`).
+   Don't add flags that disable these without an explicit, documented reason. Anything a web page can send the
+   bridge (frames, URLs, uploads) must fail that request, never the process — see PLAN.md §10.
 3. **User settings live only in the browser.** Saved TVs (names, addresses, keys, passwords) are kept in
    IndexedDB (`apps/web/src/devices/store.ts`) and the bridge pairing in `localStorage`. Nothing is ever sent to
    the website or any third party. Device details go **only to the paired bridge**, inside the RPC that needs them.

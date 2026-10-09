@@ -1,3 +1,4 @@
+import { StringDecoder } from 'node:string_decoder';
 import { DeviceErrorCodes, LunaErrorCodes, type DeviceTarget } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
 import type { SshRunner } from './pool.js';
@@ -108,6 +109,10 @@ export async function lunaSubscribe<T>(
     return await new Promise<T>((resolve, reject) => {
       let buf = '';
       let stderr = '';
+      // A character split across two chunks stays whole; a TV that never ends a line can't fill the bridge's memory.
+      const out = new StringDecoder('utf8');
+      const err = new StringDecoder('utf8');
+      const MAX_LINE = 4 * 1024 * 1024;
       let settled = false;
       const finish = (fn: () => void) => {
         if (settled) return;
@@ -120,10 +125,14 @@ export async function lunaSubscribe<T>(
         opts.timeoutMs ?? 600_000,
       );
       stream.stderr.on('data', (c: Buffer) => {
-        stderr += c.toString('utf8');
+        if (stderr.length < 64 * 1024) stderr += err.write(c);
       });
       stream.on('data', (c: Buffer) => {
-        buf += c.toString('utf8');
+        buf += out.write(c);
+        if (buf.length > MAX_LINE && buf.indexOf('\n') < 0) {
+          finish(() => reject(new RpcError(LunaErrorCodes.BadResponse, `Unexpected response from ${uri}.`, 'A reply line was too long.')));
+          return;
+        }
         let nl: number;
         while (!settled && (nl = buf.indexOf('\n')) >= 0) {
           const line = buf.slice(0, nl).trim();

@@ -25,6 +25,10 @@ test('Dev Mode: details, session countdown, renew, automatic renewal', async ({ 
   await expect(dialog.locator('.copybox')).toContainText('https://developer.lge.com/secure/ResetDevModeSession.dev?sessionToken=MOCKDEVMODETOKEN');
   await dialog.getByRole('button', { name: 'Shell script' }).click();
   await expect(dialog.locator('pre')).toContainText("DEVICE_NAME='Info-Dev'");
+  // The key is hidden until asked for (screens get shared and recorded).
+  await expect(dialog.locator('pre')).toContainText('[private key hidden]');
+  await expect(dialog.locator('pre')).not.toContainText('BEGIN RSA PRIVATE KEY');
+  await dialog.getByRole('button', { name: 'Show key' }).click();
   await expect(dialog.locator('pre')).toContainText('BEGIN RSA PRIVATE KEY');
   const dl = page.waitForEvent('download');
   await dialog.getByRole('button', { name: /Download renew-devmode-Info-Dev\.sh/ }).click();

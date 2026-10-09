@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DeviceAuth, type DeviceTarget } from '@lgdm/protocol';
+import { hostProblem, isValidUsername } from './validate';
 
 /**
  * Saved TVs live ONLY in this browser (IndexedDB, per site). Nothing is stored on the bridge or any server;
@@ -57,13 +58,46 @@ export const SavedDevice = z.object({
 export type SavedDevice = z.infer<typeof SavedDevice>;
 export type NewDevice = Omit<SavedDevice, 'id' | 'createdAt' | 'updatedAt'>;
 
+/**
+ * A device as read from a backup file. Stricter than SavedDevice: the address and user name must pass the same
+ * rules as the add / edit forms, so a hand-made backup can't slip in values the forms would refuse
+ * (e.g. a user name like "-oProxyCommand=…").
+ */
+export const ImportedDevice = SavedDevice.extend({
+  host: z.string().trim().refine((h) => hostProblem(h) === null, 'Not a valid IP address or host name.'),
+  username: z.string().refine(isValidUsername, 'Not a valid user name.'),
+});
+
 export const ExportFile = z.object({
   format: z.literal('lg-dev-manager/devices'),
   version: z.literal(1),
   exportedAt: z.number(),
-  devices: z.array(SavedDevice),
+  devices: z.array(ImportedDevice).max(500),
 });
 export type ExportFile = z.infer<typeof ExportFile>;
+
+/** Why a backup was refused, in words for the user (never echoes keys or passwords). */
+export class BackupError extends Error {
+  override name = 'BackupError';
+}
+
+const NOT_A_BACKUP = 'That file is not an LG Dev Manager device backup.';
+
+function describeBackupProblem(error: z.ZodError, json: unknown): string {
+  const issue = error.issues.find((i) => i.path[0] === 'devices' && typeof i.path[1] === 'number');
+  if (!issue) return NOT_A_BACKUP;
+  const index = issue.path[1] as number;
+  const raw = (json as { devices?: { name?: unknown }[] }).devices?.[index]?.name;
+  const label = typeof raw === 'string' && raw.trim() ? `“${raw.trim().slice(0, 64)}”` : `number ${index + 1}`;
+  const field = issue.path[2];
+  const what =
+    field === 'username'
+      ? 'has a user name that isn’t allowed'
+      : field === 'host'
+        ? 'has an address that isn’t an IP address or host name'
+        : 'has settings this app can’t use';
+  return `Nothing was imported: TV ${label} in this backup ${what}. Only import backups you made yourself.`;
+}
 
 const DB_NAME = 'lgdm';
 /** 2: screenshots (features/info/shots.ts). */
@@ -224,9 +258,14 @@ export async function exportDevices(): Promise<ExportFile> {
   return { format: 'lg-dev-manager/devices', version: 1, exportedAt: Date.now(), devices: await listDevices() };
 }
 
-/** Import a backup. Devices with an id that already exists are replaced. Returns how many were imported. */
+/**
+ * Import a backup. Devices with an id that already exists are replaced. Returns how many were imported.
+ * All or nothing: one bad device rejects the whole file with a BackupError.
+ */
 export async function importDevices(json: unknown): Promise<number> {
-  const file = ExportFile.parse(json);
+  const parsed = ExportFile.safeParse(json);
+  if (!parsed.success) throw new BackupError(describeBackupProblem(parsed.error, json));
+  const file = parsed.data;
   const d = await db();
   await new Promise<void>((resolve, reject) => {
     const t = d.transaction(STORE, 'readwrite');

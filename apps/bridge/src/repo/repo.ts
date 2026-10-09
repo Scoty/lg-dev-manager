@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
+import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from 'node:dns';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { BlockList, isIP } from 'node:net';
+import { Readable } from 'node:stream';
 import {
   AppsErrorCodes,
   DEFAULT_REPO_URL,
@@ -255,8 +259,11 @@ export async function safeGet(href: string, timeoutMs: number, trustedOrigin?: s
   let url = new URL(href);
   for (let hop = 0; ; hop++) {
     if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new RpcError(RepoErrorCodes.BadResponse, 'Only http(s) links can be fetched.', url.href);
-    if (url.origin !== trustedOrigin) await assertPublicHost(url);
-    const res = await fetch(url, { redirect: 'manual', signal, headers: { accept: '*/*' } });
+    const trusted = url.origin === trustedOrigin;
+    if (!trusted) await assertPublicHost(url);
+    // Outside the trusted source the connection checks the address it actually uses (pinnedGet), so a host that
+    // answers DNS with a public address for the check and 127.0.0.1 a moment later still can't reach this computer.
+    const res = trusted ? await fetch(url, { redirect: 'manual', signal, headers: { accept: '*/*' } }) : await pinnedGet(url, signal);
     const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
     if (!location) return res;
     await res.body?.cancel().catch(() => {});
@@ -322,6 +329,43 @@ export async function downloadIpk(
     );
   }
   return { data, sha256, done };
+}
+
+type LookupCallback = (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
+
+/** dns.lookup for outgoing connections that refuses loopback, LAN and link-local answers. */
+export function publicLookup(hostname: string, options: LookupOptions, callback: LookupCallback) {
+  dnsLookup(hostname, { ...options, all: true }, (err, addresses) => {
+    if (err) return callback(err, '');
+    const list = addresses as LookupAddress[];
+    if (!list.length || list.some((a) => isNonPublicAddress(a.address))) {
+      return callback(Object.assign(new Error(`Refusing to connect to a local or private network address for ${hostname}.`), { code: 'EPRIVATE' }), '');
+    }
+    if (options.all) callback(null, list);
+    else callback(null, list[0]!.address, list[0]!.family);
+  });
+}
+
+/** A GET whose connection may only go to a public address. Answers like fetch (no redirects followed). */
+function pinnedGet(url: URL, signal: AbortSignal): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const req = (url.protocol === 'https:' ? httpsRequest : httpRequest)(
+      url,
+      { method: 'GET', headers: { accept: '*/*', 'user-agent': 'lg-dev-manager-bridge' }, lookup: publicLookup as never, signal },
+      (msg) => {
+        const status = msg.statusCode ?? 0;
+        const headers = new Headers();
+        for (const [k, v] of Object.entries(msg.headers)) for (const x of [v ?? []].flat()) headers.append(k, x);
+        const empty = status === 204 || status === 304;
+        if (empty) msg.resume();
+        resolve(new Response(empty ? null : (Readable.toWeb(msg) as ReadableStream<Uint8Array>), { status, headers }));
+      },
+    );
+    req.on('error', (e: NodeJS.ErrnoException) =>
+      reject(e.code === 'EPRIVATE' ? new RpcError(RepoErrorCodes.BadResponse, 'Refusing to fetch from a local or private network address.', url.href) : e),
+    );
+    req.end();
+  });
 }
 
 async function assertPublicHost(url: URL) {

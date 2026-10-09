@@ -29,16 +29,40 @@ export const requireRoot = (device: DeviceTarget, what: string) => {
   }
 };
 
+/**
+ * Runs a followed command so it stops when the bridge closes the channel. Closing an SSH exec channel without a PTY
+ * doesn't signal the process on the TV: it lives on until its next write fails — and `ls-monitor` never fails, so it
+ * kept the bus name com.webos.monitor and every later capture got LUNASERVICE ERROR -1028. Here the command runs in
+ * the background while `cat` waits on the channel's input (fd 3, saved first: background jobs get /dev/null); when
+ * the channel closes, `cat` sees EOF and the command (and anything it started) is killed.
+ */
+export function untilChannelCloses(command: string): string {
+  return [
+    'exec 3<&0',
+    `{ ${command}; } </dev/null & p=$!`,
+    '( cat <&3; pkill -P $p; kill $p ) >/dev/null 2>&1 & w=$!',
+    'wait $p; s=$?',
+    'kill $w 2>/dev/null',
+    'exit $s',
+  ].join('; ');
+}
+
+/**
+ * Only one ls-monitor can hold the bus name. One left over (a capture from an older bridge, or another tab) is
+ * stopped first, so a new capture takes over instead of failing with -1028.
+ */
+const STOP_STALE_MONITOR = 'if killall ls-monitor 2>/dev/null || pkill -x ls-monitor 2>/dev/null; then sleep 1; fi';
+
 /** The command that follows each log (remote-log.service.ts: logread, dmesg; ls-monitor.component.ts). */
 export function logCommand(source: LogSource, lines: number): string {
   switch (source) {
     case 'syslog':
-      return `tail -f -n ${Math.max(0, Math.min(5000, Math.floor(lines)))} /var/log/messages`;
+      return untilChannelCloses(`tail -f -n ${Math.max(0, Math.min(5000, Math.floor(lines)))} /var/log/messages`);
     case 'dmesg':
       // `-w` (follow) needs util-linux dmesg; busybox's only prints the buffer once.
-      return 'dmesg -w -x || dmesg';
+      return untilChannelCloses('dmesg -w -x || dmesg');
     case 'lsmonitor':
-      return 'ls-monitor -j';
+      return `${STOP_STALE_MONITOR}; ${untilChannelCloses('ls-monitor -j')}`;
   }
 }
 

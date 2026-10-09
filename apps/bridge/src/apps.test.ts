@@ -1,3 +1,4 @@
+import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { fakeIpk, startMockTv, type MockTv } from '@lgdm/mock-tv';
 import type { DeviceTarget, OpProgress } from '@lgdm/protocol';
@@ -199,12 +200,38 @@ describe('IPK control', () => {
     expect(readIpkControl(Buffer.from('not an ipk'))).toBeNull();
     expect(readIpkControl(Buffer.from('!<arch>\nbroken'))).toBeNull();
   });
+
+  it('returns at once for a tar entry with a negative, garbage or too-large size (no endless loop)', () => {
+    const ipkWithTarSize = (size: string) => {
+      const hdr = Buffer.alloc(512);
+      hdr.write('./junk', 0);
+      hdr.write(`${size}\0`, 124, 'latin1');
+      hdr[156] = 0x35; // a directory, so it is skipped rather than matched
+      const ctl = gzipSync(Buffer.concat([hdr, Buffer.alloc(1024)]));
+      const ar = (name: string, n: number) =>
+        Buffer.from(name.padEnd(16) + '0'.padEnd(12) + '0'.padEnd(6) + '0'.padEnd(6) + '100644'.padEnd(8) + String(n).padEnd(10) + '`\n', 'latin1');
+      return Buffer.concat([Buffer.from('!<arch>\n'), ar('control.tar.gz', ctl.length), ctl, ctl.length % 2 ? Buffer.from('\n') : Buffer.alloc(0)]);
+    };
+    for (const size of ['-1001', 'zz', '77777777777']) expect(readIpkControl(ipkWithTarSize(size))).toBeNull();
+  });
 });
 
 describe('pool', () => {
   it('limits concurrent channels per connection but finishes every command', async () => {
     const results = await Promise.all(Array.from({ length: 20 }, (_, i) => pool.exec(devmode(streamTv), `echo ${i}`)));
     expect(results.map((r) => r.stdout.trim())).toEqual(Array.from({ length: 20 }, (_, i) => String(i)));
+  });
+
+  it('long-running channels never use up the channels other commands need', async () => {
+    const p2 = new SshPool();
+    const d = devmode(devTv);
+    // More followed logs / console commands than one connection has room for.
+    const open = await Promise.all(Array.from({ length: 8 }, () => p2.open(d, 'sleep 5')));
+    const t0 = Date.now();
+    expect((await p2.exec(d, 'echo free', { timeoutMs: 3000 })).stdout.trim()).toBe('free');
+    expect(Date.now() - t0).toBeLessThan(2500);
+    for (const ch of open) ch.close();
+    p2.close();
   });
 
   it('a graceful close lets running commands finish, then ends the connection', async () => {

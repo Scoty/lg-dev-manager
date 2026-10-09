@@ -982,3 +982,10 @@ button.log-row:hover { background: var(--bg-hover); }
 @media (max-width: 860px) {
   .crumbs > span:not(.current), .crumbs .sep { display: none; }
 }
+
+/* Shown instead of the app when it is loaded inside another site's frame (public/theme-init.js). */
+.standalone-notice { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--bg-body); }
+.standalone-notice .card { max-width: 520px; width: 100%; }
+
+/* A page that crashed (PageErrorBoundary): the shell stays, this card takes the content area. */
+.page-error .mono { word-break: break-word; }
