@@ -70,7 +70,27 @@ button.nav-link { width: 100%; text-align: left; }
 .hero-title .accent { white-space: nowrap; }
 /* Page intros use the width they have (Adminator caps them at 60ch, which wrapped short lines early). */
 .hero-text { flex: 1; min-width: 0; }
-.hero-sub { max-width: none; }
+.hero-sub { max-width: none; margin: 0; }
+
+/* Compact density (owner request): Adminator's marketing-dashboard spacing left a lot of empty space around the
+   page intro, between cards and above the footer. Same look, tighter rhythm. */
+.content { padding: 22px 28px 4px; }
+.hero { margin-bottom: 16px; gap: 24px; }
+.hero-text .eyebrow { margin-bottom: 6px; }
+.hero-title { font-size: clamp(24px, 2.6vw, 30px); margin-bottom: 4px; }
+.grid { gap: 16px; }
+.card { padding: 18px; }
+.card-head { padding-bottom: 12px; margin-bottom: 14px; }
+.data-toolbar { margin-bottom: 12px; }
+.d-footer { padding: 12px 28px 14px; }
+.data-table thead th { padding-top: 9px; padding-bottom: 9px; }
+.data-table tbody td { padding-top: 8px; padding-bottom: 8px; }
+.data-foot { padding-top: 12px; }
+@media (max-width: 720px) {
+  .content { padding: 16px 14px 4px; }
+  .hero { gap: 12px; }
+  .d-footer { padding: 12px 14px; }
+}
 /* Pill groups sit in toolbars and rows next to inputs and buttons: no underline-tab margin, or they ride high. */
 .tabs.pills { margin-bottom: 0; }
 .stack > .tabs.pills { align-self: flex-start; }
@@ -501,7 +521,7 @@ body.has-drawer-open .console-dock { z-index: 10; }
 
 .repo-grid {
   list-style: none; margin: 0; padding: 0;
-  display: grid; gap: 14px;
+  display: grid; gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 .repo-card {
@@ -796,6 +816,6 @@ kbd {
 .btn--danger-ghost:hover { border-color: var(--danger); }
 .screenshot--empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center;
-  aspect-ratio: 16 / 9; max-height: 320px; border-radius: 10px; border: 1px dashed var(--border); color: var(--t-muted); font-size: 13px; padding: 16px;
+  min-height: 140px; border-radius: 10px; border: 1px dashed var(--border); color: var(--t-muted); font-size: 13px; padding: 16px;
 }
 .screenshot--empty svg { width: 32px; height: 32px; stroke: currentColor; stroke-width: 1.5; fill: none; }
