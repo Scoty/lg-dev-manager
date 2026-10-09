@@ -1,4 +1,10 @@
-LG Dev Manager (web)
+LG Dev Manager
+https://github.com/Scoty/lg-dev-manager
+Copyright 2026 Scoty (https://github.com/Scoty) and the LG Dev Manager contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE). You may use, change and share this app and its
+source code freely, including commercially, as long as you keep the license and this NOTICE file — which credits
+the authors below — with any copy or derived work.
 
 This project is a re-implementation inspired by and porting behaviour from:
 

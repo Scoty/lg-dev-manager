@@ -106,7 +106,8 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 
 - Original app: Apache-2.0 — keep attribution in `NOTICE` when porting code or text.
 - Adminator: MIT — keep its copyright notice in `NOTICE` and in the ported SCSS header.
-- This repo: **❓ to be decided by owner** (default proposal: Apache-2.0, matching the original).
+- This repo: **Apache-2.0** (`LICENSE`, owner decision Oct 2026). Free use as long as the authors are credited: keep
+  `NOTICE` up to date and ship `LICENSE` + `NOTICE` with anything distributed (the npm bridge package included).
 
 ## Decisions
 
@@ -119,7 +120,7 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 | UI framework | React 19 + Vite + TypeScript | Decided |
 | v1 scope | **Full parity** with the desktop app (all of PLAN.md §3, incl. Debug tools) before the public release | Decided |
 | Device/key storage | **Browser only** (IndexedDB + export/import); bridge is stateless and never writes device details to disk | Decided (owner, Oct 2026) |
-| Repo license | Apache-2.0 (proposed) | Default |
+| Repo license | Apache-2.0 — free use, attribution via NOTICE (owner, Oct 2026) | Decided |
 | Hosting | GitHub Pages with custom domain **lg.scoty.uk** (Cloudflare DNS), public preview from now, v1.0 at M10 | Decided |
 | Repository | **github.com/Scoty/lg-dev-manager** | Decided |
 | Test devices | Owner tests on both Dev Mode (SSH 9922) and rooted (SSH 22) TVs | Decided |
