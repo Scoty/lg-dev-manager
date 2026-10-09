@@ -11,6 +11,7 @@ import type { SavedDevice } from '../../devices/store';
 import { AppIcon } from './AppIcon';
 import { useAppOperations } from './operations';
 import { useInstalledApps, useStorage } from './queries';
+import { modelLabel } from '../../devices/model';
 
 const fmtKb = (kb: number) => (kb >= 1024 * 1024 ? `${(kb / 1024 / 1024).toFixed(1)} GB` : `${Math.round(kb / 1024)} MB`);
 
@@ -89,7 +90,7 @@ export function InstalledAppsPage() {
         eyebrow="Apps"
         title="Installed"
         accent="apps"
-        sub={active ? <>Apps on <b>{active.name}</b>. Drop an <span className="mono">.ipk</span> anywhere on this page to install it.</> : 'Apps on your TV.'}
+        sub={active ? <>Apps on <b>{active.name}</b>{active.info?.modelName && <> ({modelLabel(active.info.modelName)})</>}. Drop an <span className="mono">.ipk</span> anywhere on this page to install it.</> : 'Apps on your TV.'}
         actions={
           active && (
             <>

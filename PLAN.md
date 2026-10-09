@@ -89,6 +89,7 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [x] New key made for a TV (the original's “App key”; ed25519, private key kept in the browser) — `device.generateKey`
 - [x] Edit / remove device; test connection
 - [x] Device info for the wizard — `device.info`
+- [x] TV model shown as its series + model number (“LG C4 · OLED55C46LA”) in the wizard, device list, switcher and Apps page; saved with the TV and refreshed in the background (quiet `device.info`)
 - [x] Browser-only device store (IndexedDB) with export / import / remove-all
 - [ ] Import from ares-cli `novacom-devices.json` + key files (nice-to-have; replaces ares-cli-compatible storage)
 

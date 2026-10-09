@@ -109,7 +109,7 @@ describe('ssh + luna', () => {
 
   it('calls luna services', async () => {
     const res = await lunaCall(pool, devmode(), 'luna://com.webos.service.tv.systemproperty/getSystemInfo', { keys: ['modelName'] });
-    expect(res.modelName).toBe('MOCK55TV');
+    expect(res.modelName).toBe('OLED55C36LC');
   });
 
   it('maps luna failures to typed errors', async () => {
@@ -141,7 +141,7 @@ describe('luna output quirks', () => {
 
   it('keeps stdin open so luna-send waits for the answer (it quits silently on EOF)', async () => {
     const { deviceInfo } = await import('./devices/info.js');
-    expect(await deviceInfo(pool, rooted())).toMatchObject({ modelName: 'MOCK55TV', osVersion: '8.0.0' });
+    expect(await deviceInfo(pool, rooted())).toMatchObject({ modelName: 'OLED55C36LC', osVersion: '8.0.0' });
 
     // What the bridge used to do: close stdin straight away. The TV's luna-send then exits 0 with no output.
     const ch = await pool.open(rooted(), `luna-send -n 1 luna://com.webos.service.tv.systemproperty/getSystemInfo '{}'`);

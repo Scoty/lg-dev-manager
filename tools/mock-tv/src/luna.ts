@@ -27,7 +27,7 @@ export const LUNA: Record<string, LunaHandler> = {
   }),
   'luna://com.webos.service.tv.systemproperty/getSystemInfo': () => ({
     returnValue: true,
-    modelName: 'MOCK55TV',
+    modelName: 'OLED55C36LC',
     firmwareVersion: '03.00.00',
     sdkVersion: '8.0.0',
     boardType: 'MOCK',

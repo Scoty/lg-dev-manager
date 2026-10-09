@@ -54,7 +54,7 @@ afterAll(async () => {
 describe('device info', () => {
   it('reads model, webOS and firmware version', async () => {
     expect(await deviceInfo(pool, devmode(devTv))).toEqual({
-      modelName: 'MOCK55TV',
+      modelName: 'OLED55C36LC',
       osVersion: '8.0.0',
       firmwareVersion: '03.00.00',
       socName: 'mock-tv',

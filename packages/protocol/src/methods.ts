@@ -81,11 +81,12 @@ export const Methods = {
     result: z.object({ latencyMs: z.number(), root: z.boolean() }),
   },
   /**
-   * Model, webOS and firmware version — what the add-device wizard shows after a test login.
+   * Model, webOS and firmware version — shown by the add-device wizard, the device list and the TV switcher.
    * Port of DeviceManagerService.getDeviceInfo. Fields the TV doesn't report are omitted.
    */
   'device.info': {
-    params: z.object({ device: DeviceTarget }),
+    /** `quiet`: a background read — the console lists it only under "Background reads". */
+    params: z.object({ device: DeviceTarget, quiet: z.boolean().optional() }),
     result: z.object({
       modelName: z.string().optional(),
       osVersion: z.string().optional(),

@@ -7,7 +7,8 @@ import { ErrorAlert, describeError } from '../../components/ErrorAlert';
 import { useFeedback } from '../../components/Feedback';
 import { Icon, type IconName } from '../../shell/icons';
 import { useRpc } from '../../bridge/useRpc';
-import { addDevice, setActiveDeviceId } from '../../devices/store';
+import { addDevice, setActiveDeviceId, tvInfo } from '../../devices/store';
+import { modelLine } from '../../devices/model';
 import { useDevices } from '../../devices/useDevices';
 import { consoleTarget } from '../../console/store';
 import { AuthFields } from './AuthFields';
@@ -217,6 +218,7 @@ export function AddDevicePage() {
       username,
       auth: res.auth,
       ...(description.trim() ? { description: description.trim() } : {}),
+      ...(res.info ? { info: tvInfo({ host: host.trim(), port }, res.info) } : {}),
     });
     setActiveDeviceId(d.id);
     setSaved(d.id);
@@ -492,7 +494,7 @@ export function AddDevicePage() {
                     </div>
                   </div>
                   <dl className="kv">
-                    <dt>Model</dt><dd>{verify.info.modelName ?? '—'}</dd>
+                    <dt>Model</dt><dd>{modelLine(verify.info.modelName) ?? '—'}</dd>
                     <dt>webOS</dt><dd>{verify.info.osVersion ?? '—'}</dd>
                     <dt>Firmware</dt><dd className="mono">{verify.info.firmwareVersion ?? '—'}</dd>
                     <dt>Logged in as</dt><dd className="mono">{username}{verify.login?.root ? ' (root)' : ''}</dd>

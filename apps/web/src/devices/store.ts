@@ -6,6 +6,28 @@ import { DeviceAuth, type DeviceTarget } from '@lgdm/protocol';
  * the bridge receives a device's connection details with each call and forgets them when the connection closes.
  * Data is per origin: devices added on lg.scoty.uk are not visible at http://localhost:5199 — use export/import.
  */
+export const TvInfo = z.object({
+  modelName: z.string().max(64).optional(),
+  osVersion: z.string().max(64).optional(),
+  firmwareVersion: z.string().max(64).optional(),
+  /** host:port it was read from — a changed address means it needs reading again. */
+  from: z.string().max(300),
+  at: z.number(),
+});
+export type TvInfo = z.infer<typeof TvInfo>;
+
+/** The bits of a device.info result worth keeping with a saved TV. */
+export function tvInfo(d: Pick<SavedDevice, 'host' | 'port'>, info: { modelName?: string; osVersion?: string; firmwareVersion?: string }): TvInfo {
+  const cut = (v?: string) => (v ? v.slice(0, 64) : undefined);
+  return TvInfo.parse({
+    ...(info.modelName ? { modelName: cut(info.modelName) } : {}),
+    ...(info.osVersion ? { osVersion: cut(info.osVersion) } : {}),
+    ...(info.firmwareVersion ? { firmwareVersion: cut(info.firmwareVersion) } : {}),
+    from: `${d.host}:${d.port}`,
+    at: Date.now(),
+  });
+}
+
 export const SavedDevice = z.object({
   id: z.string(),
   name: z.string().min(1).max(64),
@@ -15,6 +37,8 @@ export const SavedDevice = z.object({
   username: z.string().min(1).max(64),
   auth: DeviceAuth,
   description: z.string().max(200).optional(),
+  /** What the TV last said about itself (device.info), for showing its model. Refreshed in the background. */
+  info: TvInfo.optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -100,6 +124,14 @@ export async function updateDevice(id: string, patch: Partial<NewDevice>): Promi
   await tx('readwrite', (s) => s.put(device));
   notify();
   return device;
+}
+
+/** Remember what the TV said about itself. Not an edit, so `updatedAt` stays. */
+export async function setDeviceInfo(id: string, info: TvInfo): Promise<void> {
+  const current = await getDevice(id);
+  if (!current) return;
+  await tx('readwrite', (s) => s.put(SavedDevice.parse({ ...current, info })));
+  notify();
 }
 
 export async function removeDevice(id: string): Promise<void> {

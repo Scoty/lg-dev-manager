@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Dropdown } from '../components/Dropdown';
 import { setActiveDeviceId } from '../devices/store';
 import { useDevices } from '../devices/useDevices';
+import { modelLabel } from '../devices/model';
 import { Icon } from './icons';
 
 /** Sidebar-footer device chooser (home/device-chooser in the original), on Adminator's `.workspace` button. */
@@ -30,7 +31,7 @@ export function DeviceSwitcher() {
             <div className="workspace-name">{active?.name ?? 'No TV selected'}</div>
             <div className="workspace-role">
               {active
-                ? `${active.host} · ${active.mode === 'rooted' ? 'rooted' : 'Dev Mode'}`
+                ? `${modelLabel(active.info?.modelName) ?? active.host} · ${active.mode === 'rooted' ? 'rooted' : 'Dev Mode'}`
                 : devices?.length
                   ? 'choose a TV'
                   : 'add a TV to start'}
@@ -58,7 +59,7 @@ export function DeviceSwitcher() {
               <Icon name="tv" />
               <span className="dd-menu-text">
                 <span>{d.name}</span>
-                <span className="dd-menu-sub mono">{d.host}</span>
+                <span className="dd-menu-sub mono">{[modelLabel(d.info?.modelName), d.host].filter(Boolean).join(' · ')}</span>
               </span>
               {d.id === active?.id && <Icon name="check" className="dd-check" strokeWidth={2.4} />}
             </button>

@@ -5,11 +5,13 @@ import { Topbar } from './Topbar';
 import { Footer } from './Footer';
 import { CommandPalette } from './CommandPalette';
 import { ConsoleDock } from '../console/ConsoleDock';
+import { useTvInfoRefresh } from '../devices/useTvInfoRefresh';
 
 export function Layout() {
   const [drawer, setDrawer] = useState(false);
   const [palette, setPalette] = useState(false);
   const { pathname } = useLocation();
+  useTvInfoRefresh();
 
   // Mobile drawer: Adminator's CSS reacts to body.has-drawer-open.
   useEffect(() => {

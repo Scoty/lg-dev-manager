@@ -123,7 +123,7 @@ export const handlers: HandlerMap = {
     return { latencyMs: Date.now() - started, root: res.stdout.trim() === '0' };
   },
 
-  'device.info': ({ device }, session, ctx) => deviceInfo(sshFor(session, ctx), device),
+  'device.info': ({ device, quiet }, session, ctx) => deviceInfo(sshFor(session, ctx, quiet), device),
   'device.storage': ({ device }, session, ctx) => storageInfo(sshFor(session, ctx), device),
   'device.generateKey': ({ comment }) => generateKey(comment),
 

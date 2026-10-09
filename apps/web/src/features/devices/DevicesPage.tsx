@@ -7,7 +7,8 @@ import { describeError } from '../../components/ErrorAlert';
 import { Dropdown } from '../../components/Dropdown';
 import { Icon } from '../../shell/icons';
 import { useRpc } from '../../bridge/useRpc';
-import { removeDevice, setActiveDeviceId, toTarget, type SavedDevice } from '../../devices/store';
+import { removeDevice, setActiveDeviceId, setDeviceInfo, toTarget, tvInfo, type SavedDevice } from '../../devices/store';
+import { modelLine } from '../../devices/model';
 import { useDevices } from '../../devices/useDevices';
 import { DataPrivacyCard } from './DataPrivacyCard';
 import { EditDeviceDialog } from './EditDeviceDialog';
@@ -26,10 +27,11 @@ export function DevicesPage() {
       const device = toTarget(d);
       const login = await call('device.test', { device }, 40_000);
       const info = await call('device.info', { device }, 40_000).catch(() => null);
+      if (info) setDeviceInfo(d.id, tvInfo(d, info)).catch(() => {});
       toast({
         kind: 'success',
         title: `${d.name} is reachable`,
-        text: [info?.modelName, info?.osVersion && `webOS ${info.osVersion}`, `${login.latencyMs} ms`, login.root ? 'root' : null]
+        text: [modelLine(info?.modelName), info?.osVersion && `webOS ${info.osVersion}`, `${login.latencyMs} ms`, login.root ? 'root' : null]
           .filter(Boolean)
           .join(' · '),
       });
@@ -111,6 +113,12 @@ export function DevicesPage() {
                             <span className="device-av"><Icon name="tv" /></span>
                             <div className="data-cell-user-meta">
                               <div className="data-cell-user-name">{d.name}</div>
+                              {d.info?.modelName && (
+                                <div className="cell-sub" title={d.info.firmwareVersion ? `Firmware ${d.info.firmwareVersion}` : undefined}>
+                                  {modelLine(d.info.modelName)}
+                                  {d.info.osVersion && <> · webOS {d.info.osVersion}</>}
+                                </div>
+                              )}
                               {d.description && <div className="cell-sub">{d.description}</div>}
                               <div className="cell-sub mono show-sm">{d.host}:{d.port}</div>
                             </div>

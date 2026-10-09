@@ -1,4 +1,4 @@
-import { addDevModeTv, addRootedTv, expect, ipkFile, test } from './fixtures';
+import { addDevModeTv, addRootedTv, expect, ipkFile, ROOTED_PORT, test } from './fixtures';
 
 test.describe('Dev Mode TV', () => {
   test('wizard: port check, wrong passphrase, then success', async ({ paired: page, errors }) => {
@@ -26,7 +26,7 @@ test.describe('Dev Mode TV', () => {
     await page.getByLabel('Passphrase').fill('A1B2C3');
     await page.getByRole('button', { name: 'Verify & add' }).click();
     await expect(page.getByText('Living room is ready')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText('MOCK55TV')).toBeVisible();
+    await expect(page.getByText('LG C3 · OLED55C36LC')).toBeVisible();
     expect(errors).toEqual([]);
   });
 
@@ -97,11 +97,14 @@ test('devices: switch, edit, remove', async ({ paired: page, errors }) => {
   await page.getByRole('menuitemradio', { name: /TV One/ }).click();
   await expect(page.getByRole('button', { name: /Active TV: TV One/ })).toBeVisible();
 
+  await expect(page.getByRole('button', { name: /Active TV: TV One/ })).toContainText('LG C3 · Dev Mode');
+
   await page.goto('/#/devices');
+  await expect(page.getByRole('row', { name: /TV Two/ })).toContainText('LG C3 · OLED55C36LC · webOS 8.0.0');
   await page.getByRole('button', { name: 'Edit TV Two' }).click();
   await page.getByRole('dialog').getByLabel('Name').fill('TV Two (bedroom)');
   await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByRole('cell', { name: 'TV Two (bedroom)', exact: true })).toBeVisible();
+  await expect(page.locator('.data-cell-user-name', { hasText: /^TV Two \(bedroom\)$/ })).toBeVisible();
 
   await page.getByRole('button', { name: 'Test connection to TV One' }).click();
   await expect(page.getByText('TV One is reachable')).toBeVisible({ timeout: 30_000 });
@@ -113,8 +116,8 @@ test('devices: switch, edit, remove', async ({ paired: page, errors }) => {
   expect(await removeItem.evaluate(visibleAtCentre)).toBe(true);
   await removeItem.click();
   await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click();
-  await expect(page.getByRole('cell', { name: 'TV Two (bedroom)', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('cell', { name: 'TV One', exact: true })).toBeVisible();
+  await expect(page.locator('.data-cell-user-name', { hasText: /^TV Two \(bedroom\)$/ })).toHaveCount(0);
+  await expect(page.locator('.data-cell-user-name', { hasText: /^TV One$/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -124,3 +127,33 @@ function visibleAtCentre(el: Element) {
   const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   return !!hit && el.contains(hit);
 }
+
+test('a TV saved without its model gets it in the background', async ({ paired: page, errors }) => {
+  await page.goto('/#/devices');
+  const backup = {
+    format: 'lg-dev-manager/devices',
+    version: 1,
+    exportedAt: Date.now(),
+    devices: [
+      {
+        id: 'e2e-old-tv',
+        name: 'Old save',
+        mode: 'rooted',
+        host: '127.0.0.1',
+        port: ROOTED_PORT,
+        username: 'root',
+        auth: { kind: 'password', password: 'alpine' },
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ],
+  };
+  await page.locator('input[type=file][accept*=json]').setInputFiles({
+    name: 'backup.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(backup)),
+  });
+  await expect(page.getByRole('row', { name: /Old save/ })).toContainText('LG C3 · OLED55C36LC', { timeout: 30_000 });
+  await expect(page.getByRole('button', { name: /Active TV: Old save/ })).toContainText('LG C3 · rooted');
+  expect(errors).toEqual([]);
+});
