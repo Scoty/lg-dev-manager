@@ -236,6 +236,12 @@ export async function runDebugStream(
     const ret = { senderUniqueName: du, destinationUniqueName: su, type: 'return', replyToken: t, sender: c.destination, destination: c.sender, methodCategory: '', method: '', payload: c.reply };
     msg({ ...ret, transport: 'TX' });
     msg({ ...ret, transport: 'RX' });
+    // Like a real TV, a caller that has its answer cancels the call (most calls on the bus end this way).
+    if (c.method === 'getForegroundAppInfo') {
+      const cancel = { senderUniqueName: su, destinationUniqueName: du, type: 'callCancel', sender: c.sender, destination: c.destination, payload: { token: t } };
+      msg({ ...cancel, transport: 'TX' });
+      msg({ ...cancel, transport: 'RX' });
+    }
     await wait(d.every, signal);
   }
   return 0;

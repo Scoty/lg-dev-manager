@@ -346,8 +346,11 @@ export class MonitorCapture {
         entry.messages.splice(1, 1);
         entry.skipped = (entry.skipped ?? 0) + 1;
       }
-      if (m.type === 'callCancel') entry.status = 'cancelled';
-      else if (entry.status === 'pending' || entry.status === 'ok') {
+      // A caller cancels when it's done listening — on a real TV nearly every call ends that way. Only a call
+      // cancelled before any reply counts as cancelled; one that was answered keeps its answer's status.
+      if (m.type === 'callCancel') {
+        if (entry.status === 'pending') entry.status = 'cancelled';
+      } else if (entry.status === 'pending' || entry.status === 'ok' || entry.status === 'cancelled') {
         const rv = (m.payload as { returnValue?: unknown } | undefined)?.returnValue;
         entry.status = rv === false ? 'error' : 'ok';
       }

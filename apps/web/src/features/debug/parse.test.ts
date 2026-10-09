@@ -102,10 +102,15 @@ describe('luna monitor', () => {
     c.add(ret(6, { returnValue: false, errorText: 'Denied' }));
     c.add(call(7, 'subscribe'));
     c.add({ type: 'callCancel', transport: 'TX', senderUniqueName: ':1.1', destinationUniqueName: ':1.9', payload: { token: 7 } });
+    // Answered, then cancelled by the caller (what a real TV does for most calls): still "replied".
+    c.add(call(8, 'getMemState'));
+    c.add(ret(8, { returnValue: true }));
+    c.add({ type: 'callCancel', transport: 'TX', senderUniqueName: ':1.1', destinationUniqueName: ':1.9', payload: { token: 8 } });
     expect(c.calls.map((e) => [e.name, e.status, e.messages.length])).toEqual([
       ['com.webos.service.config/getConfigs', 'ok', 2],
       ['com.webos.service.config/setConfigs', 'error', 2],
       ['com.webos.service.config/subscribe', 'cancelled', 2],
+      ['com.webos.service.config/getMemState', 'ok', 3],
     ]);
     expect(c.calls[0]!.information).toBe('{"a":1}');
   });

@@ -35,6 +35,8 @@ export interface LogColumn {
   get: (e: LogEntry) => string | undefined;
   /** Hidden on narrow screens. */
   wide?: boolean;
+  /** Shown only once some line has a value for it (e.g. dmesg's source, which most TVs never print). */
+  optional?: boolean;
 }
 
 /**
@@ -142,7 +144,11 @@ export function LogView({
 
   // Narrow screens drop the `wide` columns entirely (hidden grid items would still take their tracks).
   const narrow = useNarrow();
-  const cols = narrow ? columns.filter((c) => !c.wide) : columns;
+  const present = useMemo(
+    () => new Set(columns.filter((c) => c.optional && entries.some((e) => c.get(e))).map((c) => c.key)),
+    [columns, entries],
+  );
+  const cols = columns.filter((c) => !(narrow && c.wide) && (!c.optional || present.has(c.key)));
   const grid = { gridTemplateColumns: cols.map((c) => c.width).join(' ') };
   const running = state.phase === 'running';
 
@@ -308,6 +314,6 @@ export const DMESG_COLUMNS: LogColumn[] = [
   { key: 'time', label: 'Since boot', width: '100px', get: (e) => (e.monotonic !== undefined ? e.monotonic.toFixed(3) : '') },
   { key: 'level', label: 'Level', width: '58px', get: (e) => e.level },
   { key: 'facility', label: 'Facility', width: '64px', get: (e) => e.facility, wide: true },
-  { key: 'context', label: 'Source', width: 'minmax(80px, 170px)', get: (e) => e.context, wide: true },
+  { key: 'context', label: 'Source', width: 'minmax(80px, 170px)', get: (e) => e.context, wide: true, optional: true },
   { key: 'message', label: 'Message', width: 'minmax(0, 1fr)', get: (e) => e.message },
 ];
