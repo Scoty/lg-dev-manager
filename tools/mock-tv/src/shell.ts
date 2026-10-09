@@ -3,6 +3,7 @@ import { posix } from 'node:path';
 import { handleLuna, lunaMiss, SUBSCRIPTIONS } from './luna.js';
 import { canWrite, ensureDir, type MockState } from './state.js';
 import { listDir, removeTree, statPath, touch } from './fs.js';
+import { runDebugCommand } from './debug.js';
 
 export interface CommandResult {
   stdout: string | Buffer;
@@ -177,6 +178,8 @@ export function runCommand(command: string, ctx: CommandContext): CommandResult 
       code: 0,
     };
   }
+  const dbg = runDebugCommand(command, state);
+  if (dbg) return dbg;
   const typed = runTyped(command, ctx);
   if (typed) return typed;
   const bin = command.split(/\s+/)[0];

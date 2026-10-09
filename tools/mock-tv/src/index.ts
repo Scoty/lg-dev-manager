@@ -5,6 +5,7 @@ import ssh2 from 'ssh2';
 import { WebSocketServer } from 'ws';
 import { isLunaOnce, isSubscription, readsStdin, runCommand, runSubscription } from './shell.js';
 import { serveSftp } from './sftp.js';
+import { isDebugStream, runDebugStream } from './debug.js';
 import { runInteractive, type PtyInfo } from './interactive.js';
 import { createState, type MockApp, type MockState } from './state.js';
 
@@ -16,6 +17,7 @@ export { LUNA, SUBSCRIPTIONS } from './luna.js';
 export { MOCK_APPS, MOCK_DEVMODE_TOKEN, MOCK_STORE_APPS, devApp, storeApp, fakeIpk, makeIconPng, type MockApp, type MockState } from './state.js';
 export { MOCK_REPO_APPS, startMockRepo, type MockRepo, type MockRepoApp } from './repo.js';
 export { startMockLge, type MockLge } from './lge.js';
+export { CRASH_DIR, SYSLOG, type DebugState } from './debug.js';
 
 export interface MockTvOptions {
   /** `prisoner` (Dev Mode) or `root` (rooted). */
@@ -163,6 +165,19 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
               if (res.stderr && stream.writable) stream.stderr.write(res.stderr);
               if (stream.writable) {
                 stream.exit(res.code);
+                stream.end();
+              }
+            });
+            return;
+          }
+          if (isDebugStream(info.command)) {
+            // Followed logs: print as they go until the client closes the channel.
+            const ac = new AbortController();
+            stream.on('close', () => ac.abort());
+            stream.on('data', () => {});
+            void runDebugStream(info.command, state, (s) => stream.writable && stream.write(s), (s) => stream.writable && stream.stderr.write(s), ac.signal).then((code) => {
+              if (stream.writable) {
+                stream.exit(code);
                 stream.end();
               }
             });

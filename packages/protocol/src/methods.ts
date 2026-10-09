@@ -4,6 +4,7 @@ import { AppId, AppInfo, MAX_CHUNK_BYTES, MAX_UPLOAD_BYTES } from './apps';
 import { ScanResult } from './console';
 import { RepoPackage, WebUrl } from './repo';
 import { FileItem, FileName, MAX_READ_CHUNK, RemotePath } from './files';
+import { CrashReportFile, LogSource, PmLogContext, PmLogLevel } from './debug';
 
 /**
  * Bumped when the wire contract changes in a way an older peer can't handle (including new methods the
@@ -13,8 +14,9 @@ import { FileItem, FileName, MAX_READ_CHUNK, RemotePath } from './files';
  *  v4 — M4: repo.list, repo.image, repo.description, apps.installFromRepo, device.hbchannel
  *  v5 — M5: files.*, shell.*, device.storage path
  *  v6 — M6: devmode.status, devmode.renew, device.screenshot
+ *  v7 — M7: logs.*, pmlog.*, crashes.*
  */
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 
 const base64 = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/, 'Not base64');
 
@@ -362,6 +364,55 @@ export const Methods = {
   'device.hbchannel': {
     params: z.object({ device: DeviceTarget, quiet: z.boolean().optional() }),
     result: z.object({ installed: z.boolean(), root: z.boolean().optional() }),
+  },
+
+  /**
+   * Follow a log on the TV (root): `syslog` — `tail -f /var/log/messages` after turning developer logging on;
+   * `dmesg` — `dmesg -w -x`; `lsmonitor` — `ls-monitor -j` (luna bus traffic). Lines arrive as `logs.lines`
+   * events with this opId; resolves when the command ends, or `logs.stop` stops it. `lines`: how much history.
+   */
+  'logs.stream': {
+    params: z.object({
+      device: DeviceTarget,
+      source: LogSource,
+      opId: z.string().min(1).max(64),
+      lines: z.number().int().min(0).max(5000).optional(),
+    }),
+    result: z.object({ exitCode: z.number().nullable(), stopped: z.boolean() }),
+  },
+  'logs.stop': {
+    params: z.object({ opId: z.string().max(64) }),
+    result: z.object({ stopped: z.boolean() }),
+  },
+  /** Empty /var/log/messages (`syslog`) or the kernel ring buffer (`dmesg -c`). Root. */
+  'logs.clear': {
+    params: z.object({ device: DeviceTarget, source: z.enum(['syslog', 'dmesg']) }),
+    result: z.object({}),
+  },
+  /** PmLog contexts and their levels (`PmLogCtl show`). Root. */
+  'pmlog.show': {
+    params: z.object({ device: DeviceTarget }),
+    result: z.object({ contexts: z.array(z.object({ name: z.string(), level: z.string() })) }),
+  },
+  /** Set a context's level (`PmLogCtl set`); `*` sets all. Returns the contexts PmLogCtl says it changed. */
+  'pmlog.set': {
+    params: z.object({ device: DeviceTarget, context: PmLogContext, level: PmLogLevel }),
+    result: z.object({ changed: z.array(z.string()) }),
+  },
+  /** Native crash reports (listCrashReports): the files in the first crash folder that exists. */
+  'crashes.list': {
+    params: z.object({ device: DeviceTarget }),
+    result: z.object({ dir: z.string().nullable(), reports: z.array(CrashReportFile) }),
+  },
+  /** A crash report's text, unzipped if it is gzip. Only files in the crash folders. */
+  'crashes.read': {
+    params: z.object({ device: DeviceTarget, path: RemotePath }),
+    result: z.object({ text: z.string(), truncated: z.boolean() }),
+  },
+  /** Delete a crash report. Only files in the crash folders. */
+  'crashes.delete': {
+    params: z.object({ device: DeviceTarget, path: RemotePath }),
+    result: z.object({}),
   },
 } as const;
 

@@ -26,6 +26,17 @@ function capture(p: Record<string, unknown>, s: MockState): Record<string, unkno
 const appsOf = (state: MockState) => state.apps.map((a) => ({ ...a }));
 
 export const LUNA: Record<string, LunaHandler> = {
+  // Developer logging (PmLogComponent.logRead): webOS 4+ uses the config service, 3.x pmlogd.
+  'luna://com.webos.service.config/setConfigs': (params, state) => {
+    const configs = (params.configs ?? {}) as Record<string, unknown>;
+    if (state.username !== 'root') return { returnValue: false, errorCode: -1, errorText: 'Denied method call "setConfigs"' };
+    if ('system.collectDevLogs' in configs) state.debug.devLogs = configs['system.collectDevLogs'] === true;
+    return { returnValue: true };
+  },
+  'luna://com.webos.pmlogd/setdevlogstatus': (params, state) => {
+    state.debug.devLogs = params.recordDevLogs === true;
+    return { returnValue: true };
+  },
   'luna://com.palm.systemservice/osInfo/query': () => ({
     returnValue: true,
     webos_name: 'webOS TV',

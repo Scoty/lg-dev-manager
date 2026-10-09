@@ -1,6 +1,7 @@
 import { deflateSync } from 'node:zlib';
 import { posix } from 'node:path';
 import { addLink, type Meta } from './fs.js';
+import { createDebugState, seedDebugFiles, type DebugState } from './debug.js';
 
 export interface MockApp {
   id: string;
@@ -39,6 +40,8 @@ export interface MockState {
   onDevmodeExtend?: () => void;
   /** Only the older `com.webos.service.tv.capture` screenshot service exists (pre-webOS 5 firmware). */
   legacyCapture: boolean;
+  /** Logs, PmLog contexts (debug tools). */
+  debug: DebugState;
 }
 
 export const DEV_APPS_DIR = '/media/developer/apps/usr/palm/applications';
@@ -178,10 +181,12 @@ export function createState(opts: {
     diskKb: { total: 1_843_200, available: 1_204_400 },
     devmodeExtends: 0,
     legacyCapture: opts.legacyCapture ?? false,
+    debug: createDebugState(opts.username === 'root'),
   };
   for (const app of opts.apps ?? MOCK_APPS) addApp(state, app);
   if (!state.hbchannel) state.apps = state.apps.filter((a) => a.id !== 'org.webosbrew.hbchannel');
   addFile(state, '/etc/prefs/properties/machineName', Buffer.from('mock-soc\n'));
+  seedDebugFiles(state);
   // Something to browse in the Files page: a text file, a symlinked folder and a dangling link.
   const home = opts.username === 'root' ? '/home/root' : '/media/developer';
   addFile(state, `${home}/notes.txt`, Buffer.from('Hello from the mock TV.\nThis file is here for the Files page.\n'));

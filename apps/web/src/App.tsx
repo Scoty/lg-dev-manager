@@ -10,8 +10,11 @@ import { InstalledAppsPage } from './features/apps/InstalledAppsPage';
 import { RepoPage } from './features/repo/RepoPage';
 import { FilesPage } from './features/files/FilesPage';
 import { TerminalPage } from './features/terminal/TerminalPage';
+import { SyslogPage, DmesgPage } from './features/debug/LogPages';
+import { PmLogPage } from './features/debug/PmLogPage';
+import { CrashesPage } from './features/debug/CrashesPage';
+import { LunaMonitorPage } from './features/debug/LunaMonitorPage';
 import { InfoPage } from './features/info/InfoPage';
-import { ComingSoon } from './features/placeholder/ComingSoon';
 
 /** A fresh wizard on every visit, including "Add a TV" clicked while already on the page. */
 function AddDeviceRoute() {
@@ -27,13 +30,6 @@ function Home() {
   return <Navigate to={status.state === 'unpaired' ? '/bridge' : '/apps/installed'} replace />;
 }
 
-const PAGES = [
-  { path: 'debug/logs', eyebrow: 'Debug', title: 'Log reader', icon: 'debug', milestone: 'M7', description: 'Stream system logs from the TV.' },
-  { path: 'debug/pmlog', eyebrow: 'Debug', title: 'PmLog', icon: 'debug', milestone: 'M7', description: 'Turn developer logging on and set log contexts.' },
-  { path: 'debug/dmesg', eyebrow: 'Debug', title: 'dmesg', icon: 'debug', milestone: 'M7', description: 'Kernel ring buffer.' },
-  { path: 'debug/crashes', eyebrow: 'Debug', title: 'Crash reports', icon: 'debug', milestone: 'M7', description: 'Browse and download crash reports.' },
-  { path: 'debug/luna', eyebrow: 'Debug', title: 'Luna monitor', icon: 'debug', milestone: 'M7', description: 'Watch luna-service bus traffic live.' },
-] as const;
 
 export function App() {
   return (
@@ -54,9 +50,11 @@ export function App() {
                 <Route path="terminal" element={<TerminalPage />} />
                 <Route path="info" element={<InfoPage />} />
                 <Route path="debug" element={<Navigate to="/debug/logs" replace />} />
-                {PAGES.map(({ path, ...p }) => (
-                  <Route key={path} path={path} element={<ComingSoon {...p} />} />
-                ))}
+                <Route path="debug/logs" element={<SyslogPage />} />
+                <Route path="debug/pmlog" element={<PmLogPage />} />
+                <Route path="debug/dmesg" element={<DmesgPage />} />
+                <Route path="debug/crashes" element={<CrashesPage />} />
+                <Route path="debug/luna" element={<LunaMonitorPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>

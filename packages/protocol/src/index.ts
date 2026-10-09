@@ -5,3 +5,4 @@ export * from './apps';
 export * from './console';
 export * from './repo';
 export * from './files';
+export * from './debug';

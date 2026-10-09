@@ -4,8 +4,8 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 (Tauri + Angular + Rust) with the look of [Adminator 2026](https://github.com/puikinsh/adminator-admin-dashboard),
 hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS).
 
-> **Status:** M6 (Device info) done — TV details, Developer Mode session countdown with renew and automatic-renewal helpers, screenshots, Homebrew Channel status.
-> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M7 (Debug tools).
+> **Status:** M7 (Debug tools) done — system log, log levels (PmLog), kernel log, crash reports and the luna bus monitor. All of §3 is in place.
+> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M8 (Ship).
 
 ---
 
@@ -123,10 +123,11 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [x] Homebrew Channel card: installed / latest version, rooted, install or update
 
 ### Debug
-- [ ] PmLog: control + set context (`pmlogd/setdevlogstatus`, `config/setConfigs`)
-- [ ] Log reader (streaming), dmesg
-- [ ] Crash reports list + details
-- [ ] Luna-service (ls-monitor) traffic monitor + details
+- [x] System log: `tail -f /var/log/messages` after turning developer logging on (`config/setConfigs`, fallback `pmlogd/setdevlogstatus`); level filter, search, pause, save, clear on TV — `logs.stream` / `logs.stop` / `logs.clear` (root)
+- [x] Log levels (PmLog): every context's level, all at once, or a named context (`PmLogCtl show` / `set`) — `pmlog.show`, `pmlog.set` (root)
+- [x] Kernel log: `dmesg -w -x` (plain `dmesg` where follow isn't supported), clear with `dmesg -c` (root)
+- [x] Crash reports: `/tmp/faultmanager/crash/` (or `/tmp/var/log/reports/librdx/`), titles parsed like the original, view / copy / download (gunzipped), delete — `crashes.*` (Dev Mode too)
+- [x] Luna monitor: `ls-monitor -j` grouped into calls and replies, `sender:` / `destination:` / `-` filters, details with payloads, save / open `.jsonl` (root)
 
 ### Console (not in the original)
 - [x] Console panel at the bottom: every SSH command, transfer and tunnel the bridge runs for this tab, live and past (`cmd.log`)
@@ -181,7 +182,7 @@ lg-dev-manager/
 | M4 ✅ | Homebrew repo | Browse/search/install/update from repo.webosbrew.org. |
 | M5 ✅ | Files + Terminal | SFTP browser with upload/download; xterm PTY. |
 | M6 ✅ | Info + Dev Mode renew + screenshot | TV details, session countdown + renew, screenshots. |
-| M7 | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
+| M7 ✅ | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
 | M8 | Ship | Bridge published to npm (`npx lg-dev-manager-bridge`), README with screenshots, "preview" label removed. |
 
 Scope is **full parity before release** (v1.0 at M8). The site at **lg.scoty.uk** is already public as a *preview*:

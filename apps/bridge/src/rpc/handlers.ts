@@ -4,7 +4,10 @@ import { randomUUID } from 'node:crypto';
 import {
   CMD_LOG_EVENT,
   CMD_OUTPUT_EVENT,
+  DeviceErrorCodes,
   ErrorCodes,
+  LOG_LINES_EVENT,
+  type LogLines,
   KEY_SERVER_PORT,
   OP_PROGRESS_EVENT,
   type CmdLog,
@@ -31,6 +34,7 @@ import type { HttpTrace, RepoClient } from '../repo/repo.js';
 import type { ShellSessions } from '../shell/shells.js';
 import { homeDir, listDir, makeDir, readChunk, removePath, renameFile, statFile, writeFile } from '../files/files.js';
 import type { UploadStore } from './uploads.js';
+import { LineBatcher, clearLog, deleteCrashReport, enableDevLogs, listCrashReports, logCommand, pmLogSet, pmLogShow, readCrashReport, requireRoot } from '../debug/debug.js';
 
 export interface Session {
   authed: boolean;
@@ -185,6 +189,66 @@ export const handlers: HandlerMap = {
       run.ch?.close();
     }
   },
+  'logs.stream': async ({ device, source, opId, lines }, session, ctx) => {
+    requireRoot(device, source === 'lsmonitor' ? 'The luna monitor' : source === 'dmesg' ? 'dmesg' : 'The system log');
+    if (session.streams.has(opId)) throw new RpcError(ErrorCodes.BadRequest, 'That operation id is already running.');
+    const run: RunningCommand = {
+      cancelled: false,
+      cancel() {
+        this.cancelled = true;
+        this.ch?.close();
+      },
+    };
+    // Stopping answers at once, even if the TV is slow to confirm the channel closed (or has gone offline).
+    let onCancel: () => void = () => {};
+    const cancelled = new Promise<null>((resolve) => (onCancel = () => resolve(null)));
+    const cancel = run.cancel.bind(run);
+    run.cancel = () => {
+      cancel();
+      onCancel();
+    };
+    session.streams.set(opId, run);
+    const batch = new LineBatcher(
+      (l, dropped) => session.emit(LOG_LINES_EVENT, { opId, lines: l, ...(dropped ? { dropped } : {}) } satisfies LogLines),
+      // ls-monitor prints one JSON message per line, some of them large; cut lines would be unreadable.
+      source === 'lsmonitor' ? 1024 * 1024 : undefined,
+    );
+    try {
+      const ssh = sshFor(session, ctx);
+      if (source === 'syslog') await enableDevLogs(ssh, device);
+      if (run.cancelled) return { exitCode: null, stopped: true };
+      const ch = await ssh.open(device, logCommand(source, lines ?? 100));
+      run.ch = ch;
+      const stderr: Buffer[] = [];
+      ch.stream.on('data', (c: Buffer) => batch.push(c));
+      ch.stream.stderr.on('data', (c: Buffer) => stderr.length < 64 && stderr.push(c));
+      const exit = new Promise<number | null>((resolve) => ch.stream.on('close', (code: number | null) => resolve(typeof code === 'number' ? code : null)));
+      if (run.cancelled) ch.close();
+      const exitCode = await Promise.race([exit, cancelled]);
+      batch.flush(true);
+      if (!run.cancelled && exitCode !== 0 && !batch.sawOutput) {
+        const detail = Buffer.concat(stderr).toString('utf8').trim();
+        throw new RpcError(DeviceErrorCodes.CommandFailed, /denied|not permitted/i.test(detail) ? 'The TV refused to show this log.' : 'Couldn’t read this log on the TV.', detail);
+      }
+      return { exitCode: run.cancelled ? null : exitCode, stopped: run.cancelled };
+    } finally {
+      batch.stop();
+      session.streams.delete(opId);
+      run.ch?.close();
+    }
+  },
+  'logs.stop': ({ opId }, session) => {
+    const run = session.streams.get(opId);
+    if (!run) return { stopped: false };
+    run.cancel();
+    return { stopped: true };
+  },
+  'logs.clear': async ({ device, source }, session, ctx) => (await clearLog(sshFor(session, ctx), device, source), {}),
+  'pmlog.show': async ({ device }, session, ctx) => ({ contexts: await pmLogShow(sshFor(session, ctx), device) }),
+  'pmlog.set': async ({ device, context, level }, session, ctx) => ({ changed: await pmLogSet(sshFor(session, ctx), device, context, level) }),
+  'crashes.list': ({ device }, session, ctx) => listCrashReports(sshFor(session, ctx), device),
+  'crashes.read': ({ device, path }, session, ctx) => readCrashReport(sshFor(session, ctx), device, path),
+  'crashes.delete': async ({ device, path }, session, ctx) => (await deleteCrashReport(sshFor(session, ctx), device, path), {}),
   'cmd.cancel': ({ opId }, session) => {
     const run = session.streams.get(opId);
     if (!run) return { cancelled: false };

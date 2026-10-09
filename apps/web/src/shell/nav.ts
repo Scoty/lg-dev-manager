@@ -42,9 +42,9 @@ export const NAV: NavSection[] = [
         text: 'Debug',
         icon: 'debug',
         children: [
-          { key: 'debug-logs', text: 'Log reader', to: '/debug/logs' },
-          { key: 'debug-pmlog', text: 'PmLog', to: '/debug/pmlog' },
-          { key: 'debug-dmesg', text: 'dmesg', to: '/debug/dmesg' },
+          { key: 'debug-logs', text: 'System log', to: '/debug/logs' },
+          { key: 'debug-pmlog', text: 'Log levels', to: '/debug/pmlog' },
+          { key: 'debug-dmesg', text: 'Kernel log', to: '/debug/dmesg' },
           { key: 'debug-crashes', text: 'Crash reports', to: '/debug/crashes' },
           { key: 'debug-luna', text: 'Luna monitor', to: '/debug/luna' },
         ],
