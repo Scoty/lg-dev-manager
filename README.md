@@ -1,8 +1,9 @@
 # LG Dev Manager
 
 Manage LG webOS TVs from your browser — rooted (Homebrew Channel) or in Developer Mode. Install apps from the
-webOS Homebrew repository or from an IPK file, update them, browse the TV's files, open a shell, take screenshots,
-renew the Dev Mode session and dig into logs and the luna bus.
+webOS Homebrew repository or from an IPK file, update them, install any build of [Litefin](#litefin-in-one-click)
+in one click, browse the TV's files, open a shell, take screenshots, renew the Dev Mode session and dig into logs and
+the luna bus.
 
 **Open it:** https://lg.scoty.uk — then run the bridge on your computer (one command, below).
 
@@ -75,7 +76,8 @@ The bridge tells the site its version; when a newer one is out, the app says so.
 - **Devices** — network scan, add rooted or Developer Mode TVs (key fetched from the TV's key server, or a new key
   made for it), edit, test, export / import.
 - **Apps** — installed apps with update badges; install IPK files (drag and drop); the webOS **Homebrew repository**
-  with search, details, install and update; the **Litefin repo** with every webOS build of the latest releases.
+  with search, details, install and update; the **Litefin repo** with every webOS build of the latest releases
+  (see [below](#litefin-in-one-click)).
 - **Files** — browse, upload, download, preview, rename, delete over SFTP.
 - **Terminal** — full shell in tabs, plus a simple mode for TVs without a terminal.
 - **Device info** — model, webOS and firmware, Homebrew Channel status and update, screenshots, Dev Mode session
@@ -84,6 +86,23 @@ The bridge tells the site its version; when a newer one is out, the app says so.
 - **Console** — every command the bridge runs on the TV, live, with the option to type your own.
 
 Light and dark themes, a command palette (⌘K / Ctrl K), and no analytics or tracking.
+
+## Litefin in one click
+
+This app started with one itch. [Litefin](https://github.com/MoazSalem/litefin), a lightweight Jellyfin client for
+LG TVs, publishes a separate IPK for each generation of webOS (Modern, Normal, Legacy, Ultra Legacy) on every
+release, and the Homebrew repository carries only one of them. Updating used to mean opening the GitHub releases,
+downloading the right IPK by hand and installing it through the desktop webOS Dev Manager.
+
+**Apps → Litefin repo** does all of that in one click:
+
+- It lists the last five Litefin releases with every webOS build side by side, read straight from GitHub by the
+  bridge (pre-releases are skipped).
+- It suggests the right build for the active TV from its webOS version, and shows which version is installed and
+  whether a newer one is out.
+- **Install** downloads that build, checks it against GitHub's SHA-256 when one is published, and installs it on the TV
+  — through Homebrew Channel on a rooted TV, or the Developer Mode installer otherwise. All builds are the same app,
+  so switching builds or versions simply replaces it.
 
 ## Run the bridge from the source code
 
