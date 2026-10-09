@@ -4,8 +4,8 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 (Tauri + Angular + Rust) with the look of [Adminator 2026](https://github.com/puikinsh/adminator-admin-dashboard),
 hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS).
 
-> **Status:** M5 (Files + Terminal) done — SFTP file browser with upload / download / preview, and xterm.js terminals in tabs.
-> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M6 (Device info, Dev Mode renew, screenshot).
+> **Status:** M6 (Device info) done — TV details, Developer Mode session countdown with renew and automatic-renewal helpers, screenshots, Homebrew Channel status.
+> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M7 (Debug tools).
 
 ---
 
@@ -116,10 +116,11 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [x] "Dumb" terminal fallback when the TV refuses a PTY (command + output + exit code), or on request
 
 ### Device info
-- [ ] System info (`tv.systemproperty/getSystemInfo`, `osInfo/query`, `sdx/getDeviceUuid`)
-- [ ] **Dev Mode session**: remaining time + one-click renew (`developer.lge.com/secure/CheckDevModeSession.dev`)
-- [ ] Renew script generator (for cron / Homebrew Channel)
-- [ ] Screenshot (`capture/executeOneShot` / `tv.capture/executeOneShot`) → shown + downloadable
+- [x] System info (`tv.systemproperty/getSystemInfo`, `osInfo/query`, `sdx/getDeviceUuid`) — model, webOS, firmware, OTA ID, SoC
+- [x] **Dev Mode session**: live countdown from `developer.lge.com/secure/CheckDevModeSession.dev` (token from `/var/luna/preferences/devmode_enabled`, never shown in the console), one-click renew (Developer Mode app launched with `{ extend: true }`) — `devmode.status`, `devmode.renew`
+- [x] Automatic renewal: renew URL, shell script generator (cron), IFTTT steps
+- [x] Screenshot (`capture/executeOneShot`, fallback `tv.capture/executeOneShot` at 1920×1080) → shown + downloadable, layer choice — `device.screenshot` (root)
+- [x] Homebrew Channel card: installed / latest version, rooted, install or update
 
 ### Debug
 - [ ] PmLog: control + set context (`pmlogd/setdevlogstatus`, `config/setConfigs`)
@@ -179,7 +180,7 @@ lg-dev-manager/
 | M3 ✅ | Devices + Apps | Add-device wizard end to end; installed apps; launch/remove; install IPK from file. First build worth trying on a real TV. |
 | M4 ✅ | Homebrew repo | Browse/search/install/update from repo.webosbrew.org. |
 | M5 ✅ | Files + Terminal | SFTP browser with upload/download; xterm PTY. |
-| M6 | Info + Dev Mode renew + screenshot | |
+| M6 ✅ | Info + Dev Mode renew + screenshot | TV details, session countdown + renew, screenshots. |
 | M7 | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
 | M8 | Ship | Bridge published to npm (`npx lg-dev-manager-bridge`), README with screenshots, "preview" label removed. |
 

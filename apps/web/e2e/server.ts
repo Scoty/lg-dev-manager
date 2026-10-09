@@ -6,6 +6,7 @@
  *  - a rooted mock TV that refuses PTYs on 127.0.0.1:2223 (root / alpine), for the simple-shell terminal,
  *  - a fake Homebrew repository on 127.0.0.1:5298 (tools/mock-tv/src/repo.ts) the bridge uses instead of
  *    repo.webosbrew.org,
+ *  - a fake LG Developer Mode session service (developer.lge.com) knowing the Dev Mode TV's token,
  *  - the bridge on 127.0.0.1:5299 serving the built web UI (apps/web/dist), pairing token "e2e-token".
  * Run with: pnpm --filter @lgdm/web e2e:server
  */
@@ -13,7 +14,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startMockRepo, startMockTv } from '@lgdm/mock-tv';
+import { MOCK_DEVMODE_TOKEN, startMockLge, startMockRepo, startMockTv } from '@lgdm/mock-tv';
 import { startServer } from '../../bridge/src/server.js';
 
 export const E2E = {
@@ -34,6 +35,9 @@ const devTv = await startMockTv({ sshPort: 9922, keyServerPort: 9991, passphrase
 const rootTv = await startMockTv({ username: 'root', password: 'alpine', hbchannel: true, sshPort: E2E.rootedPort });
 const noPtyTv = await startMockTv({ username: 'root', password: 'alpine', pty: false, sshPort: E2E.noPtyPort });
 const repo = await startMockRepo({ port: E2E.repoPort });
+const lge = await startMockLge({ tokens: { [MOCK_DEVMODE_TOKEN]: (742 * 3600 + 15 * 60) * 1000 } });
+// Launching the Developer Mode app with { extend: true } resets the session at LG, like on a real TV.
+devTv.state.onDevmodeExtend = () => lge.sessions.set(MOCK_DEVMODE_TOKEN, Date.now() + 1000 * 3600 * 1000);
 const origins = [`http://127.0.0.1:${E2E.bridgePort}`, `http://localhost:${E2E.bridgePort}`];
 await startServer({
   host: '127.0.0.1',
@@ -42,6 +46,7 @@ await startServer({
   token: E2E.token,
   webRoot: join(here, '..', 'dist'),
   repoUrl: repo.url,
+  lgeUrl: lge.url,
   dev: true,
 });
 

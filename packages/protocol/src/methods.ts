@@ -12,8 +12,9 @@ import { FileItem, FileName, MAX_READ_CHUNK, RemotePath } from './files';
  *  v3 — device.scan, checkConnection.webos, cmd.stream/cmd.cancel, cmd.log events
  *  v4 — M4: repo.list, repo.image, repo.description, apps.installFromRepo, device.hbchannel
  *  v5 — M5: files.*, shell.*, device.storage path
+ *  v6 — M6: devmode.status, devmode.renew, device.screenshot
  */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 const base64 = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/, 'Not base64');
 
@@ -201,6 +202,33 @@ export const Methods = {
     result: z.object({}),
   },
 
+  /**
+   * Developer Mode session (dev-mode plugin, src-tauri/src/plugins/devmode.rs): the session token from
+   * /var/luna/preferences/devmode_enabled and the time LG's server says is left. Dev Mode logins only.
+   * `remaining` is "HH:MM:SS"; absent when LG didn't answer with a time.
+   */
+  'devmode.status': {
+    params: z.object({ device: DeviceTarget }),
+    result: z.object({
+      token: z.string().optional(),
+      remaining: z.string().optional(),
+      /** Why there is no time, in words (LG's answer, or that it couldn't be reached). */
+      problem: z.string().optional(),
+    }),
+  },
+  /** Extend the session the way the original does: launch the Developer Mode app with `{ extend: true }`. */
+  'devmode.renew': {
+    params: z.object({ device: DeviceTarget }),
+    result: z.object({}),
+  },
+  /**
+   * A screenshot (takeScreenshot in device-manager.service.ts): `capture/executeOneShot` (or the older
+   * `tv.capture` service) writes a PNG to /tmp, which is read back and deleted. Needs root.
+   */
+  'device.screenshot': {
+    params: z.object({ device: DeviceTarget, method: z.enum(['DISPLAY', 'VIDEO', 'GRAPHIC']).default('DISPLAY') }),
+    result: z.object({ mime: z.string(), base64: z.string() }),
+  },
   /** The login's home folder (`echo -n $HOME`, FileSessionImpl.home); /media/developer if it has none. */
   'files.home': {
     params: z.object({ device: DeviceTarget }),

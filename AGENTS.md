@@ -83,7 +83,8 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 - Every new RPC gets a bridge integration test against the mock TV.
 - Every page gets a Playwright smoke test (renders in light + dark, no console errors) — add it to `apps/web/e2e/smoke.spec.ts`.
 - User flows that touch the TV get a Playwright test against the mock TVs (`apps/web/e2e/devices-apps.spec.ts`,
-  `repo.spec.ts`, `files-terminal.spec.ts`). The rig's TVs are shared by parallel tests, so each test uses app ids no other test touches.
+  `repo.spec.ts`, `files-terminal.spec.ts`, `info.spec.ts`). The rig's TVs are shared by parallel tests, so each test uses app ids no other test touches.
+- LG's Developer Mode session service is faked by `tools/mock-tv/src/lge.ts` (`startMockLge`, bridge env `LGDM_LGE_URL`).
 - The Homebrew repository is faked by `tools/mock-tv/src/repo.ts` (`startMockRepo`); point a bridge at it with
   `LGDM_REPO_URL`. Add catalogue entries there for new repo states.
 - The rig also runs a TV that refuses PTYs (port 2223) for the simple-shell path. Mock file metadata (owners, modes,

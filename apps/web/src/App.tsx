@@ -10,6 +10,7 @@ import { InstalledAppsPage } from './features/apps/InstalledAppsPage';
 import { RepoPage } from './features/repo/RepoPage';
 import { FilesPage } from './features/files/FilesPage';
 import { TerminalPage } from './features/terminal/TerminalPage';
+import { InfoPage } from './features/info/InfoPage';
 import { ComingSoon } from './features/placeholder/ComingSoon';
 
 /** A fresh wizard on every visit, including "Add a TV" clicked while already on the page. */
@@ -27,8 +28,6 @@ function Home() {
 }
 
 const PAGES = [
-  { path: 'info', eyebrow: 'Device', title: 'Device info', icon: 'info', milestone: 'M6',
-    description: 'Model, firmware and webOS version, Dev Mode session time left with one-click renew, and screenshots.' },
   { path: 'debug/logs', eyebrow: 'Debug', title: 'Log reader', icon: 'debug', milestone: 'M7', description: 'Stream system logs from the TV.' },
   { path: 'debug/pmlog', eyebrow: 'Debug', title: 'PmLog', icon: 'debug', milestone: 'M7', description: 'Turn developer logging on and set log contexts.' },
   { path: 'debug/dmesg', eyebrow: 'Debug', title: 'dmesg', icon: 'debug', milestone: 'M7', description: 'Kernel ring buffer.' },
@@ -53,6 +52,7 @@ export function App() {
                 <Route path="apps/homebrew" element={<RepoPage />} />
                 <Route path="files" element={<FilesPage />} />
                 <Route path="terminal" element={<TerminalPage />} />
+                <Route path="info" element={<InfoPage />} />
                 <Route path="debug" element={<Navigate to="/debug/logs" replace />} />
                 {PAGES.map(({ path, ...p }) => (
                   <Route key={path} path={path} element={<ComingSoon {...p} />} />

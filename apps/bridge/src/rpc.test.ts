@@ -282,3 +282,13 @@ describe('files and shells over WebSocket', () => {
     expect((await call('shell.write', { shellId, data: 'x' })).error.code).toBe('shell_not_found');
   });
 });
+
+describe('device info over WebSocket', () => {
+  it('takes a screenshot as root and explains Dev Mode-only calls', async () => {
+    const dev = device('S3cr3t-pa55');
+    const shot = await call('device.screenshot', { device: dev });
+    expect(shot.result.mime).toBe('image/png');
+    expect((await call('devmode.status', { device: dev })).error.code).toBe('wrong_login');
+    expect((await call('device.screenshot', { device: dev, method: 'SCREEN' })).error.code).toBe('bad_request');
+  });
+});

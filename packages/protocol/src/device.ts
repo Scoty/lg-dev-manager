@@ -50,4 +50,6 @@ export const DeviceErrorCodes = {
   AuthFailed: 'ssh_auth_failed',
   Timeout: 'ssh_timeout',
   CommandFailed: 'command_failed',
+  /** The operation needs a different login (root, or Developer Mode's prisoner). */
+  WrongLogin: 'wrong_login',
 } as const;

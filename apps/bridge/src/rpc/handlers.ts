@@ -24,7 +24,8 @@ import { lunaCall } from '../ssh/luna.js';
 import { verifyKey } from '../devices/keys.js';
 import { fetchKey } from '../devices/keyserver.js';
 import { checkConnection } from '../devices/ports.js';
-import { deviceInfo, generateKey, storageInfo } from '../devices/info.js';
+import { deviceInfo, generateKey, storageInfo, takeScreenshot } from '../devices/info.js';
+import { DEFAULT_LGE_URL, devModeStatus, renewDevMode } from '../devices/devmode.js';
 import { appIcon, hbChannelConfig, installFromRepo, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
 import type { HttpTrace, RepoClient } from '../repo/repo.js';
 import type { ShellSessions } from '../shell/shells.js';
@@ -81,6 +82,8 @@ export interface Context {
   token: string;
   pool: SshPool;
   repo: RepoClient;
+  /** LG's Developer Mode session service (LGDM_LGE_URL overrides, for tests). */
+  lgeUrl?: string;
 }
 
 type Handler<M extends MethodName> = (
@@ -136,6 +139,14 @@ export const handlers: HandlerMap = {
   'device.info': ({ device, quiet }, session, ctx) => deviceInfo(sshFor(session, ctx, quiet), device),
   'device.storage': ({ device, path }, session, ctx) => storageInfo(sshFor(session, ctx), device, path),
   'device.generateKey': ({ comment }) => generateKey(comment),
+  // The token is read through the plain pool so it never appears in the console; the LG request is traced
+  // with the token blanked out.
+  'devmode.status': ({ device }, session, ctx) => devModeStatus(ctx.pool, device, ctx.lgeUrl ?? DEFAULT_LGE_URL, httpTraceFor(session)),
+  'devmode.renew': async ({ device }, session, ctx) => {
+    await renewDevMode(sshFor(session, ctx), device);
+    return {};
+  },
+  'device.screenshot': ({ device, method }, session, ctx) => takeScreenshot(sshFor(session, ctx), device, method ?? 'DISPLAY'),
   'device.hbchannel': ({ device, quiet }, session, ctx) => hbChannelConfig(sshFor(session, ctx, quiet), device),
 
   'device.disconnect': ({ device }, _s, { pool }) => ({ closed: pool.close(device) }),

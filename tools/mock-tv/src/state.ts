@@ -33,6 +33,12 @@ export interface MockState {
   launched: string[];
   /** Total / available KiB reported by `df`. */
   diskKb: { total: number; available: number };
+  /** Times the Developer Mode app was launched with `{ extend: true }` (devmode renew). */
+  devmodeExtends: number;
+  /** Called on a devmode extend — the real app then resets the session at LG (wire to a MockLge). */
+  onDevmodeExtend?: () => void;
+  /** Only the older `com.webos.service.tv.capture` screenshot service exists (pre-webOS 5 firmware). */
+  legacyCapture: boolean;
 }
 
 export const DEV_APPS_DIR = '/media/developer/apps/usr/palm/applications';
@@ -148,7 +154,17 @@ export function addApp(state: MockState, app: MockApp) {
   addFile(state, `${app.folderPath}/appinfo.json`, Buffer.from(JSON.stringify({ id: app.id, title: app.title, version: app.version })));
 }
 
-export function createState(opts: { username: string; hbchannel?: boolean; apps?: MockApp[]; storeApps?: MockApp[] }): MockState {
+/** The Developer Mode session token a Dev Mode mock TV keeps in /var/luna/preferences/devmode_enabled. */
+export const MOCK_DEVMODE_TOKEN = 'MOCKDEVMODETOKEN0123456789';
+
+export function createState(opts: {
+  username: string;
+  hbchannel?: boolean;
+  apps?: MockApp[];
+  storeApps?: MockApp[];
+  devmodeToken?: string | null;
+  legacyCapture?: boolean;
+}): MockState {
   const state: MockState = {
     username: opts.username,
     hbchannel: opts.hbchannel ?? false,
@@ -160,6 +176,8 @@ export function createState(opts: { username: string; hbchannel?: boolean; apps?
     meta: new Map(),
     launched: [],
     diskKb: { total: 1_843_200, available: 1_204_400 },
+    devmodeExtends: 0,
+    legacyCapture: opts.legacyCapture ?? false,
   };
   for (const app of opts.apps ?? MOCK_APPS) addApp(state, app);
   if (!state.hbchannel) state.apps = state.apps.filter((a) => a.id !== 'org.webosbrew.hbchannel');
@@ -169,6 +187,12 @@ export function createState(opts: { username: string; hbchannel?: boolean; apps?
   addFile(state, `${home}/notes.txt`, Buffer.from('Hello from the mock TV.\nThis file is here for the Files page.\n'));
   addLink(state, `${home}/apps-link`, '/media/developer/apps');
   addLink(state, `${home}/old-link`, 'gone');
+  // Developer Mode: the session token, and the Developer Mode app (installed from the LG store).
+  if (opts.username !== 'root') {
+    const token = opts.devmodeToken === undefined ? MOCK_DEVMODE_TOKEN : opts.devmodeToken;
+    if (token !== null) addFile(state, '/var/luna/preferences/devmode_enabled', Buffer.from(token));
+    state.storeApps = [...state.storeApps, storeApp('com.palmdts.devmode', 'Developer Mode', '1.1.1')];
+  }
   return state;
 }
 

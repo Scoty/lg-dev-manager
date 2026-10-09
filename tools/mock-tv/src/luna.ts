@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { get } from 'node:http';
-import { addApp, devApp, readControl, type MockState } from './state.js';
+import { addApp, addFile, devApp, makeIconPng, readControl, type MockState } from './state.js';
 
 /** Canned luna-send responses. Keep payload shapes close to real webOS. */
 export type LunaHandler = (params: Record<string, unknown>, state: MockState) => Record<string, unknown>;
@@ -14,6 +14,14 @@ export type LunaSubscription = (
 const HB = 'luna://org.webosbrew.hbchannel.service';
 
 const notFound = (service: string) => ({ returnValue: false, errorCode: -1, errorText: `Service does not exist: ${service}.` });
+
+function capture(p: Record<string, unknown>, s: MockState): Record<string, unknown> {
+  const path = String(p.path ?? '');
+  if (!path.startsWith('/tmp/')) return { returnValue: false, errorCode: 'CAPTURE_ERROR_01', errorText: 'Invalid path' };
+  const color: [number, number, number] = p.method === 'GRAPHIC' ? [37, 99, 235] : p.method === 'VIDEO' ? [16, 185, 129] : [139, 92, 246];
+  addFile(s, path, makeIconPng(color, 160));
+  return { returnValue: true };
+}
 
 const appsOf = (state: MockState) => state.apps.map((a) => ({ ...a }));
 
@@ -49,11 +57,26 @@ export const LUNA: Record<string, LunaHandler> = {
     exist: [...s.apps, ...s.storeApps].some((a) => a.id === p.appId),
   }),
   'luna://com.webos.applicationManager/launch': (p, s) => {
-    if (!s.apps.some((a) => a.id === p.id)) {
+    if (![...s.apps, ...s.storeApps].some((a) => a.id === p.id)) {
       return { returnValue: false, errorCode: -101, errorText: `Cannot find proper launchPoint for ${String(p.id)}` };
     }
     s.launched.push(String(p.id));
+    if (p.id === 'com.palmdts.devmode' && (p.params as { extend?: unknown } | undefined)?.extend === true) {
+      s.devmodeExtends++;
+      s.onDevmodeExtend?.();
+    }
     return { returnValue: true, appId: p.id };
+  },
+  // Screenshots (takeScreenshot in device-manager.service.ts): write a PNG where asked.
+  'luna://com.webos.service.capture/executeOneShot': (p, s) => {
+    if (s.legacyCapture) return notFound('com.webos.service.capture');
+    return capture(p, s);
+  },
+  // The older service: some models refuse a capture without an explicit size (CAPTURE_ERROR_03).
+  'luna://com.webos.service.tv.capture/executeOneShot': (p, s) => {
+    if (!s.legacyCapture) return notFound('com.webos.service.tv.capture');
+    if (p.width === undefined) return { returnValue: false, errorCode: 'CAPTURE_ERROR_03', errorText: 'Specified size is out of range' };
+    return capture(p, s);
   },
   [`${HB}/getConfiguration`]: (_p, s) =>
     s.hbchannel

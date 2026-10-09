@@ -59,7 +59,7 @@ export function startServer(config: BridgeConfig, pool = new SshPool(), repo = n
 
     ws.on('message', async (data, isBinary) => {
       if (isBinary) return;
-      const res = await dispatch(data.toString(), session, { token: config.token, pool, repo });
+      const res = await dispatch(data.toString(), session, { token: config.token, pool, repo, lgeUrl: config.lgeUrl });
       if (res && ws.readyState === ws.OPEN) ws.send(JSON.stringify(res));
       if (res && 'error' in res && res.error.code === 'unauthorized' && !session.authed) {
         ws.close(4401, 'unauthorized');
