@@ -7,6 +7,7 @@ import { BridgePage } from './features/bridge/BridgePage';
 import { DevicesPage } from './features/devices/DevicesPage';
 import { AddDevicePage } from './features/devices/AddDevicePage';
 import { InstalledAppsPage } from './features/apps/InstalledAppsPage';
+import { RepoPage } from './features/repo/RepoPage';
 import { ComingSoon } from './features/placeholder/ComingSoon';
 
 /** A fresh wizard on every visit, including "Add a TV" clicked while already on the page. */
@@ -24,8 +25,6 @@ function Home() {
 }
 
 const PAGES = [
-  { path: 'apps/homebrew', eyebrow: 'Apps', title: 'Homebrew repository', icon: 'store', milestone: 'M4',
-    description: 'Browse and search repo.webosbrew.org, see what has updates, and install packages in one click.' },
   { path: 'files', eyebrow: 'Device', title: 'Files', icon: 'files', milestone: 'M5',
     description: 'Browse the TV filesystem over SFTP, upload by drag & drop, download, rename and delete.' },
   { path: 'terminal', eyebrow: 'Device', title: 'Terminal', icon: 'terminal', milestone: 'M5',
@@ -53,6 +52,7 @@ export function App() {
                 <Route path="devices/new" element={<AddDeviceRoute />} />
                 <Route path="apps" element={<Navigate to="/apps/installed" replace />} />
                 <Route path="apps/installed" element={<InstalledAppsPage />} />
+                <Route path="apps/homebrew" element={<RepoPage />} />
                 <Route path="debug" element={<Navigate to="/debug/logs" replace />} />
                 {PAGES.map(({ path, ...p }) => (
                   <Route key={path} path={path} element={<ComingSoon {...p} />} />

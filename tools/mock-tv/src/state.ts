@@ -20,6 +20,8 @@ export interface MockState {
   /** Homebrew Channel installed (its luna service answers). */
   hbchannel: boolean;
   apps: MockApp[];
+  /** Apps installed outside the developer partition (LG Content Store, system): not in dev/listApps. */
+  storeApps: MockApp[];
   files: Map<string, Buffer>;
   dirs: Set<string>;
   /** App ids launched, newest last — lets tests assert on launches. */
@@ -95,6 +97,22 @@ export function devApp(id: string, title: string, version: string, vendor = 'web
   };
 }
 
+/** An app installed from the LG Content Store (cryptofs), or a system app. */
+export function storeApp(id: string, title: string, version: string, system = false): MockApp {
+  return {
+    ...devApp(id, title, version, system ? 'LG Electronics' : 'Store vendor'),
+    folderPath: system ? `/usr/palm/applications/${id}` : `/media/cryptofs/apps/usr/palm/applications/${id}`,
+    removable: !system,
+    systemApp: system,
+  };
+}
+
+/** Apps outside the developer partition on the fake TV. */
+export const MOCK_STORE_APPS: MockApp[] = [
+  storeApp('com.example.storeapp', 'Store App', '2.0.0'),
+  storeApp('com.webos.app.browser', 'Web Browser', '1.0.0', true),
+];
+
 /** Default apps on the fake TV (Dev Mode partition). Extend as features land; keep shapes close to real webOS. */
 export const MOCK_APPS: MockApp[] = [
   devApp('com.example.hello', 'Hello World', '1.0.0', 'Example Inc.'),
@@ -125,11 +143,12 @@ export function addApp(state: MockState, app: MockApp) {
   addFile(state, `${app.folderPath}/appinfo.json`, Buffer.from(JSON.stringify({ id: app.id, title: app.title, version: app.version })));
 }
 
-export function createState(opts: { username: string; hbchannel?: boolean; apps?: MockApp[] }): MockState {
+export function createState(opts: { username: string; hbchannel?: boolean; apps?: MockApp[]; storeApps?: MockApp[] }): MockState {
   const state: MockState = {
     username: opts.username,
     hbchannel: opts.hbchannel ?? false,
     apps: [],
+    storeApps: opts.storeApps ?? MOCK_STORE_APPS,
     files: new Map(),
     dirs: new Set(['/', '/tmp', '/media', '/media/developer', '/home', '/home/root', '/etc']),
     launched: [],

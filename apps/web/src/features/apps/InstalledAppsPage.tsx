@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react';
+import { Link } from 'react-router-dom';
 import type { AppInfo } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
 import { ErrorAlert } from '../../components/ErrorAlert';
@@ -12,6 +13,8 @@ import { AppIcon } from './AppIcon';
 import { useAppOperations } from './operations';
 import { useInstalledApps, useStorage } from './queries';
 import { modelLabel } from '../../devices/model';
+import { useRepoApps, type RepoAppView } from '../repo/useRepoApps';
+import { RepoDetails } from '../repo/RepoDetails';
 
 const fmtKb = (kb: number) => (kb >= 1024 * 1024 ? `${(kb / 1024 / 1024).toFixed(1)} GB` : `${Math.round(kb / 1024)} MB`);
 
@@ -35,7 +38,11 @@ function StorageBar({ device }: { device: SavedDevice }) {
 export function InstalledAppsPage() {
   const { active } = useDevices();
   const { data: apps, error, isLoading, isFetching, refetch } = useInstalledApps(active);
-  const { install, remove, launch, busy, dialog } = useAppOperations(active, apps);
+  const ops = useAppOperations(active, apps);
+  const { install, remove, launch, busy, dialog } = ops;
+  // Homebrew repository entries for installed apps: update badges and details (InstalledComponent in the original).
+  const repoApps = useRepoApps(active);
+  const [detailsId, setDetailsId] = useState<string | null>(null);
   const { toast } = useFeedback();
   const [query, setQuery] = useState('');
   const [showSystem, setShowSystem] = useState(false);
@@ -155,7 +162,9 @@ export function InstalledAppsPage() {
               <div className="empty-state">
                 <div className="empty-icon"><Icon name="apps" /></div>
                 <h3>{query ? 'No matching apps' : 'No apps installed yet'}</h3>
-                <p>{query ? 'Try another search.' : 'Install an IPK from your computer, or browse the Homebrew repository.'}</p>
+                <p>
+                  {query ? 'Try another search.' : <>Install an IPK from your computer, or browse the <Link to="/apps/homebrew">Homebrew repository</Link>.</>}
+                </p>
               </div>
             ) : (
               <div className="table-scroll">
@@ -170,7 +179,17 @@ export function InstalledAppsPage() {
                   </thead>
                   <tbody>
                     {visible.map((app) => (
-                      <AppRow key={app.id} app={app} device={active} onLaunch={launch} onRemove={remove} busy={busy} />
+                      <AppRow
+                        key={app.id}
+                        app={app}
+                        device={active}
+                        repo={repoApps.view.get(app.id)}
+                        onLaunch={launch}
+                        onRemove={remove}
+                        onUpdate={(v) => ops.installFromRepo(v.pkg, { update: true, incompatible: v.incompatible })}
+                        onDetails={(v) => setDetailsId(v.pkg.id)}
+                        busy={busy}
+                      />
                     ))}
                   </tbody>
                 </table>
@@ -192,6 +211,13 @@ export function InstalledAppsPage() {
           </div>
         </div>
       )}
+      <RepoDetails
+        view={detailsId ? (repoApps.view.get(detailsId) ?? null) : null}
+        device={active}
+        ready={repoApps.ready}
+        actions={ops}
+        onClose={() => setDetailsId(null)}
+      />
       {dialog}
     </div>
   );
@@ -200,16 +226,24 @@ export function InstalledAppsPage() {
 function AppRow({
   app,
   device,
+  repo,
   onLaunch,
   onRemove,
+  onUpdate,
+  onDetails,
   busy,
 }: {
   app: AppInfo;
   device: SavedDevice | null;
+  /** This app's Homebrew repository entry, if it has one. */
+  repo?: RepoAppView;
   onLaunch: (a: AppInfo) => void;
   onRemove: (a: AppInfo) => void;
+  onUpdate: (v: RepoAppView) => void;
+  onDetails: (v: RepoAppView) => void;
   busy: boolean;
 }) {
+  const update = repo?.state === 'update' ? repo : undefined;
   const { toast } = useFeedback();
   const removable = app.removable !== false && !app.systemApp;
   const title = app.title ?? app.id;
@@ -227,10 +261,29 @@ function AppRow({
           </div>
         </div>
       </td>
-      <td className="data-cell-mono hide-sm">{app.version ? `v${app.version}` : '—'}</td>
+      <td className="data-cell-mono hide-sm">
+        {app.version ? `v${app.version}` : '—'}
+        {update && (
+          <span className="badge warning update-badge" title={`v${update.pkg.manifest?.version} is in the Homebrew repository`}>
+            v{update.pkg.manifest?.version} available
+          </span>
+        )}
+      </td>
       <td className="hide-sm">{app.type ? <span className="badge">{app.type}</span> : '—'}</td>
       <td>
         <div className="row-actions">
+          {update && (
+            <button
+              type="button"
+              className="btn btn--sm btn--primary"
+              onClick={() => onUpdate(update)}
+              disabled={busy}
+              aria-label={`Update ${title} to ${update.pkg.manifest?.version}`}
+              title={`Update to v${update.pkg.manifest?.version}`}
+            >
+              <Icon name="download" /> <span className="hide-sm">Update</span>
+            </button>
+          )}
           <button type="button" className="btn btn--sm btn--soft-primary" onClick={() => onLaunch(app)} aria-label={`Launch ${title}`}>
             <Icon name="play" /> <span className="hide-sm">Launch</span>
           </button>
@@ -257,6 +310,19 @@ function AppRow({
                 >
                   <Icon name="copy" /> Copy app id
                 </button>
+                {repo && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="dd-menu-item"
+                    onClick={() => {
+                      close();
+                      onDetails(repo);
+                    }}
+                  >
+                    <Icon name="store" /> Homebrew repo details
+                  </button>
+                )}
                 <div className="dd-divider" />
                 <button
                   type="button"

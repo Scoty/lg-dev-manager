@@ -10,21 +10,33 @@ export const TvInfo = z.object({
   modelName: z.string().max(64).optional(),
   osVersion: z.string().max(64).optional(),
   firmwareVersion: z.string().max(64).optional(),
+  /** SoC name (e.g. "k8lp"), for Homebrew apps that only run on some chips. */
+  socName: z.string().max(64).optional(),
   /** host:port it was read from — a changed address means it needs reading again. */
   from: z.string().max(300),
   at: z.number(),
+  /** Which fields this record was read with — older records get read again (see useTvInfoRefresh). */
+  v: z.number().optional(),
 });
+
+/** Bump when TvInfo gains a field, so saved TVs pick it up. 2: socName. */
+export const TV_INFO_VERSION = 2;
 export type TvInfo = z.infer<typeof TvInfo>;
 
 /** The bits of a device.info result worth keeping with a saved TV. */
-export function tvInfo(d: Pick<SavedDevice, 'host' | 'port'>, info: { modelName?: string; osVersion?: string; firmwareVersion?: string }): TvInfo {
+export function tvInfo(
+  d: Pick<SavedDevice, 'host' | 'port'>,
+  info: { modelName?: string; osVersion?: string; firmwareVersion?: string; socName?: string },
+): TvInfo {
   const cut = (v?: string) => (v ? v.slice(0, 64) : undefined);
   return TvInfo.parse({
     ...(info.modelName ? { modelName: cut(info.modelName) } : {}),
     ...(info.osVersion ? { osVersion: cut(info.osVersion) } : {}),
     ...(info.firmwareVersion ? { firmwareVersion: cut(info.firmwareVersion) } : {}),
+    ...(info.socName ? { socName: cut(info.socName) } : {}),
     from: `${d.host}:${d.port}`,
     at: Date.now(),
+    v: TV_INFO_VERSION,
   });
 }
 

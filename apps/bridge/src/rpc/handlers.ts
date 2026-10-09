@@ -25,7 +25,8 @@ import { verifyKey } from '../devices/keys.js';
 import { fetchKey } from '../devices/keyserver.js';
 import { checkConnection } from '../devices/ports.js';
 import { deviceInfo, generateKey, storageInfo } from '../devices/info.js';
-import { appIcon, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
+import { appIcon, hbChannelConfig, installFromRepo, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
+import type { HttpTrace, RepoClient } from '../repo/repo.js';
 import type { UploadStore } from './uploads.js';
 
 export interface Session {
@@ -50,19 +51,23 @@ const sshFor = (session: Session, ctx: Context, quiet = false) =>
   new LoggedSsh(ctx.pool, (e: CmdLog) => session.emit(CMD_LOG_EVENT, e), quiet);
 
 /** Log a non-SSH step (the key server fetch) in the console. Output is never included. */
-async function traceHttp<T>(session: Session, target: string, command: string, fn: () => Promise<T>): Promise<T> {
+async function traceHttp<T>(session: Session, target: string, command: string, fn: () => Promise<T>, quiet = false): Promise<T> {
   const id = randomUUID();
   const at = Date.now();
-  session.emit(CMD_LOG_EVENT, { id, phase: 'start', target, command, kind: 'http', at } satisfies CmdLog);
+  const q = quiet ? { quiet: true } : {};
+  session.emit(CMD_LOG_EVENT, { id, phase: 'start', target, command, kind: 'http', at, ...q } satisfies CmdLog);
   try {
     const r = await fn();
-    session.emit(CMD_LOG_EVENT, { id, phase: 'end', target, command, kind: 'http', at: Date.now(), durationMs: Date.now() - at, exitCode: 0 } satisfies CmdLog);
+    session.emit(CMD_LOG_EVENT, { id, phase: 'end', target, command, kind: 'http', at: Date.now(), durationMs: Date.now() - at, exitCode: 0, ...q } satisfies CmdLog);
     return r;
   } catch (e) {
-    session.emit(CMD_LOG_EVENT, { id, phase: 'end', target, command, kind: 'http', at: Date.now(), durationMs: Date.now() - at, error: (e as Error).message } satisfies CmdLog);
+    session.emit(CMD_LOG_EVENT, { id, phase: 'end', target, command, kind: 'http', at: Date.now(), durationMs: Date.now() - at, error: (e as Error).message, ...q } satisfies CmdLog);
     throw e;
   }
 }
+
+/** Console tracing for the Homebrew repository's HTTP requests. */
+const httpTraceFor = (session: Session, quiet = false): HttpTrace => (target, command, fn) => traceHttp(session, target, command, fn, quiet);
 
 /** Progress reporter for one operation, sent as `op.progress` events. */
 const progressFor = (session: Session, opId: string) => (p: Omit<OpProgress, 'opId'>) =>
@@ -71,6 +76,7 @@ const progressFor = (session: Session, opId: string) => (p: Omit<OpProgress, 'op
 export interface Context {
   token: string;
   pool: SshPool;
+  repo: RepoClient;
 }
 
 type Handler<M extends MethodName> = (
@@ -126,6 +132,7 @@ export const handlers: HandlerMap = {
   'device.info': ({ device, quiet }, session, ctx) => deviceInfo(sshFor(session, ctx, quiet), device),
   'device.storage': ({ device }, session, ctx) => storageInfo(sshFor(session, ctx), device),
   'device.generateKey': ({ comment }) => generateKey(comment),
+  'device.hbchannel': ({ device, quiet }, session, ctx) => hbChannelConfig(sshFor(session, ctx, quiet), device),
 
   'device.disconnect': ({ device }, _s, { pool }) => ({ closed: pool.close(device) }),
 
@@ -188,6 +195,13 @@ export const handlers: HandlerMap = {
       done();
     }
   },
+
+  'apps.installFromRepo': ({ device, id, channel, opId }, session, ctx) =>
+    installFromRepo(sshFor(session, ctx), ctx.repo, device, id, channel ?? 'stable', progressFor(session, opId), httpTraceFor(session)),
+
+  'repo.list': ({ refresh }, session, { repo }) => repo.list({ refresh, trace: httpTraceFor(session, true) }),
+  'repo.image': ({ url }, session, { repo }) => repo.image(url, httpTraceFor(session, true)),
+  'repo.description': ({ id }, session, { repo }) => repo.description(id, httpTraceFor(session, true)),
 
   'upload.begin': ({ name, size }, session) => ({ uploadId: session.uploads.begin(name, size) }),
   'upload.chunk': ({ uploadId, offset, data }, session) => ({ received: session.uploads.chunk(uploadId, offset, data) }),

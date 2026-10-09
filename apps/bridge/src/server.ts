@@ -7,10 +7,11 @@ import { serveStatic } from './http/static.js';
 import { BRIDGE_VERSION } from './version.js';
 import { SshPool } from './ssh/pool.js';
 import { UploadStore } from './rpc/uploads.js';
+import { RepoClient } from './repo/repo.js';
 
 export const RPC_PATH = '/rpc';
 
-export function startServer(config: BridgeConfig, pool = new SshPool()): Promise<Server> {
+export function startServer(config: BridgeConfig, pool = new SshPool(), repo = new RepoClient(config.repoUrl)): Promise<Server> {
   const http = createServer((req, res) => {
     if (req.url === '/healthz') {
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, version: BRIDGE_VERSION }));
@@ -55,7 +56,7 @@ export function startServer(config: BridgeConfig, pool = new SshPool()): Promise
 
     ws.on('message', async (data, isBinary) => {
       if (isBinary) return;
-      const res = await dispatch(data.toString(), session, { token: config.token, pool });
+      const res = await dispatch(data.toString(), session, { token: config.token, pool, repo });
       if (res && ws.readyState === ws.OPEN) ws.send(JSON.stringify(res));
       if (res && 'error' in res && res.error.code === 'unauthorized' && !session.authed) {
         ws.close(4401, 'unauthorized');

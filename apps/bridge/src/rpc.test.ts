@@ -2,14 +2,17 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { fakeIpk, startMockTv, type MockTv } from '@lgdm/mock-tv';
+import { fakeIpk, startMockRepo, startMockTv, type MockRepo, type MockTv } from '@lgdm/mock-tv';
 import { PROTOCOL_VERSION } from '@lgdm/protocol';
 import { startServer } from './server.js';
+import { SshPool } from './ssh/pool.js';
+import { RepoClient } from './repo/repo.js';
 
 const TOKEN = 'rpc-test-token';
 const ORIGIN = 'http://localhost:5173';
 let server: Server;
 let tv: MockTv;
+let repo: MockRepo;
 let ws: WebSocket;
 let nextId = 1;
 const frames: string[] = [];
@@ -31,7 +34,8 @@ function call(method: string, params?: unknown): Promise<any> {
 
 beforeAll(async () => {
   tv = await startMockTv({ username: 'root', password: 'S3cr3t-pa55' });
-  server = await startServer({ host: '127.0.0.1', port: 0, allowedOrigins: [ORIGIN], token: TOKEN, dev: true });
+  repo = await startMockRepo();
+  server = await startServer({ host: '127.0.0.1', port: 0, allowedOrigins: [ORIGIN], token: TOKEN, dev: true }, new SshPool(), new RepoClient(repo.url));
   ws = new WebSocket(`ws://127.0.0.1:${(server.address() as AddressInfo).port}/rpc`, { headers: { Origin: ORIGIN } });
   await new Promise((r) => ws.once('open', r));
   await call('system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
@@ -39,7 +43,7 @@ beforeAll(async () => {
 afterAll(async () => {
   ws.close();
   await new Promise<void>((r) => server.close(() => r()));
-  await tv.close();
+  await Promise.all([tv.close(), repo.close()]);
 });
 
 const device = (password: string) => ({ host: tv.host, port: tv.sshPort, username: 'root', auth: { kind: 'password', password } });
@@ -205,5 +209,31 @@ describe('console: early cancel', () => {
     const running = call('cmd.stream', { device: device('S3cr3t-pa55'), command: 'sleep 1000', opId: 'c9' });
     expect((await call('cmd.cancel', { opId: 'c9' })).result).toEqual({ cancelled: true });
     expect((await running).result).toEqual({ exitCode: null, cancelled: true });
+  });
+});
+
+describe('Homebrew repository over WebSocket', () => {
+  const dev = () => device('S3cr3t-pa55');
+
+  it('lists the repository and logs the fetch as a quiet console step', async () => {
+    const before = frames.length;
+    const res = await call('repo.list', {});
+    expect(res.result.packages.length).toBe(repo.apps.length);
+    const logs = frames.slice(before).map((f) => JSON.parse(f)).filter((m) => m.event === 'cmd.log');
+    expect(logs.some((m) => m.data.kind === 'http' && m.data.quiet && m.data.command === `GET ${repo.url}/apps.json`)).toBe(true);
+  });
+
+  it('serves descriptions and validates ids', async () => {
+    expect((await call('repo.description', { id: 'com.example.repoapp' })).result.html).toContain('<h2>About</h2>');
+    expect((await call('repo.description', { id: '../../etc/passwd' })).error.code).toBe('bad_request');
+  });
+
+  it('reports Homebrew Channel and installs from the repository with progress', async () => {
+    expect((await call('device.hbchannel', { device: dev(), quiet: true })).result).toEqual({ installed: false, root: false });
+    const before = frames.length;
+    const res = await call('apps.installFromRepo', { device: dev(), id: 'com.example.beta', opId: 'op-repo' });
+    expect(res.result).toEqual({ appId: 'com.example.beta', version: '1.0.0', via: 'devmode' });
+    const progress = frames.slice(before).map((f) => JSON.parse(f)).filter((m) => m.event === 'op.progress' && m.data.opId === 'op-repo');
+    expect(progress.map((p) => p.data.stage)).toEqual(expect.arrayContaining(['upload', 'install']));
   });
 });

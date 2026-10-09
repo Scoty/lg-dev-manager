@@ -63,5 +63,7 @@ export function useRefreshDeviceData() {
   return (device: SavedDevice) => {
     qc.invalidateQueries({ queryKey: ['apps', device.id] });
     qc.invalidateQueries({ queryKey: ['storage', device.id] });
+    // Installing or removing Homebrew Channel changes what the repository page flags as needing root.
+    qc.invalidateQueries({ queryKey: ['hbchannel', device.id] });
   };
 }

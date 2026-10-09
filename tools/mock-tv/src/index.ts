@@ -12,7 +12,8 @@ const { Server: SshServer, utils } = ssh2;
 
 export { runCommand, unquote } from './shell.js';
 export { LUNA, SUBSCRIPTIONS } from './luna.js';
-export { MOCK_APPS, devApp, fakeIpk, makeIconPng, type MockApp, type MockState } from './state.js';
+export { MOCK_APPS, MOCK_STORE_APPS, devApp, storeApp, fakeIpk, makeIconPng, type MockApp, type MockState } from './state.js';
+export { MOCK_REPO_APPS, startMockRepo, type MockRepo, type MockRepoApp } from './repo.js';
 
 export interface MockTvOptions {
   /** `prisoner` (Dev Mode) or `root` (rooted). */
@@ -32,6 +33,8 @@ export interface MockTvOptions {
   forwarding?: boolean;
   /** Apps present at start (default MOCK_APPS). */
   apps?: MockApp[];
+  /** Store / system apps present at start (default MOCK_STORE_APPS). */
+  storeApps?: MockApp[];
   /** Also listen on this port like webOS's second-screen service (3000), so network scans find the TV. */
   ssapPort?: number;
 }
@@ -70,7 +73,7 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
   const host = opts.host ?? '127.0.0.1';
   const username = opts.username ?? 'prisoner';
   const passphrase = opts.passphrase ?? 'A1B2C3';
-  const state = createState({ username, hbchannel: opts.hbchannel, apps: opts.apps });
+  const state = createState({ username, hbchannel: opts.hbchannel, apps: opts.apps, storeApps: opts.storeApps });
   const hostKey = pem().privateKey;
   // Dev Mode keys are passphrase-protected traditional PEM ("Proc-Type: 4,ENCRYPTED").
   const { privateKey } = pem('aes-128-cbc', passphrase);

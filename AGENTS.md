@@ -58,7 +58,7 @@ pnpm dev:web        # UI only
 pnpm dev:bridge     # bridge only
 pnpm --filter @lgdm/mock-tv start   # fake Dev Mode TV on 127.0.0.1:9922 (SSH) / :9991 (key server)
 pnpm test           # unit + integration (uses mock TV)
-pnpm e2e            # Playwright: built UI + real bridge + mock TVs (apps/web/e2e)
+pnpm e2e            # Playwright: built UI + real bridge + mock TVs + fake Homebrew repo (apps/web/e2e)
 pnpm dev:rig        # same rig for trying the UI by hand: http://127.0.0.1:5299, token e2e-token
 pnpm lint && pnpm typecheck
 pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
@@ -82,7 +82,10 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 
 - Every new RPC gets a bridge integration test against the mock TV.
 - Every page gets a Playwright smoke test (renders in light + dark, no console errors) — add it to `apps/web/e2e/smoke.spec.ts`.
-- User flows that touch the TV get a Playwright test against the mock TVs (`apps/web/e2e/devices-apps.spec.ts`).
+- User flows that touch the TV get a Playwright test against the mock TVs (`apps/web/e2e/devices-apps.spec.ts`,
+  `repo.spec.ts`). The rig's TVs are shared by parallel tests, so each test uses app ids no other test touches.
+- The Homebrew repository is faked by `tools/mock-tv/src/repo.ts` (`startMockRepo`); point a bridge at it with
+  `LGDM_REPO_URL`. Add catalogue entries there for new repo states.
 - The mock TV (`tools/mock-tv`) should behave like the real one: when a feature needs a new command or luna call,
   add it there with realistic payloads (see `luna.ts`, `shell.ts`), including failure cases.
 - Real-TV checks are done by the owner; when a change needs one, say so in the PR description with steps.
@@ -108,3 +111,4 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 | Hosting | GitHub Pages with custom domain **lg.scoty.uk** (Cloudflare DNS), public preview from now, v1.0 at M8 | Decided |
 | Repository | **github.com/Scoty/lg-dev-manager** | Decided |
 | Test devices | Owner tests on both Dev Mode (SSH 9922) and rooted (SSH 22) TVs | Decided |
+| Homebrew repo access | The **bridge** fetches repo.webosbrew.org (index, descriptions, icons, IPKs) so the site's CSP needs no new hosts; descriptions are rendered from an allow-list, never as raw HTML | Decided (M4) |

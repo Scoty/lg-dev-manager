@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { APP_ID_HBCHANNEL, AppsErrorCodes, type AppInfo, type OpProgress } from '@lgdm/protocol';
+import { APP_ID_HBCHANNEL, AppsErrorCodes, RepoErrorCodes, type AppInfo, type OpProgress, type RepoPackage } from '@lgdm/protocol';
 import { newOpId, onOpProgress, uploadToBridge, useRpc } from '../../bridge/useRpc';
 import { BridgeError } from '../../bridge/client';
 import { Modal } from '../../components/Modal';
@@ -9,16 +9,19 @@ import { useFeedback } from '../../components/Feedback';
 import { Icon } from '../../shell/icons';
 import { toTarget, type SavedDevice } from '../../devices/store';
 import { useRefreshDeviceData } from './queries';
+import { INCOMPATIBLE_TEXT, type IncompatibleReason } from '../repo/logic';
 
 type Phase = 'send' | 'copy' | 'install';
 
 interface OpState {
-  kind: 'install' | 'remove';
+  kind: 'install' | 'repo' | 'remove';
+  /** For `repo`: "Installing" or "Updating". */
+  verb?: string;
   subject: string;
   phase: Phase;
   percent?: number;
   text?: string;
-  done?: { appId?: string; via?: 'devmode' | 'hbchannel' };
+  done?: { appId?: string; via?: 'devmode' | 'hbchannel'; version?: string };
   error?: unknown;
 }
 
@@ -26,6 +29,10 @@ const PHASES: Record<OpState['kind'], { id: Phase; label: string }[]> = {
   install: [
     { id: 'send', label: 'Send the IPK to the bridge' },
     { id: 'copy', label: 'Copy it to the TV' },
+    { id: 'install', label: 'Install' },
+  ],
+  repo: [
+    { id: 'copy', label: 'Download the IPK' },
     { id: 'install', label: 'Install' },
   ],
   remove: [{ id: 'install', label: 'Uninstall' }],
@@ -40,7 +47,9 @@ function installHint(e: unknown) {
   const { code } = describeError(e);
   if (code === AppsErrorCodes.InsufficientSpace) return 'Free some space on the TV (uninstall apps you don’t use) and try again.';
   if (code === AppsErrorCodes.InstallFailed) return 'The TV rejected the package. Check that it is a webOS IPK made for this TV.';
-  if (code === AppsErrorCodes.ChecksumMismatch) return 'The connection to the TV may be unstable. Try again.';
+  if (code === AppsErrorCodes.ChecksumMismatch) return 'The download or the copy to the TV was damaged. Try again; if it keeps failing, the repository entry may be broken.';
+  if (code === AppsErrorCodes.Conflict) return 'An app with the same id came from the LG Content Store (or is built in). Uninstall that one on the TV first.';
+  if (code === RepoErrorCodes.DownloadFailed || code === RepoErrorCodes.Unreachable) return 'Check this computer’s internet connection and try again.';
   return null;
 }
 
@@ -103,6 +112,56 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
     }
   };
 
+  /**
+   * Install or update from the Homebrew repository (installPackage in apps.component.ts). Asks first when the app
+   * is marked incompatible with this TV.
+   */
+  const installFromRepo = async (
+    pkg: RepoPackage,
+    opts: { channel?: 'stable' | 'beta'; update?: boolean; incompatible?: IncompatibleReason[] | null } = {},
+  ) => {
+    if (!device || !client || running) return false;
+    const channel = opts.channel ?? 'stable';
+    if (opts.incompatible?.length) {
+      const ok = await confirm({
+        title: `${pkg.title} may not work on ${device.name}`,
+        message: (
+          <>
+            <p>The repository marks <b>{pkg.title}</b> as not compatible with this TV:</p>
+            <ul className="plain-list">
+              {opts.incompatible.map((r) => (
+                <li key={r}>{INCOMPATIBLE_TEXT[r]}</li>
+              ))}
+            </ul>
+            <p>It may not work properly, or at all.</p>
+          </>
+        ),
+        confirmText: 'Install anyway',
+        danger: true,
+      });
+      if (!ok) return false;
+    }
+    const opId = newOpId();
+    const verb = opts.update ? 'Updating' : channel === 'beta' ? 'Installing the beta of' : 'Installing';
+    setOp({ kind: 'repo', verb, subject: pkg.title, phase: 'copy', text: 'Starting…' });
+    const off = onOpProgress(client, opId, (p) => {
+      if (p.stage === 'cleanup') return;
+      const phase = phaseOf(p.stage);
+      setOp((s) => (s && !s.done && s.error === undefined ? { ...s, phase, percent: p.percent, text: p.text } : s));
+    });
+    try {
+      const res = await client.call('apps.installFromRepo', { device: toTarget(device), id: pkg.id, channel, opId }, 20 * 60_000);
+      setOp((s) => (s ? { ...s, done: res } : s));
+      refresh(device);
+      return true;
+    } catch (e) {
+      setOp((s) => (s ? { ...s, error: e } : s));
+      return false;
+    } finally {
+      off();
+    }
+  };
+
   const remove = async (app: AppInfo) => {
     if (!device || !client || running) return;
     const title = app.title ?? app.id;
@@ -154,7 +213,7 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
       open={!!op}
       onClose={() => (running ? abort.current?.abort() : setOp(null))}
       dismissible={!running}
-      title={op ? `${op.kind === 'install' ? 'Installing' : 'Uninstalling'} ${op.subject}` : ''}
+      title={op ? `${op.kind === 'remove' ? 'Uninstalling' : op.kind === 'repo' ? op.verb : 'Installing'} ${op.subject}` : ''}
       footer={
         op && (
           <>
@@ -216,18 +275,27 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
             </div>
           )}
           {op.done && (
-            <Alert kind="success" title={installedApp ? `${installedApp.title ?? installedApp.id} ${installedApp.version ? `v${installedApp.version} ` : ''}is installed` : 'Installed'}>
+            <Alert
+              kind="success"
+              title={
+                installedApp
+                  ? `${installedApp.title ?? installedApp.id} ${installedApp.version ? `v${installedApp.version} ` : ''}is installed`
+                  : op.done.version
+                    ? `${op.subject} v${op.done.version} is installed`
+                    : 'Installed'
+              }
+            >
               {op.done.via === 'hbchannel' ? 'Installed by Homebrew Channel on ' : 'Installed on '}
               {device?.name}.
             </Alert>
           )}
           {op.error !== undefined && (
-            <ErrorAlert error={op.error} title={op.kind === 'install' ? 'Install failed' : 'Uninstall failed'} hint={op.kind === 'install' ? installHint(op.error) : null} />
+            <ErrorAlert error={op.error} title={op.kind === 'remove' ? 'Uninstall failed' : 'Install failed'} hint={op.kind === 'remove' ? null : installHint(op.error)} />
           )}
         </div>
       )}
     </Modal>
   );
 
-  return { install, remove, launch, busy: running, dialog };
+  return { install, installFromRepo, remove, launch, busy: running, dialog };
 }

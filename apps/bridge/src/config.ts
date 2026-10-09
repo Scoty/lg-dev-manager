@@ -13,6 +13,8 @@ export interface BridgeConfig {
   token: string;
   /** Directory with the built web UI to serve over HTTP, if any. */
   webRoot?: string;
+  /** Homebrew repository API (default repo.webosbrew.org; LGDM_REPO_URL overrides, for tests). */
+  repoUrl?: string;
   dev: boolean;
 }
 
@@ -65,6 +67,7 @@ export function parseArgs(argv: string[]): BridgeConfig {
     allowedOrigins: [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...self, ...extra])],
     token: loadOrCreateToken(argv.includes('--reset-token')),
     webRoot: get('web-root') ?? process.env.LGDM_WEB_ROOT,
+    repoUrl: process.env.LGDM_REPO_URL,
     dev: argv.includes('--dev'),
   };
 }

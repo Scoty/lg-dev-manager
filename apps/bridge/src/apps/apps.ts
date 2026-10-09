@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import {
+  APP_ID_HBCHANNEL,
   AppInfo,
   AppsErrorCodes,
   LunaErrorCodes,
+  RepoErrorCodes,
   TEMP_IPK_DIR,
   type DeviceTarget,
   type OpProgress,
@@ -14,6 +16,7 @@ import type { SshRunner } from '../ssh/pool.js';
 import { serveToDevice } from '../ssh/serve.js';
 import { mkdirp, putFile, readFile, rmFile, sha256sum } from '../ssh/transfer.js';
 import { readIpkControl } from './ipk.js';
+import type { HttpTrace, RepoClient } from '../repo/repo.js';
 
 /**
  * App management. Port of AppManagerService (dev-manager-desktop src/app/core/services/app-manager.service.ts)
@@ -102,10 +105,30 @@ export async function removeApp(pool: SshRunner, device: DeviceTarget, id: strin
   });
 }
 
+/** Homebrew Channel's configuration (getHbChannelConfig in device-manager.service.ts); `installed: false` without it. */
+export async function hbChannelConfig(pool: SshRunner, device: DeviceTarget): Promise<{ installed: boolean; root?: boolean }> {
+  try {
+    const conf = await lunaCall(pool, device, 'luna://org.webosbrew.hbchannel.service/getConfiguration', {});
+    return { installed: true, ...(typeof conf.root === 'boolean' ? { root: conf.root } : {}) };
+  } catch (e) {
+    if (e instanceof RpcError && e.code === LunaErrorCodes.ServiceNotFound) return { installed: false, root: false };
+    return { installed: false };
+  }
+}
+
 async function hasHbChannel(pool: SshRunner, device: DeviceTarget): Promise<boolean> {
-  return lunaCall(pool, device, 'luna://org.webosbrew.hbchannel.service/getConfiguration', {})
-    .then(() => true)
-    .catch(() => false);
+  return (await hbChannelConfig(pool, device)).installed;
+}
+
+/**
+ * A failure Homebrew Channel reported. `installer` marks the one the original treats as final (InstallError in
+ * app-manager.service.ts: "-5: FAILED_IPKG_INSTALL", out of space); any other failure may be retried with the
+ * dev install.
+ */
+class HbInstallError extends RpcError {
+  constructor(code: string, message: string, detail: string, readonly installer: boolean) {
+    super(code, message, detail);
+  }
 }
 
 /** Copy the IPK to the developer partition and run appinstalld's dev install (tempDownloadIpk + devInstall). */
@@ -163,38 +186,50 @@ async function hbInstallVia(
   progress?: Progress,
 ) {
   try {
-    progress?.({ stage: 'install', text: 'Homebrew Channel is installing…' });
-    await lunaSubscribe(
-      pool,
-      device,
-      'luna://org.webosbrew.hbchannel.service/install',
-      { ipkUrl: served.url, ipkHash: sha256, subscribe: true },
-      (msg): SubscriptionStep<true> => {
-        if (msg.returnValue === false) {
-          const text = typeof msg.errorText === 'string' ? msg.errorText : 'Homebrew Channel could not install the app.';
-          const m = /(-?\d+): +(\w+)/.exec(text);
-          if (m?.[2] === 'FAILED_IPKG_INSTALL' && m[1] === '-5') {
-            throw new RpcError(AppsErrorCodes.InsufficientSpace, "Can't install because there isn't enough free space on the TV.", text);
-          }
-          throw new RpcError(AppsErrorCodes.InstallFailed, text, JSON.stringify(msg));
-        }
-        if (msg.finished) return { done: true };
-        // Updating Homebrew Channel itself: the service forks the update and exits without `finished`.
-        if (msg.statusText === 'Self-update') return { done: true };
-        if (msg.subscribed === false && msg.returnValue) return { done: true };
-        const status = typeof msg.statusText === 'string' ? msg.statusText : undefined;
-        const stage = status && /download/i.test(status) ? 'upload' : status && /verif/i.test(status) ? 'verify' : 'install';
-        progress?.({
-          stage,
-          percent: typeof msg.progress === 'number' ? Math.max(0, Math.min(100, msg.progress)) : undefined,
-          text: status === 'Downloading…' ? 'Sending IPK to the TV…' : status,
-        });
-        return undefined;
-      },
-    );
+    await hbInstallUrl(pool, device, served.url, sha256, 'Sending IPK to the TV…', progress);
   } finally {
     await served.close().catch(() => {});
   }
+}
+
+/** `hbchannel.service/install` from a URL the TV downloads itself (hbChannelInstall in app-manager.service.ts). */
+async function hbInstallUrl(
+  pool: SshRunner,
+  device: DeviceTarget,
+  ipkUrl: string,
+  sha256: string | undefined,
+  downloadText: string,
+  progress?: Progress,
+) {
+  progress?.({ stage: 'install', text: 'Homebrew Channel is installing…' });
+  await lunaSubscribe(
+    pool,
+    device,
+    'luna://org.webosbrew.hbchannel.service/install',
+    { ipkUrl, ...(sha256 ? { ipkHash: sha256 } : {}), subscribe: true },
+    (msg): SubscriptionStep<true> => {
+      if (msg.returnValue === false) {
+        const text = typeof msg.errorText === 'string' ? msg.errorText : 'Homebrew Channel could not install the app.';
+        const m = /(-?\d+): +(\w+)/.exec(text);
+        if (m?.[2] === 'FAILED_IPKG_INSTALL' && m[1] === '-5') {
+          throw new HbInstallError(AppsErrorCodes.InsufficientSpace, "Can't install because there isn't enough free space on the TV.", text, true);
+        }
+        throw new HbInstallError(AppsErrorCodes.InstallFailed, text, JSON.stringify(msg), false);
+      }
+      if (msg.finished) return { done: true };
+      // Updating Homebrew Channel itself: the service forks the update and exits without `finished`.
+      if (msg.statusText === 'Self-update') return { done: true };
+      if (msg.subscribed === false && msg.returnValue) return { done: true };
+      const status = typeof msg.statusText === 'string' ? msg.statusText : undefined;
+      const stage = status && /download/i.test(status) ? 'upload' : status && /verif/i.test(status) ? 'verify' : 'install';
+      progress?.({
+        stage,
+        percent: typeof msg.progress === 'number' ? Math.max(0, Math.min(100, msg.progress)) : undefined,
+        text: status === 'Downloading…' ? downloadText : status,
+      });
+      return undefined;
+    },
+  );
 }
 
 /**
@@ -223,4 +258,78 @@ export async function installIpk(
   }
   const appId = await devInstall(pool, device, data, sha256, progress);
   return { appId: appId || packageId, via: 'devmode' };
+}
+
+/**
+ * Where an app with this id is installed, if anywhere (findInstallLocation in app-manager.service.ts):
+ * the developer partition, cryptofs (LG Content Store) or the system image.
+ */
+export async function findInstallLocation(pool: SshRunner, device: DeviceTarget, id: string): Promise<'developer' | 'cryptofs' | 'system' | null> {
+  if (device.username === 'root') {
+    return lunaCall(pool, device, 'luna://com.webos.service.applicationManager/getAppInfo', { id }, false, true)
+      .then((r) => {
+        const info = (r.appInfo ?? {}) as { folderPath?: unknown; systemApp?: unknown };
+        if (info.systemApp === true) return 'system' as const;
+        // No folder path: unknown (the original fails here and treats it as not installed).
+        if (typeof info.folderPath !== 'string') return null;
+        return info.folderPath.startsWith('/media/developer/') ? ('developer' as const) : ('cryptofs' as const);
+      })
+      .catch(() => null);
+  }
+  const apps = await listApps(pool, device);
+  if (apps.some((a) => a.id === id)) return 'developer';
+  // The original launches the app when getAppLoadStatus is missing (old webOS); we don't start apps as a probe.
+  const status = await lunaCall(pool, device, 'luna://com.webos.service.applicationManager/getAppLoadStatus', { appId: id }, true, true).catch(
+    () => ({ exist: false }) as Record<string, unknown>,
+  );
+  return status.exist === true ? 'cryptofs' : null;
+}
+
+/**
+ * Install or update an app from the Homebrew repository (installPackage in apps.component.ts +
+ * installByManifest in app-manager.service.ts): refuse if the id belongs to a store/system app; with Homebrew
+ * Channel let the TV download the IPK (falling back to the dev install unless the installer itself failed, or the
+ * app is Homebrew Channel); otherwise download it here, check the sha256 and dev install.
+ */
+export async function installFromRepo(
+  pool: SshRunner,
+  repo: RepoClient,
+  device: DeviceTarget,
+  id: string,
+  channel: 'stable' | 'beta',
+  progress?: Progress,
+  trace?: HttpTrace,
+): Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel' }> {
+  const pkg = await repo.get(id, trace);
+  const manifest = channel === 'beta' ? pkg.manifestBeta : pkg.manifest;
+  if (!manifest) {
+    throw new RpcError(RepoErrorCodes.NoManifest, `${pkg.title} has no ${channel === 'beta' ? 'beta' : 'release'} to install.`);
+  }
+  const location = await findInstallLocation(pool, device, pkg.id).catch(() => null);
+  if (location && location !== 'developer') {
+    throw new RpcError(
+      AppsErrorCodes.Conflict,
+      location === 'system'
+        ? `${pkg.title} can't be installed: a built-in app with the same id (${pkg.id}) is on the TV.`
+        : `Another app with the same id (${pkg.id}) is already installed. If it came from the LG Content Store, uninstall it first.`,
+    );
+  }
+  if (await hasHbChannel(pool, device)) {
+    try {
+      await hbInstallUrl(pool, device, manifest.ipkUrl, manifest.ipkHash?.sha256, 'The TV is downloading the IPK…', progress);
+      return { appId: pkg.id, version: manifest.version, via: 'hbchannel' };
+    } catch (e) {
+      // Like installByManifest: retry with the dev install unless the installer ran out of space, and never for
+      // Homebrew Channel itself.
+      if ((e instanceof HbInstallError && e.installer) || pkg.id === APP_ID_HBCHANNEL) throw e;
+    }
+  }
+  progress?.({ stage: 'upload', text: 'Downloading the IPK…' });
+  const { data, sha256, done } = await repo.download(manifest, progress, trace);
+  try {
+    const appId = await devInstall(pool, device, data, sha256, progress);
+    return { appId: appId || pkg.id, version: manifest.version, via: 'devmode' };
+  } finally {
+    done();
+  }
 }

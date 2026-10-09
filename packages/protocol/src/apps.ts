@@ -59,4 +59,6 @@ export const AppsErrorCodes = {
   UploadIncomplete: 'upload_incomplete',
   FileTooLarge: 'file_too_large',
   TransferFailed: 'transfer_failed',
+  /** Another app with this id is installed outside the developer partition (e.g. from the LG Content Store). */
+  Conflict: 'app_conflict',
 } as const;

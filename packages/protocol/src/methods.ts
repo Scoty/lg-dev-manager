@@ -2,14 +2,16 @@ import { z } from 'zod';
 import { DeviceTarget } from './device';
 import { AppId, AppInfo, MAX_CHUNK_BYTES, MAX_UPLOAD_BYTES } from './apps';
 import { ScanResult } from './console';
+import { RepoPackage, WebUrl } from './repo';
 
 /**
  * Bumped when the wire contract changes in a way an older peer can't handle (including new methods the
  * UI depends on), so a stale bridge gets a clear "update" message instead of unknown_method errors.
  *  v2 — M3: device.info/storage/generateKey, apps.*, upload.*
  *  v3 — device.scan, checkConnection.webos, cmd.stream/cmd.cancel, cmd.log events
+ *  v4 — M4: repo.list, repo.image, repo.description, apps.installFromRepo, device.hbchannel
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 const base64 = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/, 'Not base64');
 /** Absolute POSIX path without `..` segments. */
@@ -201,6 +203,51 @@ export const Methods = {
   'upload.discard': {
     params: z.object({ uploadId: z.string().max(64) }),
     result: z.object({}),
+  },
+
+  /**
+   * The Homebrew repository's apps (all pages of `apps.json`). The bridge fetches it — only from the
+   * configured repository — and keeps it in memory for a few minutes; `refresh` fetches it again.
+   */
+  'repo.list': {
+    params: z.object({ refresh: z.boolean().optional() }),
+    result: z.object({ packages: z.array(RepoPackage), fetchedAt: z.number() }),
+  },
+  /**
+   * An icon or screenshot from the repository, fetched by the bridge (so the page needs no third-party image
+   * hosts). Only URLs the repository index lists are fetched. Images up to 4 MiB.
+   */
+  'repo.image': {
+    params: z.object({ url: WebUrl }),
+    result: z.object({ mime: z.string(), base64: z.string() }),
+  },
+  /**
+   * An app's full description as HTML (from the repository; the UI sanitises it), and the URL relative links and
+   * images resolve against. Images in it can be loaded with `repo.image`. Null if it has none.
+   */
+  'repo.description': {
+    params: z.object({ id: AppId }),
+    result: z.object({ html: z.string().nullable(), baseUrl: z.string().optional() }),
+  },
+  /**
+   * Install or update an app from the repository (installByManifest in app-manager.service.ts). The bridge looks
+   * the app up itself. With Homebrew Channel the TV downloads the IPK; otherwise the bridge downloads it, checks
+   * its sha256 and runs the dev install. Refuses if an app with the same id is installed outside the developer
+   * partition. Streams `op.progress`.
+   */
+  'apps.installFromRepo': {
+    params: z.object({
+      device: DeviceTarget,
+      id: AppId,
+      channel: z.enum(['stable', 'beta']).default('stable'),
+      opId: z.string().max(64),
+    }),
+    result: z.object({ appId: z.string(), version: z.string(), via: z.enum(['devmode', 'hbchannel']) }),
+  },
+  /** Homebrew Channel's configuration (`hbchannel.service/getConfiguration`): is it installed, and is the TV rooted. */
+  'device.hbchannel': {
+    params: z.object({ device: DeviceTarget, quiet: z.boolean().optional() }),
+    result: z.object({ installed: z.boolean(), root: z.boolean().optional() }),
   },
 } as const;
 

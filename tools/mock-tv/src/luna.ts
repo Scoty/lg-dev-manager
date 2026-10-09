@@ -34,7 +34,20 @@ export const LUNA: Record<string, LunaHandler> = {
   }),
   'luna://com.webos.service.sdx/getDeviceUuid': () => ({ returnValue: true, uuid: '00000000-0000-0000-0000-000000000000' }),
   'luna://com.webos.applicationManager/dev/listApps': (_p, s) => ({ returnValue: true, apps: appsOf(s) }),
-  'luna://com.webos.applicationManager/listApps': (_p, s) => ({ returnValue: true, apps: appsOf(s) }),
+  // Without dev/: every app, including store and system apps.
+  'luna://com.webos.applicationManager/listApps': (_p, s) => ({ returnValue: true, apps: [...appsOf(s), ...s.storeApps.map((a) => ({ ...a }))] }),
+  // Where an app lives (findInstallLocation in app-manager.service.ts). Real TVs answer this to root only.
+  'luna://com.webos.service.applicationManager/getAppInfo': (p, s) => {
+    if (s.username !== 'root') return { returnValue: false, errorCode: -1, errorText: 'Denied method call "getAppInfo" for category "/"' };
+    const app = [...s.apps, ...s.storeApps].find((a) => a.id === p.id);
+    if (!app) return { returnValue: false, errorCode: -101, errorText: `"${String(p.id)}" was not found OR Unsupported Application Type` };
+    return { returnValue: true, appId: app.id, appInfo: { ...app } };
+  },
+  'luna://com.webos.service.applicationManager/getAppLoadStatus': (p, s) => ({
+    returnValue: true,
+    appId: p.appId,
+    exist: [...s.apps, ...s.storeApps].some((a) => a.id === p.appId),
+  }),
   'luna://com.webos.applicationManager/launch': (p, s) => {
     if (!s.apps.some((a) => a.id === p.id)) {
       return { returnValue: false, errorCode: -101, errorText: `Cannot find proper launchPoint for ${String(p.id)}` };
@@ -123,6 +136,12 @@ export const SUBSCRIPTIONS: Record<string, LunaSubscription> = {
       return;
     }
     yield { returnValue: true, subscribed: true, statusText: 'Installing…' };
+    // Packages whose id ends in ".hbfail" make Homebrew Channel's own install step fail (a generic appinstalld
+    // error, which the bridge retries with the dev install).
+    if (readControl(data)?.id.endsWith('.hbfail')) {
+      yield { returnValue: false, errorText: 'Installation failed: -1: FAILED_IPKG_INSTALL' };
+      return;
+    }
     const res = installPackage(s, data);
     if (!res.ok) {
       yield { returnValue: false, errorText: `Installation failed: ${res.errorCode}: ${res.reason}` };

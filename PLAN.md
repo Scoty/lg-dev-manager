@@ -4,8 +4,8 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 (Tauri + Angular + Rust) with the look of [Adminator 2026](https://github.com/puikinsh/adminator-admin-dashboard),
 hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS).
 
-> **Status:** M3 (Devices + Apps) done — add-device wizard with network scan, device switcher, installed apps with launch / uninstall / IPK install, console panel.
-> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M4 (Homebrew repository).
+> **Status:** M4 (Homebrew repository) done — browse / search / install / update from repo.webosbrew.org, update badges on the Installed page.
+> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M5 (Files + Terminal).
 
 ---
 
@@ -97,9 +97,12 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [x] Bridge: `cmd.exec` and one-shot `luna.call` (luna-send-pub / luna-send, typed luna errors)
 - [x] Installed apps list (`applicationManager/dev/listApps`, fallback `listApps`) with icons from the TV, search, system-app filter
 - [x] Launch, remove (`appInstallService/dev/remove`, confirm; Homebrew Channel asks twice)
-- [ ] App details (with the Homebrew repo info — M4)
+- [x] App details (with the Homebrew repo info): “Homebrew repo details” in an installed app's menu
 - [x] Install IPK from a local file (file picker or drag & drop → bridge memory → `/media/developer/temp` over SFTP or `cat` → `appInstallService/dev/install`, sha256 check, progress)
-- [ ] **Homebrew repository** browser (`repo.webosbrew.org/api`), details, install/update, "update available" badges
+- [x] **Homebrew repository** browser (`repo.webosbrew.org/api`, all pages, fetched and cached by the bridge — `repo.list`), search, All / Installed / Updates filters
+- [x] Repo app details: description (allow-listed HTML), screenshots and icons through the bridge (`repo.image`, `repo.description`), project page, root badges
+- [x] Install / update / install beta from the repo (`apps.installFromRepo`): Homebrew Channel downloads the IPK on the TV; otherwise the bridge downloads it, checks the sha256 and dev-installs; refuses ids owned by LG Store / system apps (`findInstallLocation`)
+- [x] Compatibility check (webOS range, SoC list, root via `device.hbchannel`) with an “Install anyway” confirm; “update available” badges and Update buttons on the Installed page
 - [x] Homebrew Channel aware install path (`org.webosbrew.hbchannel.service/install`, IPK served over an SSH reverse tunnel), hbchannel removal flow
 
 ### Files
@@ -173,7 +176,7 @@ lg-dev-manager/
 | M1 ✅ | Skeleton | Monorepo builds; Adminator shell renders (sidebar, topbar, theme toggle) with empty pages; CI green. |
 | M2 ✅ | Bridge core | Stateless device RPCs (connection check, key-server key fetch, test login, exec, luna); browser device store; mock TV in tests; lg.scoty.uk deploy. |
 | M3 ✅ | Devices + Apps | Add-device wizard end to end; installed apps; launch/remove; install IPK from file. First build worth trying on a real TV. |
-| M4 | Homebrew repo | Browse/search/install/update from repo.webosbrew.org. |
+| M4 ✅ | Homebrew repo | Browse/search/install/update from repo.webosbrew.org. |
 | M5 | Files + Terminal | SFTP browser with upload/download; xterm PTY. |
 | M6 | Info + Dev Mode renew + screenshot | |
 | M7 | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
