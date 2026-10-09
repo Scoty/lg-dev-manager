@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ICONS, type IconName } from './icons';
 import { NAV } from './nav';
 import { toggleTheme } from '../lib/theme';
+import { useDevices } from '../devices/useDevices';
+import { setActiveDeviceId } from '../devices/store';
 
 interface PaletteItem {
   label: string;
@@ -27,6 +29,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { devices, activeId } = useDevices();
 
   const items = useMemo<PaletteItem[]>(() => {
     const list: PaletteItem[] = [];
@@ -44,9 +47,14 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       }
     }
     list.push({ label: 'Toggle theme (light / dark)', section: 'Action', icon: 'sun', run: () => toggleTheme() });
-    list.push({ label: 'Add a device', section: 'Action', icon: 'plus', run: () => navigate('/devices') });
+    list.push({ label: 'Add a TV', section: 'Action', icon: 'plus', run: () => navigate('/devices/new') });
+    list.push({ label: 'Install an IPK', section: 'Action', icon: 'upload', run: () => navigate('/apps/installed') });
+    for (const d of devices ?? []) {
+      if (d.id === activeId) continue;
+      list.push({ label: `Switch to ${d.name}`, section: 'TV', icon: 'tv', run: () => setActiveDeviceId(d.id) });
+    }
     return list;
-  }, [navigate]);
+  }, [navigate, devices, activeId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

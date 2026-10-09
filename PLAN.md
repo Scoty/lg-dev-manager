@@ -4,8 +4,8 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 (Tauri + Angular + Rust) with the look of [Adminator 2026](https://github.com/puikinsh/adminator-admin-dashboard),
 hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS).
 
-> **Status:** M2 (bridge core) done — stateless bridge with SSH/luna/key-server RPCs, browser-only device store, mock TV.
-> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M3 (Devices + Apps UI).
+> **Status:** M3 (Devices + Apps) done — add-device wizard, device switcher, installed apps with launch / uninstall / IPK install.
+> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M4 (Homebrew repository).
 
 ---
 
@@ -77,29 +77,32 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 ## 3. Feature parity checklist (from the original app)
 
 ### Devices
-- [ ] Device list, select active device, set default
-- [ ] Add-device wizard: mode select (Dev Mode / rooted), connection check (ports 22, 9922, 9991)
+- [x] Device list, select active device (sidebar switcher + ⌘K)
+- [x] Add-device wizard: mode select (Dev Mode / rooted / manual), Dev Mode checklist, connection check (ports 22, 9922, 9991), verify (key → login → device info), “save anyway”
 - [x] Bridge: port check (22, 9922, 9991) — `device.checkConnection`
 - [x] Bridge: fetch private key from the Dev Mode **key server** (9991) with passphrase check — `device.fetchKey`, `device.verifyKey`
 - [x] Bridge: test login (key or password) — `device.test`
-- [ ] UI for key fetch / passphrase (M3)
-- [ ] Manual SSH: password or private key (+ key passphrase prompt)
-- [ ] Edit / remove device; inline editor
+- [x] UI for key fetch / passphrase, with key-server and passphrase hints
+- [x] Manual SSH: password or private key (+ key passphrase prompt, checked by the bridge)
+- [x] New key made for a TV (the original's “App key”; ed25519, private key kept in the browser) — `device.generateKey`
+- [x] Edit / remove device; test connection
+- [x] Device info for the wizard — `device.info`
 - [x] Browser-only device store (IndexedDB) with export / import / remove-all
 - [ ] Import from ares-cli `novacom-devices.json` + key files (nice-to-have; replaces ares-cli-compatible storage)
 
 ### Apps
 - [x] Bridge: `cmd.exec` and one-shot `luna.call` (luna-send-pub / luna-send, typed luna errors)
-- [ ] Installed apps list (`applicationManager/dev/listApps`, fallback `listApps`)
-- [ ] Launch, remove (`appInstallService/dev/remove`), app details
-- [ ] Install IPK from a local file (upload → `/media/developer/temp` → `appInstallService/dev/install`, progress)
+- [x] Installed apps list (`applicationManager/dev/listApps`, fallback `listApps`) with icons from the TV, search, system-app filter
+- [x] Launch, remove (`appInstallService/dev/remove`, confirm; Homebrew Channel asks twice)
+- [ ] App details (with the Homebrew repo info — M4)
+- [x] Install IPK from a local file (file picker or drag & drop → bridge memory → `/media/developer/temp` over SFTP or `cat` → `appInstallService/dev/install`, sha256 check, progress)
 - [ ] **Homebrew repository** browser (`repo.webosbrew.org/api`), details, install/update, "update available" badges
-- [ ] Homebrew Channel aware install path (`org.webosbrew.hbchannel.service/install`), hbchannel removal flow
+- [x] Homebrew Channel aware install path (`org.webosbrew.hbchannel.service/install`, IPK served over an SSH reverse tunnel), hbchannel removal flow
 
 ### Files
 - [ ] SFTP browser: list, navigate, sort, create folder, delete, rename
 - [ ] Upload (drag & drop) and download with progress
-- [ ] Storage usage card
+- [x] Storage usage (developer partition, on the Apps page)
 
 ### Terminal
 - [ ] Full PTY shell over SSH (xterm.js), resize, multiple tabs
@@ -162,7 +165,7 @@ lg-dev-manager/
 | M0 | Plan + AGENTS.md + decisions | Owner answers the open questions. |
 | M1 ✅ | Skeleton | Monorepo builds; Adminator shell renders (sidebar, topbar, theme toggle) with empty pages; CI green. |
 | M2 ✅ | Bridge core | Stateless device RPCs (connection check, key-server key fetch, test login, exec, luna); browser device store; mock TV in tests; lg.scoty.uk deploy. |
-| M3 | Devices + Apps | Add-device wizard end to end; installed apps; launch/remove; install IPK from file. First build worth trying on a real TV. |
+| M3 ✅ | Devices + Apps | Add-device wizard end to end; installed apps; launch/remove; install IPK from file. First build worth trying on a real TV. |
 | M4 | Homebrew repo | Browse/search/install/update from repo.webosbrew.org. |
 | M5 | Files + Terminal | SFTP browser with upload/download; xterm PTY. |
 | M6 | Info + Dev Mode renew + screenshot | |

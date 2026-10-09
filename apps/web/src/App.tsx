@@ -1,9 +1,22 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BridgeProvider, useBridge } from './bridge/BridgeProvider';
+import { FeedbackProvider } from './components/Feedback';
 import { Layout } from './shell/Layout';
 import { BridgePage } from './features/bridge/BridgePage';
 import { DevicesPage } from './features/devices/DevicesPage';
+import { AddDevicePage } from './features/devices/AddDevicePage';
+import { InstalledAppsPage } from './features/apps/InstalledAppsPage';
 import { ComingSoon } from './features/placeholder/ComingSoon';
+
+/** A fresh wizard on every visit, including "Add a TV" clicked while already on the page. */
+function AddDeviceRoute() {
+  return <AddDevicePage key={useLocation().key} />;
+}
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { refetchOnWindowFocus: false } },
+});
 
 function Home() {
   const { status } = useBridge();
@@ -11,8 +24,6 @@ function Home() {
 }
 
 const PAGES = [
-  { path: 'apps/installed', eyebrow: 'Apps', title: 'Installed apps', icon: 'apps', milestone: 'M3',
-    description: 'List, launch and remove apps on the TV, and install IPK files from your computer with progress.' },
   { path: 'apps/homebrew', eyebrow: 'Apps', title: 'Homebrew repository', icon: 'store', milestone: 'M4',
     description: 'Browse and search repo.webosbrew.org, see what has updates, and install packages in one click.' },
   { path: 'files', eyebrow: 'Device', title: 'Files', icon: 'files', milestone: 'M5',
@@ -30,22 +41,28 @@ const PAGES = [
 
 export function App() {
   return (
-    <BridgeProvider>
-      <HashRouter>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<Home />} />
-            <Route path="bridge" element={<BridgePage />} />
-            <Route path="devices" element={<DevicesPage />} />
-            <Route path="apps" element={<Navigate to="/apps/installed" replace />} />
-            <Route path="debug" element={<Navigate to="/debug/logs" replace />} />
-            {PAGES.map(({ path, ...p }) => (
-              <Route key={path} path={path} element={<ComingSoon {...p} />} />
-            ))}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </HashRouter>
-    </BridgeProvider>
+    <QueryClientProvider client={queryClient}>
+      <BridgeProvider>
+        <FeedbackProvider>
+          <HashRouter>
+            <Routes>
+              <Route element={<Layout />}>
+                <Route index element={<Home />} />
+                <Route path="bridge" element={<BridgePage />} />
+                <Route path="devices" element={<DevicesPage />} />
+                <Route path="devices/new" element={<AddDeviceRoute />} />
+                <Route path="apps" element={<Navigate to="/apps/installed" replace />} />
+                <Route path="apps/installed" element={<InstalledAppsPage />} />
+                <Route path="debug" element={<Navigate to="/debug/logs" replace />} />
+                {PAGES.map(({ path, ...p }) => (
+                  <Route key={path} path={path} element={<ComingSoon {...p} />} />
+                ))}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
+          </HashRouter>
+        </FeedbackProvider>
+      </BridgeProvider>
+    </QueryClientProvider>
   );
 }

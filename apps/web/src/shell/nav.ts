@@ -69,6 +69,7 @@ export const NAV: NavSection[] = [
 
 /** Resolves breadcrumbs ("Device › Apps › Installed") for a route path. */
 export function crumbsFor(pathname: string): string[] {
+  if (pathname.startsWith('/devices/new')) return ['Setup', 'Devices', 'Add a TV'];
   for (const section of NAV) {
     for (const item of section.items) {
       if (item.to && pathname.startsWith(item.to)) return [section.label, item.text];

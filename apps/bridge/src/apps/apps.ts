@@ -13,6 +13,7 @@ import { lunaCall, lunaSubscribe, type SubscriptionStep } from '../ssh/luna.js';
 import type { SshPool } from '../ssh/pool.js';
 import { serveToDevice } from '../ssh/serve.js';
 import { mkdirp, putFile, readFile, rmFile, sha256sum } from '../ssh/transfer.js';
+import { readIpkControl } from './ipk.js';
 
 /**
  * App management. Port of AppManagerService (dev-manager-desktop src/app/core/services/app-manager.service.ts)
@@ -166,6 +167,8 @@ async function hbInstall(pool: SshPool, device: DeviceTarget, name: string, data
           throw new RpcError(AppsErrorCodes.InstallFailed, text, JSON.stringify(msg));
         }
         if (msg.finished) return { done: true };
+        // Updating Homebrew Channel itself: the service forks the update and exits without `finished`.
+        if (msg.statusText === 'Self-update') return { done: true };
         if (msg.subscribed === false && msg.returnValue) return { done: true };
         const status = typeof msg.statusText === 'string' ? msg.statusText : undefined;
         const stage = status && /download/i.test(status) ? 'upload' : status && /verif/i.test(status) ? 'verify' : 'install';
@@ -195,15 +198,17 @@ export async function installIpk(
   progress?: Progress,
 ): Promise<{ appId?: string; via: 'devmode' | 'hbchannel' }> {
   const sha256 = createHash('sha256').update(data).digest('hex');
+  // Homebrew Channel doesn't say what it installed, so read the id from the package itself.
+  const packageId = readIpkControl(data)?.Package;
   if (await hasHbChannel(pool, device)) {
     try {
       await hbInstall(pool, device, name, data, sha256, progress);
-      return { via: 'hbchannel' };
+      return { appId: packageId, via: 'hbchannel' };
     } catch (e) {
       const tunnelRefused = e instanceof RpcError && e.code === AppsErrorCodes.TransferFailed && /tunnel/.test(e.message);
       if (!tunnelRefused) throw e;
     }
   }
   const appId = await devInstall(pool, device, data, sha256, progress);
-  return { appId, via: 'devmode' };
+  return { appId: appId || packageId, via: 'devmode' };
 }

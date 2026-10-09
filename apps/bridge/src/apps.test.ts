@@ -4,6 +4,7 @@ import type { DeviceTarget, OpProgress } from '@lgdm/protocol';
 import { appIcon, installIpk, launchApp, listApps, removeApp } from './apps/apps.js';
 import { deviceInfo, generateKey, storageInfo } from './devices/info.js';
 import { RpcError } from './rpc/errors.js';
+import { readIpkControl } from './apps/ipk.js';
 import { SshPool } from './ssh/pool.js';
 import { putFile, readFile } from './ssh/transfer.js';
 
@@ -134,7 +135,7 @@ describe('install (Dev Mode: copy + appinstalld)', () => {
   });
 
   it('maps errorCode -5 to insufficient_space', async () => {
-    const ipk = Buffer.concat([fakeIpk('com.example.huge'), Buffer.from('MOCK_NO_SPACE')]);
+    const ipk = fakeIpk('com.example.huge', '1.0.0', 'MOCK_NO_SPACE');
     expect(await code(installIpk(pool, devmode(devTv), 'huge.ipk', ipk))).toBe('insufficient_space');
   });
 
@@ -151,7 +152,7 @@ describe('install (Homebrew Channel)', () => {
   it('serves the IPK over a reverse tunnel and lets Homebrew Channel install it', async () => {
     const { events, progress } = collect();
     const res = await installIpk(pool, rooted(rootTv), 'hb.ipk', fakeIpk('com.example.hb', '1.2.3', 'HB App', 100_000), progress);
-    expect(res).toEqual({ via: 'hbchannel' });
+    expect(res).toEqual({ appId: 'com.example.hb', via: 'hbchannel' });
     expect(rootTv.state.apps.some((a) => a.id === 'com.example.hb')).toBe(true);
     expect(tempFiles(rootTv)).toEqual([]);
     expect(events.map((e) => e.text)).toEqual(expect.arrayContaining(['Sending IPK to the TV…', 'Verifying…', 'Installing…']));
@@ -182,5 +183,38 @@ describe('file transfer', () => {
   it('reports writes outside the Dev Mode jail', async () => {
     expect(await code(putFile(pool, devmode(devTv), '/usr/x', Buffer.from('x')))).toBe('transfer_failed');
     expect(await code(putFile(pool, devmode(streamTv), '/usr/x', Buffer.from('x')))).toBe('transfer_failed');
+  });
+});
+
+describe('IPK control', () => {
+  it('reads Package and Version from a real ar + control.tar.gz layout', () => {
+    expect(readIpkControl(fakeIpk('org.example.kodi', '21.1.0', 'Kodi', 5000))).toMatchObject({
+      Package: 'org.example.kodi',
+      Version: '21.1.0',
+      Description: 'Kodi',
+    });
+  });
+
+  it('returns null for anything else', () => {
+    expect(readIpkControl(Buffer.from('not an ipk'))).toBeNull();
+    expect(readIpkControl(Buffer.from('!<arch>\nbroken'))).toBeNull();
+  });
+});
+
+describe('pool', () => {
+  it('limits concurrent channels per connection but finishes every command', async () => {
+    const results = await Promise.all(Array.from({ length: 20 }, (_, i) => pool.exec(devmode(streamTv), `echo ${i}`)));
+    expect(results.map((r) => r.stdout.trim())).toEqual(Array.from({ length: 20 }, (_, i) => String(i)));
+  });
+
+  it('a stale idle timer never closes a newer connection', async () => {
+    const shortPool = new SshPool(150);
+    const d = devmode(devTv);
+    await shortPool.exec(d, 'id -u'); // arms the idle timer for connection A
+    shortPool.close(d); // A goes away; its timer must not touch B
+    const slow = shortPool.exec(d, 'sleep 1', { timeoutMs: 600 }); // B, busy past A's timer
+    expect(await code(slow)).toBe('ssh_timeout'); // timed out by us, not cut by A's timer (would be another error)
+    expect((await shortPool.exec(d, 'echo still-here')).stdout.trim()).toBe('still-here');
+    shortPool.close();
   });
 });

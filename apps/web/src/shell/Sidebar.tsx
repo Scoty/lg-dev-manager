@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Icon } from './icons';
 import { NAV, type NavItem } from './nav';
 import { APP_VERSION } from '../lib/version';
-import { useDevices } from '../devices/useDevices';
+import { DeviceSwitcher } from './DeviceSwitcher';
 
 function NavGroup({ item, pathname }: { item: NavItem; pathname: string }) {
   const containsActive = item.children!.some((c) => pathname.startsWith(c.to));
@@ -52,7 +52,6 @@ function NavEntry({ item, pathname }: { item: NavItem; pathname: string }) {
 
 export function Sidebar() {
   const { pathname } = useLocation();
-  const { active, devices } = useDevices();
   return (
     <aside className="d-sidebar">
       <Link to="/" className="brand">
@@ -75,19 +74,7 @@ export function Sidebar() {
       ))}
 
       <div className="sidebar-footer">
-        {/* Device chooser — a dropdown switcher lands with the M3 device list. */}
-        <Link to="/devices" className="workspace" title="Choose device">
-          <div className="workspace-avatar">
-            <Icon name="tv" />
-          </div>
-          <div className="workspace-text">
-            <div className="workspace-name">{active?.name ?? 'No device'}</div>
-            <div className="workspace-role">
-              {active ? `${active.host} · ${active.mode === 'rooted' ? 'rooted' : 'Dev Mode'}` : devices?.length ? 'choose a TV' : 'add a TV to start'}
-            </div>
-          </div>
-          <Icon name="updown" className="workspace-chev" strokeWidth={1.8} />
-        </Link>
+        <DeviceSwitcher />
       </div>
     </aside>
   );

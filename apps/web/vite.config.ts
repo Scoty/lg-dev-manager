@@ -36,5 +36,5 @@ export default defineConfig({
   plugins: [react(), cspPlugin()],
   server: { port: 5173, strictPort: true },
   build: { target: 'es2022', sourcemap: true },
-  test: { environment: 'jsdom', globals: false, setupFiles: ['./src/test-setup.ts'] },
+  test: { environment: 'jsdom', globals: false, setupFiles: ['./src/test-setup.ts'], include: ['src/**/*.test.{ts,tsx}'] },
 });

@@ -4,15 +4,22 @@ import { Alert } from '../../components/Alert';
 import { Icon } from '../../shell/icons';
 import { clearAllDevices, exportDevices, importDevices } from '../../devices/store';
 import { useDevices } from '../../devices/useDevices';
+import { useFeedback } from '../../components/Feedback';
 
 /** Shows where device settings live and lets the user back them up, move them, or wipe them. */
 export function DataPrivacyCard() {
   const { devices } = useDevices();
+  const { confirm } = useFeedback();
   const fileRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<{ kind: 'success' | 'danger'; text: string } | null>(null);
 
   const doExport = async () => {
-    if (!confirm('The backup file contains your TVs’ private keys and passwords. Keep it somewhere safe. Download it?')) return;
+    const ok = await confirm({
+      title: 'Download a backup?',
+      message: 'The backup file contains your TVs’ private keys and passwords. Keep it somewhere safe and don’t share it.',
+      confirmText: 'Download',
+    });
+    if (!ok) return;
     const blob = new Blob([JSON.stringify(await exportDevices(), null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -31,7 +38,13 @@ export function DataPrivacyCard() {
   };
 
   const doClear = async () => {
-    if (!confirm('Remove every saved TV, key and password from this browser? This cannot be undone.')) return;
+    const ok = await confirm({
+      title: 'Remove all TVs from this browser?',
+      message: 'Every saved TV, key and password is deleted from this browser. Nothing on the TVs changes. This can’t be undone.',
+      confirmText: 'Remove all',
+      danger: true,
+    });
+    if (!ok) return;
     await clearAllDevices();
     setMsg({ kind: 'success', text: 'All device settings were removed from this browser.' });
   };

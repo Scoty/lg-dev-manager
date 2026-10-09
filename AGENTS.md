@@ -58,6 +58,8 @@ pnpm dev:web        # UI only
 pnpm dev:bridge     # bridge only
 pnpm --filter @lgdm/mock-tv start   # fake Dev Mode TV on 127.0.0.1:9922 (SSH) / :9991 (key server)
 pnpm test           # unit + integration (uses mock TV)
+pnpm e2e            # Playwright: built UI + real bridge + mock TVs (apps/web/e2e)
+pnpm dev:rig        # same rig for trying the UI by hand: http://127.0.0.1:5299, token e2e-token
 pnpm lint && pnpm typecheck
 pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 ```
@@ -78,7 +80,10 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 ## Testing expectations
 
 - Every new RPC gets a bridge integration test against the mock TV.
-- Every page gets a Playwright smoke test (renders in light + dark, no console errors).
+- Every page gets a Playwright smoke test (renders in light + dark, no console errors) — add it to `apps/web/e2e/smoke.spec.ts`.
+- User flows that touch the TV get a Playwright test against the mock TVs (`apps/web/e2e/devices-apps.spec.ts`).
+- The mock TV (`tools/mock-tv`) should behave like the real one: when a feature needs a new command or luna call,
+  add it there with realistic payloads (see `luna.ts`, `shell.ts`), including failure cases.
 - Real-TV checks are done by the owner; when a change needs one, say so in the PR description with steps.
 
 ## Licensing

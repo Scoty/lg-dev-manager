@@ -95,10 +95,14 @@ export async function serveToDevice(
       return sent;
     },
     close: async () => {
-      client.off('tcp connection', onConnection);
-      for (const ch of open) ch.close();
-      await new Promise<void>((r) => client.unforwardIn('127.0.0.1', port, () => r()));
-      release();
+      try {
+        client.off('tcp connection', onConnection);
+        for (const ch of open) ch.close();
+        // unforwardIn throws synchronously when the connection is already gone.
+        await new Promise<void>((r) => client.unforwardIn('127.0.0.1', port, () => r()));
+      } finally {
+        release();
+      }
     },
   };
 }

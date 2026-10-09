@@ -5,7 +5,9 @@
   "description": "Web-based Device / Dev Mode Manager for LG webOS TVs",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.28.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "pnpm -r --parallel --filter ./apps/* dev",
     "dev:web": "pnpm --filter @lgdm/web dev",
@@ -13,6 +15,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "e2e": "pnpm --filter @lgdm/web build && pnpm --filter @lgdm/web e2e",
+    "dev:rig": "pnpm --filter @lgdm/web build && pnpm --filter @lgdm/web e2e:server"
   }
 }

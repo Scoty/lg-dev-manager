@@ -30,6 +30,14 @@ pnpm --filter @lgdm/mock-tv start   # optional: a fake Dev Mode TV on 127.0.0.1
 pnpm test
 ```
 
+Try the UI without a TV — mock Dev Mode and rooted TVs plus a bridge serving the built UI:
+
+```bash
+pnpm dev:rig      # open http://127.0.0.1:5299, pair with token e2e-token
+                  # Dev Mode TV: 127.0.0.1, passphrase A1B2C3 · rooted TV: manual setup, port 2222, root / alpine
+pnpm e2e          # the same rig, driven by Playwright
+```
+
 Serve the built UI from the bridge (offline use, or browsers that block `ws://localhost` from https):
 
 ```bash

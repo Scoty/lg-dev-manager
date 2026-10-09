@@ -51,9 +51,10 @@ export const LUNA: Record<string, LunaHandler> = {
 /** Install a package the way appinstalld would, or explain why not. */
 function installPackage(state: MockState, data: Buffer | undefined): { ok: true; id: string } | { ok: false; errorCode: number; reason: string } {
   if (!data) return { ok: false, errorCode: -1, reason: 'FAILED_IPKG_INSTALL' };
-  if (data.includes('MOCK_NO_SPACE')) return { ok: false, errorCode: -5, reason: 'FAILED_IPKG_INSTALL' };
   const control = readControl(data);
   if (!control) return { ok: false, errorCode: -1, reason: 'FAILED_IPKG_INSTALL' };
+  // A package described as MOCK_NO_SPACE fails like a full developer partition.
+  if (control.title === 'MOCK_NO_SPACE') return { ok: false, errorCode: -5, reason: 'FAILED_IPKG_INSTALL' };
   addApp(state, devApp(control.id, control.title ?? control.id, control.version));
   state.diskKb.available = Math.max(0, state.diskKb.available - Math.ceil(data.length / 1024));
   return { ok: true, id: control.id };

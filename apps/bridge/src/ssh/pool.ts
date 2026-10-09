@@ -11,14 +11,23 @@ type Client = ClientType;
 const IDLE_MS = 120_000;
 const READY_TIMEOUT_MS = 15_000;
 const MAX_OUTPUT = 32 * 1024 * 1024;
+/**
+ * Exec channels open at once per connection. sshd limits sessions per connection (OpenSSH MaxSessions is 10),
+ * and a page full of app icons would otherwise open dozens of `cat` channels on TVs without SFTP.
+ */
+const MAX_CHANNELS = 6;
 
 interface Entry {
+  key: string;
   client: Client;
   ready: Promise<Client>;
   idle?: ReturnType<typeof setTimeout>;
   busy: number;
   /** SFTP session, opened on first use. Resolves to null when the TV has no SFTP subsystem. */
   sftp?: Promise<SFTPWrapper | null>;
+  /** Exec channels in use, and callers waiting for one. */
+  channels: number;
+  waiting: (() => void)[];
 }
 
 export interface ExecResult {
@@ -103,7 +112,7 @@ export class SshPool {
     const ready = new Promise<Client>((resolve, reject) => {
       client.once('ready', () => resolve(client));
       client.once('error', (e) => {
-        if (this.entries.get(key)?.client === client) this.entries.delete(key);
+        this.forget(entry);
         reject(mapConnectError(e, t));
       });
       if (t.auth.kind === 'password') {
@@ -111,12 +120,30 @@ export class SshPool {
         client.on('keyboard-interactive', (_n, _i, _l, prompts, finish) => finish(prompts.map(() => pw)));
       }
     });
-    client.on('close', () => {
-      if (this.entries.get(key)?.client === client) this.entries.delete(key);
-    });
+    const entry: Entry = { key, client, ready, busy: 0, channels: 0, waiting: [] };
+    client.on('close', () => this.forget(entry));
     client.on('error', () => {}); // later errors surface on the in-flight operation / close
     client.connect(config);
-    return { client, ready, busy: 0 };
+    return entry;
+  }
+
+  /** Drop an entry from the pool (only if it is still the current one for its key) and stop its timer. */
+  private forget(e: Entry) {
+    clearTimeout(e.idle);
+    if (this.entries.get(e.key) === e) this.entries.delete(e.key);
+  }
+
+  /** Wait for a free exec channel on this connection. Returns the function that frees it. */
+  private async channel(e: Entry): Promise<() => void> {
+    if (e.channels >= MAX_CHANNELS) await new Promise<void>((r) => e.waiting.push(r));
+    e.channels++;
+    let freed = false;
+    return () => {
+      if (freed) return;
+      freed = true;
+      e.channels--;
+      e.waiting.shift()?.();
+    };
   }
 
   private entryFor(t: DeviceTarget): Entry {
@@ -130,7 +157,7 @@ export class SshPool {
   }
 
   /** Get a ready client for a device and mark it busy until `release` is called. */
-  async acquire(t: DeviceTarget): Promise<{ client: Client; release: () => void }> {
+  async acquire(t: DeviceTarget): Promise<{ client: Client; entry: Entry; release: () => void }> {
     const e = this.entryFor(t);
     clearTimeout(e.idle);
     e.busy++;
@@ -139,11 +166,21 @@ export class SshPool {
       const client = await e.ready;
       return {
         client,
+        entry: e,
         release: () => {
           if (released) return;
           released = true;
           e.busy--;
-          if (e.busy === 0) e.idle = setTimeout(() => this.close(t), this.idleMs);
+          if (e.busy === 0 && this.entries.get(e.key) === e) {
+            clearTimeout(e.idle);
+            // The timer only ever closes this same entry, and only if nobody picked it up again meanwhile.
+            e.idle = setTimeout(() => {
+              if (e.busy === 0 && this.entries.get(e.key) === e) {
+                this.forget(e);
+                e.client.end();
+              }
+            }, this.idleMs);
+          }
         },
       };
     } catch (err) {
@@ -154,8 +191,9 @@ export class SshPool {
 
   /** Run a command and collect its output as bytes. */
   async execRaw(t: DeviceTarget, command: string, opts: ExecOptions = {}): Promise<RawExecResult> {
-    const { client, release } = await this.acquire(t);
+    const { client, entry, release } = await this.acquire(t);
     const limit = opts.maxOutput ?? MAX_OUTPUT;
+    const freeChannel = await this.channel(entry);
     try {
       return await new Promise<RawExecResult>((resolve, reject) => {
         client.exec(command, (err, stream) => {
@@ -195,6 +233,7 @@ export class SshPool {
         });
       });
     } finally {
+      freeChannel();
       release();
     }
   }
@@ -210,23 +249,28 @@ export class SshPool {
    * until `close()` is called or the command ends.
    */
   async open(t: DeviceTarget, command: string): Promise<Channel> {
-    const { client, release } = await this.acquire(t);
+    const { client, entry, release } = await this.acquire(t);
+    const freeChannel = await this.channel(entry);
+    const done = () => {
+      freeChannel();
+      release();
+    };
     try {
       const stream = await new Promise<ClientChannel>((resolve, reject) => {
         client.exec(command, (err, s) =>
           err ? reject(new RpcError(DeviceErrorCodes.CommandFailed, 'The TV did not accept the command.', err.message)) : resolve(s),
         );
       });
-      stream.on('close', release);
+      stream.on('close', done);
       return {
         stream,
         close: () => {
           stream.close();
-          release();
+          done();
         },
       };
     } catch (e) {
-      release();
+      done();
       throw e;
     }
   }
@@ -236,8 +280,7 @@ export class SshPool {
    * stream files through `cat`, like ares-cli's FileTransfer).
    */
   async sftp(t: DeviceTarget): Promise<{ sftp: SFTPWrapper | null; release: () => void }> {
-    const { client, release } = await this.acquire(t);
-    const e = this.entryFor(t);
+    const { client, entry: e, release } = await this.acquire(t);
     e.sftp ??= new Promise<SFTPWrapper | null>((resolve) => {
       client.sftp((err, s) => {
         if (err || !s) return resolve(null);
@@ -257,9 +300,8 @@ export class SshPool {
     for (const k of keys) {
       const e = this.entries.get(k);
       if (!e) continue;
-      clearTimeout(e.idle);
+      this.forget(e);
       e.client.end();
-      this.entries.delete(k);
       n++;
     }
     return n;

@@ -147,25 +147,4 @@ export function canWrite(state: MockState, path: string): boolean {
   return path.startsWith('/media/developer/') || path === '/media/developer' || path.startsWith('/tmp/');
 }
 
-/**
- * Pull package id / version / title out of an uploaded "IPK". Real IPKs are ar archives with a control
- * tarball; tests and the dev UI use small text files with the same control fields, which is enough here.
- */
-export function readControl(data: Buffer): { id: string; version: string; title?: string } | null {
-  const text = data.toString('latin1');
-  const id = /^Package:\s*([\w.-]+)\s*$/m.exec(text)?.[1];
-  if (!id) return null;
-  return {
-    id,
-    version: /^Version:\s*(\S+)\s*$/m.exec(text)?.[1] ?? '1.0.0',
-    title: /^Description:\s*(.+?)\s*$/m.exec(text)?.[1],
-  };
-}
-
-/** Build a minimal fake IPK the mock TV understands. */
-export function fakeIpk(id: string, version = '1.0.0', title = id, padBytes = 0): Buffer {
-  return Buffer.concat([
-    Buffer.from(`!<arch>\ncontrol\nPackage: ${id}\nVersion: ${version}\nDescription: ${title}\nArchitecture: all\n\n`),
-    Buffer.alloc(padBytes, 0x2e),
-  ]);
-}
+export { fakeIpk, readControl } from './ipk.js';

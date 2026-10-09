@@ -104,9 +104,13 @@ export const handlers: HandlerMap = {
     await removeApp(pool, device, id, progressFor(session, opId));
     return {};
   },
-  'apps.install': ({ device, uploadId, opId }, session, { pool }) => {
-    const { name, data } = session.uploads.take(uploadId);
-    return installIpk(pool, device, name, data, progressFor(session, opId));
+  'apps.install': async ({ device, uploadId, opId }, session, { pool }) => {
+    const { name, data, done } = session.uploads.take(uploadId);
+    try {
+      return await installIpk(pool, device, name, data, progressFor(session, opId));
+    } finally {
+      done();
+    }
   },
 
   'upload.begin': ({ name, size }, session) => ({ uploadId: session.uploads.begin(name, size) }),

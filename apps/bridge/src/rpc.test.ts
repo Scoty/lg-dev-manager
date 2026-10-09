@@ -127,3 +127,24 @@ describe('uploads and installs over WebSocket', () => {
     expect((await call('apps.remove', { device: dev(), id: 'com.example.ws', opId: 'op-4' })).result).toEqual({});
   });
 });
+
+describe('upload budget', () => {
+  it('is shared and held until released, and memory grows only as data arrives', async () => {
+    const { UploadBudget, UploadStore } = await import('./rpc/uploads.js');
+    const budget = new UploadBudget(100);
+    const a = new UploadStore(budget);
+    const b = new UploadStore(budget);
+    const id = a.begin('a.ipk', 60);
+    expect(() => b.begin('b.ipk', 60)).toThrow(expect.objectContaining({ code: 'upload_too_large' }));
+    a.chunk(id, 0, Buffer.alloc(60, 1).toString('base64'));
+    const taken = a.take(id);
+    expect(taken.data.length).toBe(60);
+    expect(budget.inUse).toBe(60); // still reserved while installing
+    taken.done();
+    expect(budget.inUse).toBe(0);
+    const id2 = b.begin('b.ipk', 60);
+    b.clear();
+    expect(budget.inUse).toBe(0);
+    expect(() => b.take(id2)).toThrow(expect.objectContaining({ code: 'upload_not_found' }));
+  });
+});
