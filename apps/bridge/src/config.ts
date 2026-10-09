@@ -51,7 +51,8 @@ export function parseArgs(argv: string[]): BridgeConfig {
   const all = (name: string) =>
     argv.flatMap((a, i) => (a === `--${name}` && argv[i + 1] ? [argv[i + 1]!] : []));
 
-  const host = get('host') ?? process.env.LGDM_HOST ?? '127.0.0.1';
+  // Always loopback: only programs on this computer can reach the bridge.
+  const host = '127.0.0.1';
   const port = Number(get('port') ?? process.env.LGDM_PORT ?? DEFAULT_BRIDGE_PORT);
   const extra = [...all('allow-origin'), ...(process.env.LGDM_ALLOW_ORIGINS?.split(',') ?? [])]
     .map((o) => o.trim().replace(/\/$/, ''))

@@ -4,7 +4,7 @@ import { DeviceAuth, type DeviceTarget } from '@lgdm/protocol';
 /**
  * Saved TVs live ONLY in this browser (IndexedDB, per site). Nothing is stored on the bridge or any server;
  * the bridge receives a device's connection details with each call and forgets them when the connection closes.
- * Data is per origin: devices added on lg.scoty.uk are not visible on a NAS-served copy — use export/import.
+ * Data is per origin: devices added on lg.scoty.uk are not visible at http://localhost:5199 — use export/import.
  */
 export const SavedDevice = z.object({
   id: z.string(),

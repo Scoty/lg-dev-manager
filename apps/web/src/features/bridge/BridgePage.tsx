@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, DOCKER_IMAGE } from '@lgdm/protocol';
+import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
 import { Card } from '../../components/Card';
 import { Icon } from '../../shell/icons';
@@ -58,7 +58,7 @@ export function BridgePage() {
         eyebrow="Setup"
         title="Connect the"
         accent="bridge"
-        sub="Browsers can't open SSH connections to your TV, so a small helper runs on your computer or NAS and does it for this page. It only accepts this website and needs a pairing token."
+        sub="Browsers can't open SSH connections to your TV, so a small helper runs on your computer and does it for this page. It only accepts this website and needs a pairing token."
       />
       <div className="grid">
         <Card eyebrow="Step 1" title="Run the bridge" className="col-6">
@@ -67,14 +67,8 @@ export function BridgePage() {
               <div className="eyebrow">On this computer (Node 22+)</div>
               <div className="codeblock">npx lg-dev-manager-bridge</div>
             </div>
-            <div>
-              <div className="eyebrow">On a NAS (Docker) — serves this UI too</div>
-              <div className="codeblock">{`docker run -d --name lg-dev-manager --network host \\
-  -v lgdm-data:/data \\
-  ${DOCKER_IMAGE} --host 0.0.0.0`}</div>
-            </div>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-              The bridge prints a <strong>pairing token</strong> when it starts. Publishing to npm and ghcr.io happens at release;
+              The bridge prints a <strong>pairing token</strong> when it starts. Publishing to npm happens at release;
               until then run it from the repo with <span className="mono">pnpm dev:bridge</span>.
             </p>
             {!(DEFAULT_ALLOWED_ORIGINS as readonly string[]).includes(origin) &&

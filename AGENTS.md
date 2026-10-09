@@ -21,7 +21,7 @@ It has two parts (see `PLAN.md` §1 for why):
 
 1. **The browser never talks to the TV directly.** Every TV operation is a typed RPC in
    `packages/protocol`, implemented in the bridge. No generic "open socket to host:port" RPC — ever.
-2. **Bridge security stays on.** Default bind `127.0.0.1`, Origin allowlist, pairing token required.
+2. **Bridge security stays on.** Bind `127.0.0.1` only (no LAN mode), Origin allowlist, pairing token required.
    Don't add flags that disable these without an explicit, documented reason.
 3. **User settings live only in the browser.** Saved TVs (names, addresses, keys, passwords) are kept in
    IndexedDB (`apps/web/src/devices/store.ts`) and the bridge pairing in `localStorage`. Nothing is ever sent to
@@ -46,7 +46,7 @@ It has two parts (see `PLAN.md` §1 for why):
 
 - pnpm workspaces, Node ≥ 22, TypeScript strict everywhere.
 - Web: Vite, React 19, React Router, TanStack Query, xterm.js, SCSS (Adminator tokens).
-- Bridge: `ws`, `ssh2`, zod. No native modules (must run in Docker on ARM and x86).
+- Bridge: `ws`, `ssh2`, zod. No native modules (must run on Windows, macOS and Linux, x64 and ARM).
 - Tests: Vitest, Playwright, `tools/mock-tv` (an ssh2 server that fakes webOS luna-send + filesystem).
 
 ## Commands
@@ -92,7 +92,7 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 | Topic | Decision | Status |
 |---|---|---|
 | Browser↔TV transport | Local bridge over authenticated WebSocket | Decided (technical necessity) |
-| Where the bridge runs | Both: `npx`/binary on the user's computer (for the Pages site → localhost) **and** a Docker image for a NAS that also serves the UI on the LAN | Decided |
+| Where the bridge runs | On the user's own computer only, bound to `127.0.0.1`. No NAS / Docker / LAN mode (owner decision, Oct 2026) | Decided |
 | UI framework | React 19 + Vite + TypeScript | Decided |
 | v1 scope | **Full parity** with the desktop app (all of PLAN.md §3, incl. Debug tools) before the public release | Decided |
 | Device/key storage | **Browser only** (IndexedDB + export/import); bridge is stateless and never writes device details to disk | Decided (owner, Oct 2026) |

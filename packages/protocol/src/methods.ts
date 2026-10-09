@@ -101,4 +101,3 @@ export const PUBLIC_WEB_ORIGIN = 'https://lg.scoty.uk';
 export const DEFAULT_ALLOWED_ORIGINS = [PUBLIC_WEB_ORIGIN, 'http://localhost:5173', 'http://127.0.0.1:5173'] as const;
 
 export const REPO_URL = 'https://github.com/Scoty/lg-dev-manager';
-export const DOCKER_IMAGE = 'ghcr.io/scoty/lg-dev-manager';

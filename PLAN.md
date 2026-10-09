@@ -26,7 +26,7 @@ plus raw TCP to the Dev Mode **key server on port 9991**. A web page cannot open
 ```
 ┌──────────────────────────┐   WebSocket (JSON-RPC)   ┌───────────────────┐   SSH / SFTP   ┌────────┐
 │ Web UI (lg.scoty.uk)     │ ───────────────────────▶ │ Bridge (tiny,     │ ─────────────▶ │ LG TV  │
-│ React + TS, Adminator UI │ ◀─────────────────────── │ Node, local/NAS)  │ ◀───────────── │ webOS  │
+│ React + TS, Adminator UI │ ◀─────────────────────── │ Node, this PC)    │ ◀───────────── │ webOS  │
 └──────────────────────────┘   events, streams        └───────────────────┘   :9991 keysrv └────────┘
 ```
 
@@ -36,7 +36,7 @@ plus raw TCP to the Dev Mode **key server on port 9991**. A web page cannot open
   network calls the browser can't. It is the replacement for the Rust half of the Tauri app.
   It is **stateless about devices**: it gets connection details with each call and keeps them in memory only
   while an SSH connection is pooled (idle connections close after 2 minutes).
-  Distributed as `npx lg-dev-manager-bridge`, a Docker image (ghcr.io), and later a single binary.
+  Distributed as `npx lg-dev-manager-bridge`, and later as a double-click single binary for Windows/macOS/Linux.
 - The bridge can **also serve the Web UI itself** (`http://localhost:5199`), so the app works fully
   offline and without the public site at all.
 
@@ -45,14 +45,14 @@ plus raw TCP to the Dev Mode **key server on port 9991**. A web page cannot open
   to the website; sent only to the paired bridge for the call it is making. The bridge never writes them to disk or logs.
 - **Bridge pairing** (bridge address + token): browser `localStorage`.
 - **On the bridge**: only its own pairing token (`~/.lg-dev-manager/bridge.json`).
-- Storage is **per origin**: `lg.scoty.uk`, `localhost:5173` and a NAS-served copy each have their own list.
+- Storage is **per origin**: `lg.scoty.uk`, `localhost:5173` and the bridge-served copy (`localhost:5199`) each have their own list.
   The Devices page has **export / import** (a JSON backup — contains keys, so the UI warns) and **remove all**.
 - The public site ships a strict **Content-Security-Policy** (no third-party or inline scripts; connections only to
   itself and to ws/wss bridges) to limit what an injected script could do with stored keys.
 
 ### Bridge security (non-negotiable)
 Any website you visit could try to talk to `ws://localhost`. So the bridge:
-1. binds to `127.0.0.1` by default (LAN binding is opt-in, e.g. for a NAS);
+1. binds to `127.0.0.1` only — nothing else on the network can reach it;
 2. checks the `Origin` header against an allowlist (`https://lg.scoty.uk` + localhost dev, plus `--allow-origin`);
 3. requires a **pairing token** printed at startup, entered once in the Web UI and kept in browser storage;
 4. never exposes a generic "connect anywhere" socket — only typed SSH/luna operations (luna URIs validated, params shell-quoted).
@@ -67,10 +67,10 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 | Web UI | **Vite + React 19 + TypeScript**, React Router, TanStack Query | Mainstream, fast, easy to host statically. |
 | Styling | **Port of Adminator 2026 SCSS tokens + components** (no Bootstrap) | Same CSS variables, light/dark via `data-theme`, shell/sidebar/topbar. |
 | Terminal | **xterm.js** (+ fit, search, web-links addons) | Same as original. |
-| Bridge | **Node 22 + TypeScript**, `ws`, `ssh2` (SSH + SFTP) | Pure JS SSH, no native build step; runs anywhere incl. Docker on ARM/x86. |
+| Bridge | **Node 22 + TypeScript**, `ws`, `ssh2` (SSH + SFTP) | Pure JS SSH, no native build step; runs on Windows, macOS and Linux (x64/ARM). |
 | Protocol | Shared `packages/protocol` with **zod** schemas | One source of truth for every RPC call + event. |
 | Tests | Vitest (unit), Playwright (UI smoke), a **mock TV** (ssh2 server) for bridge integration tests | Lets CI test without a real TV. |
-| CI/CD | GitHub Actions → GitHub Pages at lg.scoty.uk (UI), ghcr.io (bridge image), npm (bridge CLI) | |
+| CI/CD | GitHub Actions → GitHub Pages at lg.scoty.uk (UI), npm + release binaries (bridge) | |
 
 ---
 
@@ -167,12 +167,12 @@ lg-dev-manager/
 | M5 | Files + Terminal | SFTP browser with upload/download; xterm PTY. |
 | M6 | Info + Dev Mode renew + screenshot | |
 | M7 | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
-| M8 | Ship | Docker image, `npx` bridge published, README with screenshots, "preview" label removed. |
+| M8 | Ship | `npx` bridge + single-binary downloads published, README with screenshots, "preview" label removed. |
 
 Scope is **full parity before release** (v1.0 at M8). The site at **lg.scoty.uk** is already public as a *preview*:
 every push to `main` deploys it, and it shows which features are still to come.
 
-**NAS note:** the Docker bridge serves the UI itself on the LAN (`http://<nas>:5199`). Using **lg.scoty.uk** with the NAS bridge needs the bridge on HTTPS (e.g. a `wss://` hostname behind Cloudflare Access); plain LAN `ws://` is blocked from an https page. A bridge on the same computer (`ws://127.0.0.1`) works from lg.scoty.uk in Chrome, Edge and Firefox.
+**Browsers:** lg.scoty.uk talking to the bridge on the same computer (`ws://127.0.0.1`) works in Chrome, Edge and Firefox. Where a browser blocks that, open the bridge-served copy at `http://localhost:5199` instead.
 
 ### Hosting setup (lg.scoty.uk)
 1. Repo **Settings → Pages → Source: GitHub Actions** (the `Deploy web UI` workflow publishes `apps/web/dist`).

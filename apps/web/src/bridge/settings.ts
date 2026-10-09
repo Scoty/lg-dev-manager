@@ -8,11 +8,12 @@ export interface BridgeSettings {
 const KEY = 'lgdm-bridge';
 
 /**
- * When the UI is served by the bridge itself (e.g. on a NAS), talk to the same origin.
- * Otherwise (GitHub Pages, Vite dev) default to a bridge on this computer.
+ * When the UI is served by the bridge itself (http://localhost:5199), talk to the same origin.
+ * Otherwise (lg.scoty.uk, Vite dev) default to the bridge on this computer.
  */
 export function defaultBridgeUrl(loc: Pick<Location, 'protocol' | 'host' | 'hostname'> = window.location): string {
-  const servedByBridge = loc.protocol === 'http:' && !['localhost:5173', '127.0.0.1:5173'].includes(loc.host);
+  const local = loc.hostname === 'localhost' || loc.hostname === '127.0.0.1';
+  const servedByBridge = loc.protocol === 'http:' && local && !['localhost:5173', '127.0.0.1:5173'].includes(loc.host);
   if (servedByBridge) return `ws://${loc.host}/rpc`;
   return `ws://127.0.0.1:${DEFAULT_BRIDGE_PORT}/rpc`;
 }

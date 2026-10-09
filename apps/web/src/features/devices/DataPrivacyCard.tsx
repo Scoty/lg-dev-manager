@@ -43,7 +43,7 @@ export function DataPrivacyCard() {
           TV names, addresses, keys and passwords are saved only in this browser's storage for{' '}
           <span className="mono">{window.location.host}</span>. They are never uploaded to this website. They are sent only to
           your paired bridge when it connects to a TV, and the bridge keeps them in memory, never on disk. Other browsers and
-          other copies of this app (for example one served from your NAS) have their own separate list — use export and import to move it.
+          other copies of this app (for example the one the bridge serves at localhost:5199) have their own separate list — use export and import to move it.
         </p>
         {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
         <div className="row">

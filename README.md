@@ -30,7 +30,7 @@ pnpm --filter @lgdm/mock-tv start   # optional: a fake Dev Mode TV on 127.0.0.1
 pnpm test
 ```
 
-Serve the built UI from the bridge (how the NAS/Docker setup works):
+Serve the built UI from the bridge (offline use, or browsers that block `ws://localhost` from https):
 
 ```bash
 pnpm build
