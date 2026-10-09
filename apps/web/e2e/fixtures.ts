@@ -7,6 +7,7 @@ import { fakeIpk } from '@lgdm/mock-tv';
 export const TOKEN = 'e2e-token';
 export const PASSPHRASE = 'A1B2C3';
 export const ROOTED_PORT = 2222;
+export const NO_PTY_PORT = 2223;
 
 /** Collects console errors and uncaught exceptions so tests can assert a page is clean. */
 export const test = base.extend<{ errors: string[]; paired: Page }>({
@@ -62,13 +63,13 @@ export async function addDevModeTv(page: Page, name: string) {
 }
 
 /** Run the add-device wizard ("Set up manually") for the rooted mock TV. */
-export async function addRootedTv(page: Page, name: string) {
+export async function addRootedTv(page: Page, name: string, port = ROOTED_PORT) {
   await openWizard(page);
   await page.getByRole('radio', { name: /Set up manually/ }).click();
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByLabel('Name').fill(name);
   await page.getByLabel('IP address').fill('127.0.0.1');
-  await page.getByLabel('SSH port').fill(String(ROOTED_PORT));
+  await page.getByLabel('SSH port').fill(String(port));
   await page.getByRole('radio', { name: 'Password' }).click();
   await page.getByLabel(/Password for/).fill('alpine');
   await page.getByRole('button', { name: 'Verify & add' }).click();

@@ -27,6 +27,8 @@ import { checkConnection } from '../devices/ports.js';
 import { deviceInfo, generateKey, storageInfo } from '../devices/info.js';
 import { appIcon, hbChannelConfig, installFromRepo, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
 import type { HttpTrace, RepoClient } from '../repo/repo.js';
+import type { ShellSessions } from '../shell/shells.js';
+import { homeDir, listDir, makeDir, readChunk, removePath, renameFile, statFile, writeFile } from '../files/files.js';
 import type { UploadStore } from './uploads.js';
 
 export interface Session {
@@ -37,6 +39,8 @@ export interface Session {
   uploads: UploadStore;
   /** Console commands this client is running (cmd.stream), by opId. Closed when the connection closes. */
   streams: Map<string, RunningCommand>;
+  /** Interactive terminals (shell.*). Closed when the connection closes. */
+  shells: ShellSessions;
 }
 
 /** A console command; `cancel` may arrive before its channel has finished opening. */
@@ -130,7 +134,7 @@ export const handlers: HandlerMap = {
   },
 
   'device.info': ({ device, quiet }, session, ctx) => deviceInfo(sshFor(session, ctx, quiet), device),
-  'device.storage': ({ device }, session, ctx) => storageInfo(sshFor(session, ctx), device),
+  'device.storage': ({ device, path }, session, ctx) => storageInfo(sshFor(session, ctx), device, path),
   'device.generateKey': ({ comment }) => generateKey(comment),
   'device.hbchannel': ({ device, quiet }, session, ctx) => hbChannelConfig(sshFor(session, ctx, quiet), device),
 
@@ -202,6 +206,54 @@ export const handlers: HandlerMap = {
   'repo.list': ({ refresh }, session, { repo }) => repo.list({ refresh, trace: httpTraceFor(session, true) }),
   'repo.image': ({ url }, session, { repo }) => repo.image(url, httpTraceFor(session, true)),
   'repo.description': ({ id }, session, { repo }) => repo.description(id, httpTraceFor(session, true)),
+
+  'files.home': async ({ device }, session, ctx) => ({ path: await homeDir(sshFor(session, ctx), device) }),
+  'files.list': ({ device, path }, session, ctx) => listDir(sshFor(session, ctx), device, path),
+  'files.stat': ({ device, path }, session, ctx) => statFile(sshFor(session, ctx), device, path),
+  'files.read': async ({ device, path, offset, length }, session, ctx) => {
+    const { data, eof } = await readChunk(sshFor(session, ctx, true), device, path, offset, length);
+    return { data: data.toString('base64'), eof };
+  },
+  'files.write': async ({ device, path, uploadId, opId, overwrite }, session, ctx) => {
+    const { data, done } = session.uploads.take(uploadId);
+    const progress = progressFor(session, opId);
+    try {
+      let last = -1;
+      return await writeFile(sshFor(session, ctx), device, path, data, !!overwrite, (sent) => {
+        const pct = Math.floor((sent / Math.max(1, data.length)) * 100);
+        if (pct !== last) {
+          last = pct;
+          progress({ stage: 'upload', percent: pct, text: 'Copying to the TV…' });
+        }
+      });
+    } finally {
+      done();
+    }
+  },
+  'files.mkdir': ({ device, parent, name }, session, ctx) => makeDir(sshFor(session, ctx), device, parent, name),
+  'files.rename': ({ device, parent, from, to }, session, ctx) => renameFile(sshFor(session, ctx), device, parent, from, to),
+  'files.remove': async ({ device, path }, session, ctx) => {
+    await removePath(sshFor(session, ctx), device, path);
+    return {};
+  },
+
+  'shell.open': ({ device, rows, cols, pty }, session) => session.shells.open(device, rows, cols, pty ?? true),
+  'shell.write': ({ shellId, data }, session) => {
+    session.shells.write(shellId, data);
+    return {};
+  },
+  'shell.resize': ({ shellId, rows, cols }, session) => {
+    session.shells.resize(shellId, rows, cols);
+    return {};
+  },
+  'shell.ack': ({ shellId, bytes }, session) => {
+    session.shells.ack(shellId, bytes);
+    return {};
+  },
+  'shell.close': ({ shellId }, session) => {
+    session.shells.close(shellId);
+    return {};
+  },
 
   'upload.begin': ({ name, size }, session) => ({ uploadId: session.uploads.begin(name, size) }),
   'upload.chunk': ({ uploadId, offset, data }, session) => ({ received: session.uploads.chunk(uploadId, offset, data) }),

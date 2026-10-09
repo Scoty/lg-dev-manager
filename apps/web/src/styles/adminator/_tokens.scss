@@ -46,6 +46,15 @@
   --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04);
   --shadow-lg:   0 10px 15px -3px rgb(15 23 42 / 0.08), 0 4px 6px -4px rgb(15 23 42 / 0.05);
   --overlay: rgba(240, 244, 248, 0.72);
+  /* Terminal (xterm.js) ANSI colours, readable on --bg-card */
+  --term-black: #1E293B;   --term-bright-black: #64748B;
+  --term-red: #DC2626;     --term-bright-red: #EF4444;
+  --term-green: #059669;   --term-bright-green: #10B981;
+  --term-yellow: #B45309;  --term-bright-yellow: #D97706;
+  --term-blue: #2563EB;    --term-bright-blue: #3B82F6;
+  --term-magenta: #7C3AED; --term-bright-magenta: #8B5CF6;
+  --term-cyan: #0E7490;    --term-bright-cyan: #0891B2;
+  --term-white: #94A3B8;   --term-bright-white: #475569;
 }
 
 :root[data-theme="dark"] {
@@ -77,4 +86,12 @@
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.25);
   --shadow-lg:   0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
   --overlay: rgba(11, 17, 32, 0.72);
+  --term-black: #334155;   --term-bright-black: #64748B;
+  --term-red: #F87171;     --term-bright-red: #FCA5A5;
+  --term-green: #34D399;   --term-bright-green: #6EE7B7;
+  --term-yellow: #FBBF24;  --term-bright-yellow: #FDE68A;
+  --term-blue: #60A5FA;    --term-bright-blue: #93C5FD;
+  --term-magenta: #A78BFA; --term-bright-magenta: #C4B5FD;
+  --term-cyan: #22D3EE;    --term-bright-cyan: #67E8F9;
+  --term-white: #CBD5E1;   --term-bright-white: #F8FAFC;
 }

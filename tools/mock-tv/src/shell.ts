@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import { handleLuna, lunaMiss, SUBSCRIPTIONS } from './luna.js';
 import { canWrite, ensureDir, type MockState } from './state.js';
+import { listDir, removeTree, statPath, touch } from './fs.js';
 
 export interface CommandResult {
   stdout: string | Buffer;
@@ -109,6 +110,8 @@ export function runCommand(command: string, ctx: CommandContext): CommandResult 
     return { stdout: `${JSON.stringify(handleLuna(uri!, parsed.params, state))}\n`, code: 0 };
   }
   if (command === 'id -u') return { stdout: state.username === 'root' ? '0\n' : '1000\n', code: 0 };
+  if (command === 'id -u; id -G') return { stdout: state.username === 'root' ? '0\n0\n' : '1000\n1000\n', code: 0 };
+  if (command === 'echo -n $HOME') return { stdout: state.username === 'root' ? '/home/root' : '/media/developer', code: 0 };
   if (command.startsWith('echo ')) return { stdout: `${unquote(command.slice(5))}\n`, code: 0 };
   if (command === 'cat') return { stdout: ctx.stdin, code: 0 };
   if (command === 'false') return { stdout: '', code: 1 };
@@ -119,6 +122,7 @@ export function runCommand(command: string, ctx: CommandContext): CommandResult 
     if (!canWrite(state, p)) return { stdout: '', stderr: `sh: can't create ${p}: Permission denied\n`, code: 1 };
     if (!state.dirs.has(posix.dirname(p))) return { stdout: '', stderr: `sh: can't create ${p}: nonexistent directory\n`, code: 1 };
     state.files.set(p, Buffer.from(ctx.stdin));
+    touch(state, p);
     return { stdout: '', code: 0 };
   }
   if ((p = pathArg('cat', command))) {
@@ -128,7 +132,28 @@ export function runCommand(command: string, ctx: CommandContext): CommandResult 
   if ((p = pathArg('mkdir -p', command))) {
     if (!canWrite(state, p)) return { stdout: '', stderr: `mkdir: can't create directory '${p}': Permission denied\n`, code: 1 };
     ensureDir(state, p);
+    touch(state, p, true);
     return { stdout: '', code: 0 };
+  }
+  if ((p = pathArg('rm -r --', command))) {
+    if (!statPath(state, p, false)) return { stdout: '', stderr: `rm: can't remove '${p}': No such file or directory\n`, code: 1 };
+    if (!canWrite(state, posix.dirname(p))) {
+      return { stdout: '', stderr: `rm: can't remove '${p}': Permission denied\n`, code: 1 };
+    }
+    removeTree(state, p);
+    return { stdout: '', code: 0 };
+  }
+  // `dd if='<path>' bs=<n> skip=<n> count=<n>` — chunked reads on TVs without SFTP.
+  const dd = /^dd if=('(?:[^']|'\\'')*') bs=(\d+) skip=(\d+) count=(\d+)(?: 2>\/dev\/null)?$/.exec(command);
+  if (dd) {
+    const path = posix.normalize(unquote(dd[1]!));
+    const [bs, skip, count] = [Number(dd[2]), Number(dd[3]), Number(dd[4])];
+    const f = state.files.get(path);
+    if (!f) return { stdout: '', stderr: `dd: can't open '${path}': No such file or directory\n`, code: 1 };
+    const part = f.subarray(bs * skip, bs * (skip + count));
+    const whole = Math.floor(part.length / bs);
+    const rest = part.length % bs ? 1 : 0;
+    return { stdout: part, stderr: `${whole}+${rest} records in\n${whole}+${rest} records out\n`, code: 0 };
   }
   if ((p = pathArg('chmod 777', command))) {
     return state.dirs.has(p) || state.files.has(p) ? { stdout: '', code: 0 } : { stdout: '', stderr: 'chmod: No such file\n', code: 1 };
@@ -156,18 +181,6 @@ export function runCommand(command: string, ctx: CommandContext): CommandResult 
   if (typed) return typed;
   const bin = command.split(/\s+/)[0];
   return { stdout: '', stderr: `sh: ${bin}: not found\n`, code: 127 };
-}
-
-/** Children of a directory in the fake filesystem. */
-function listDir(state: MockState, dir: string): string[] | null {
-  const d = posix.normalize(dir);
-  if (!state.dirs.has(d)) return null;
-  const prefix = d === '/' ? '/' : `${d}/`;
-  const names = new Set<string>();
-  for (const p of [...state.dirs, ...state.files.keys()]) {
-    if (p !== d && p.startsWith(prefix)) names.add(p.slice(prefix.length).split('/')[0]!);
-  }
-  return [...names].sort();
 }
 
 /**

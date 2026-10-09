@@ -237,3 +237,48 @@ describe('Homebrew repository over WebSocket', () => {
     expect(progress.map((p) => p.data.stage)).toEqual(expect.arrayContaining(['upload', 'install']));
   });
 });
+
+describe('files and shells over WebSocket', () => {
+  const dev = () => device('S3cr3t-pa55');
+
+  it('lists the home folder and reads a file', async () => {
+    const home = (await call('files.home', { device: dev() })).result.path;
+    expect(home).toBe('/home/root');
+    const list = await call('files.list', { device: dev(), path: home });
+    expect(list.result.items.map((i: { name: string }) => i.name)).toContain('notes.txt');
+    const read = await call('files.read', { device: dev(), path: `${home}/notes.txt`, offset: 0, length: 65536 });
+    expect(Buffer.from(read.result.data, 'base64').toString()).toContain('Hello from the mock TV');
+    expect((await call('files.list', { device: dev(), path: '/media/../etc' })).error.code).toBe('bad_request');
+  });
+
+  it('uploads into a folder with progress', async () => {
+    const begin = await call('upload.begin', { name: 'hi.txt', size: 5 });
+    await call('upload.chunk', { uploadId: begin.result.uploadId, offset: 0, data: Buffer.from('hello').toString('base64') });
+    const before = frames.length;
+    const res = await call('files.write', { device: dev(), path: '/home/root/hi.txt', uploadId: begin.result.uploadId, opId: 'op-up' });
+    expect(res.result).toEqual({ size: 5 });
+    expect(tv.state.files.get('/home/root/hi.txt')?.toString()).toBe('hello');
+    const progress = frames.slice(before).map((f) => JSON.parse(f)).filter((m) => m.event === 'op.progress' && m.data.opId === 'op-up');
+    expect(progress.at(-1)?.data.percent).toBe(100);
+  });
+
+  it('runs a terminal and streams its output as events', async () => {
+    const seen: string[] = [];
+    const listen = (raw: WebSocket.RawData) => seen.push(raw.toString());
+    ws.on('message', listen);
+    const { shellId, pty } = (await call('shell.open', { device: dev(), rows: 24, cols: 80 })).result;
+    expect(pty).toBe(true);
+    await call('shell.write', { shellId, data: 'whoami\r' });
+    const text = () =>
+      seen
+        .map((f) => JSON.parse(f))
+        .filter((m) => m.event === 'shell.output' && m.data.shellId === shellId)
+        .map((m) => Buffer.from(m.data.data, 'base64').toString())
+        .join('');
+    for (let i = 0; i < 100 && !text().includes('root\r\n'); i++) await new Promise((r) => setTimeout(r, 20));
+    expect(text()).toContain('root\r\n');
+    ws.off('message', listen);
+    await call('shell.close', { shellId });
+    expect((await call('shell.write', { shellId, data: 'x' })).error.code).toBe('shell_not_found');
+  });
+});

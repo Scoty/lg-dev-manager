@@ -3,6 +3,7 @@ import { DeviceTarget } from './device';
 import { AppId, AppInfo, MAX_CHUNK_BYTES, MAX_UPLOAD_BYTES } from './apps';
 import { ScanResult } from './console';
 import { RepoPackage, WebUrl } from './repo';
+import { FileItem, FileName, MAX_READ_CHUNK, RemotePath } from './files';
 
 /**
  * Bumped when the wire contract changes in a way an older peer can't handle (including new methods the
@@ -10,16 +11,11 @@ import { RepoPackage, WebUrl } from './repo';
  *  v2 — M3: device.info/storage/generateKey, apps.*, upload.*
  *  v3 — device.scan, checkConnection.webos, cmd.stream/cmd.cancel, cmd.log events
  *  v4 — M4: repo.list, repo.image, repo.description, apps.installFromRepo, device.hbchannel
+ *  v5 — M5: files.*, shell.*, device.storage path
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 const base64 = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/, 'Not base64');
-/** Absolute POSIX path without `..` segments. */
-const RemotePath = z
-  .string()
-  .min(1)
-  .max(4096)
-  .refine((p) => p.startsWith('/') && !p.split('/').includes('..') && !p.includes('\0'), 'Not an absolute path');
 
 /** Default port the bridge listens on (and serves the UI from). */
 export const DEFAULT_BRIDGE_PORT = 5199;
@@ -97,9 +93,9 @@ export const Methods = {
       socName: z.string().optional(),
     }),
   },
-  /** `df` of the developer partition (KiB). Null if the TV gave no usable answer. */
+  /** `df` of a folder (KiB; default the developer partition). Null if the TV gave no usable answer. */
   'device.storage': {
-    params: z.object({ device: DeviceTarget }),
+    params: z.object({ device: DeviceTarget, path: RemotePath.optional() }),
     result: z.object({ total: z.number(), used: z.number(), available: z.number() }).nullable(),
   },
   /**
@@ -202,6 +198,96 @@ export const Methods = {
   },
   'upload.discard': {
     params: z.object({ uploadId: z.string().max(64) }),
+    result: z.object({}),
+  },
+
+  /** The login's home folder (`echo -n $HOME`, FileSessionImpl.home); /media/developer if it has none. */
+  'files.home': {
+    params: z.object({ device: DeviceTarget }),
+    result: z.object({ path: z.string() }),
+  },
+  /** A directory's entries over SFTP (file::ls in the original), with symlink targets and the user's access. */
+  'files.list': {
+    params: z.object({ device: DeviceTarget, path: RemotePath }),
+    result: z.object({ path: z.string(), items: z.array(FileItem) }),
+  },
+  /** One file's details (follows symlinks). */
+  'files.stat': {
+    params: z.object({ device: DeviceTarget, path: RemotePath }),
+    result: FileItem,
+  },
+  /**
+   * Part of a file, for downloads and previews: SFTP, or `dd` on TVs without it. `offset` and `length` must be
+   * multiples of 64 KiB (except a final short read); `eof` is true when the end was reached.
+   */
+  'files.read': {
+    params: z.object({
+      device: DeviceTarget,
+      path: RemotePath,
+      offset: z.number().int().min(0),
+      length: z.number().int().min(1).max(MAX_READ_CHUNK),
+    }),
+    result: z.object({ data: z.string(), eof: z.boolean() }),
+  },
+  /**
+   * Write a file sent with `upload.*` to the TV (file::put). Streams `op.progress` (stage `upload`). Refuses to
+   * replace an existing file unless `overwrite`.
+   */
+  'files.write': {
+    params: z.object({
+      device: DeviceTarget,
+      path: RemotePath,
+      uploadId: z.string().max(64),
+      opId: z.string().max(64),
+      overwrite: z.boolean().optional(),
+    }),
+    result: z.object({ size: z.number() }),
+  },
+  'files.mkdir': {
+    params: z.object({ device: DeviceTarget, parent: RemotePath, name: FileName }),
+    result: z.object({ path: z.string() }),
+  },
+  'files.rename': {
+    params: z.object({ device: DeviceTarget, parent: RemotePath, from: FileName, to: FileName }),
+    result: z.object({ path: z.string() }),
+  },
+  /** Delete a file or a folder with everything in it (`rm -r`, FileSessionImpl.rm). */
+  'files.remove': {
+    params: z.object({ device: DeviceTarget, path: RemotePath }),
+    result: z.object({}),
+  },
+
+  /**
+   * An interactive shell on its own SSH connection (shell_manager in the original): a PTY ("xterm") when the TV
+   * allows one, otherwise a plain shell without one (`pty: false` in the result). Output arrives as
+   * `shell.output`, the end as `shell.exit`. Shells belong to this connection and close with it.
+   */
+  'shell.open': {
+    params: z.object({
+      device: DeviceTarget,
+      rows: z.number().int().min(2).max(500),
+      cols: z.number().int().min(10).max(1000),
+      /** False: don't ask for a PTY (the original's "dumb" shell). */
+      pty: z.boolean().optional(),
+    }),
+    result: z.object({ shellId: z.string(), pty: z.boolean(), title: z.string() }),
+  },
+  /** Keystrokes / pasted text for a shell. Never logged. */
+  'shell.write': {
+    params: z.object({ shellId: z.string().max(64), data: z.string().max(1024 * 1024) }),
+    result: z.object({}),
+  },
+  'shell.resize': {
+    params: z.object({ shellId: z.string().max(64), rows: z.number().int().min(2).max(500), cols: z.number().int().min(10).max(1000) }),
+    result: z.object({}),
+  },
+  /** The client has shown `bytes` of a shell's output (flow control: unacknowledged output pauses the shell). */
+  'shell.ack': {
+    params: z.object({ shellId: z.string().max(64), bytes: z.number().int().min(0) }),
+    result: z.object({}),
+  },
+  'shell.close': {
+    params: z.object({ shellId: z.string().max(64) }),
     result: z.object({}),
   },
 

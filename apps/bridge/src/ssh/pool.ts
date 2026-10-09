@@ -73,6 +73,25 @@ export interface Channel {
   close(): void;
 }
 
+function configFor(t: DeviceTarget): ConnectConfig {
+  const config: ConnectConfig = {
+    host: t.host.replace(/^\[|\]$/g, ''),
+    port: t.port,
+    username: t.username,
+    readyTimeout: READY_TIMEOUT_MS,
+    keepaliveInterval: 15_000,
+    tryKeyboard: t.auth.kind === 'password',
+  };
+  if (t.auth.kind === 'key') {
+    verifyKey(t.auth.privateKey, t.auth.passphrase); // throws passphrase_required / bad_passphrase early
+    config.privateKey = t.auth.privateKey;
+    if (t.auth.passphrase) config.passphrase = t.auth.passphrase;
+  } else {
+    config.password = t.auth.password;
+  }
+  return config;
+}
+
 /** Stable pool key. Hashing keeps credentials out of any map keys that might be logged. */
 function keyOf(t: DeviceTarget): string {
   return createHash('sha256').update(JSON.stringify([t.host, t.port, t.username, t.auth])).digest('hex');
@@ -107,22 +126,7 @@ export class SshPool implements SshRunner {
   }
 
   private connect(t: DeviceTarget): Entry {
-    const config: ConnectConfig = {
-      host: t.host.replace(/^\[|\]$/g, ''),
-      port: t.port,
-      username: t.username,
-      readyTimeout: READY_TIMEOUT_MS,
-      keepaliveInterval: 15_000,
-      tryKeyboard: t.auth.kind === 'password',
-    };
-    if (t.auth.kind === 'key') {
-      verifyKey(t.auth.privateKey, t.auth.passphrase); // throws passphrase_required / bad_passphrase early
-      config.privateKey = t.auth.privateKey;
-      if (t.auth.passphrase) config.passphrase = t.auth.passphrase;
-    } else {
-      config.password = t.auth.password;
-    }
-
+    const config = configFor(t);
     const client = new Client();
     const key = keyOf(t);
     const ready = new Promise<Client>((resolve, reject) => {
@@ -317,6 +321,30 @@ export class SshPool implements SshRunner {
 
   traceOp<T>(_t: DeviceTarget, _kind: TraceKind, _label: string, fn: () => Promise<T>): Promise<T> {
     return fn();
+  }
+
+  /**
+   * A connection of its own, outside the pool — for long-lived interactive shells, which the original also runs on
+   * separate connections (shell_manager/shell.rs) so they never compete with commands for channels or idle out.
+   * The caller ends it.
+   */
+  async dedicated(t: DeviceTarget): Promise<Client> {
+    const config = configFor(t);
+    const client = new Client();
+    return new Promise<Client>((resolve, reject) => {
+      client.once('ready', () => {
+        client.setNoDelay(true);
+        client.removeAllListeners('error');
+        client.on('error', () => {}); // surfaces as 'close' on the shell
+        resolve(client);
+      });
+      client.once('error', (e) => reject(mapConnectError(e, t)));
+      if (t.auth.kind === 'password') {
+        const pw = t.auth.password;
+        client.on('keyboard-interactive', (_n, _i, _l, prompts, finish) => finish(prompts.map(() => pw)));
+      }
+      client.connect(config);
+    });
   }
 
   /** Close the pooled connection for one device, or all of them. Returns how many were closed. */

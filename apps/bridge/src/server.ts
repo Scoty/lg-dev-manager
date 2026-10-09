@@ -8,6 +8,7 @@ import { BRIDGE_VERSION } from './version.js';
 import { SshPool } from './ssh/pool.js';
 import { UploadStore } from './rpc/uploads.js';
 import { RepoClient } from './repo/repo.js';
+import { ShellSessions } from './shell/shells.js';
 
 export const RPC_PATH = '/rpc';
 
@@ -48,7 +49,9 @@ export function startServer(config: BridgeConfig, pool = new SshPool(), repo = n
       },
       uploads: new UploadStore(),
       streams: new Map(),
+      shells: undefined as unknown as ShellSessions,
     };
+    session.shells = new ShellSessions(pool, (event, data) => session.emit(event, data));
     // Unpaired sockets get a short window to authenticate.
     const authTimer = setTimeout(() => {
       if (!session.authed) ws.close(4401, 'pairing timeout');
@@ -67,6 +70,7 @@ export function startServer(config: BridgeConfig, pool = new SshPool(), repo = n
       session.uploads.clear();
       for (const run of session.streams.values()) run.cancel();
       session.streams.clear();
+      session.shells.closeAll();
     });
   });
 

@@ -4,8 +4,8 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 (Tauri + Angular + Rust) with the look of [Adminator 2026](https://github.com/puikinsh/adminator-admin-dashboard),
 hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS).
 
-> **Status:** M4 (Homebrew repository) done — browse / search / install / update from repo.webosbrew.org, update badges on the Installed page.
-> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M5 (Files + Terminal).
+> **Status:** M5 (Files + Terminal) done — SFTP file browser with upload / download / preview, and xterm.js terminals in tabs.
+> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M6 (Device info, Dev Mode renew, screenshot).
 
 ---
 
@@ -106,13 +106,14 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [x] Homebrew Channel aware install path (`org.webosbrew.hbchannel.service/install`, IPK served over an SSH reverse tunnel), hbchannel removal flow
 
 ### Files
-- [ ] SFTP browser: list, navigate, sort, create folder, delete, rename
-- [ ] Upload (drag & drop) and download with progress
+- [x] SFTP browser: list (owners, modes, symlink targets, read-only lock), navigate (breadcrumbs, typed path, back / forward / up / home), sort, create folder, delete (`rm -r`, confirmed), rename — `files.*`
+- [x] Upload (button or drag & drop, replace confirm) and download with progress; preview text and images (the original opened files in a desktop app)
+- [x] Free space for the current folder (`device.storage` with a path)
 - [x] Storage usage (developer partition, on the Apps page)
 
 ### Terminal
-- [ ] Full PTY shell over SSH (xterm.js), resize, multiple tabs
-- [ ] "Dumb" exec terminal fallback for devices without PTY
+- [x] Full PTY shell over SSH (xterm.js, own connection per shell), resize, multiple tabs on any TV, kept across page changes, reconnect — `shell.*`
+- [x] "Dumb" terminal fallback when the TV refuses a PTY (command + output + exit code), or on request
 
 ### Device info
 - [ ] System info (`tv.systemproperty/getSystemInfo`, `osInfo/query`, `sdx/getDeviceUuid`)
@@ -177,7 +178,7 @@ lg-dev-manager/
 | M2 ✅ | Bridge core | Stateless device RPCs (connection check, key-server key fetch, test login, exec, luna); browser device store; mock TV in tests; lg.scoty.uk deploy. |
 | M3 ✅ | Devices + Apps | Add-device wizard end to end; installed apps; launch/remove; install IPK from file. First build worth trying on a real TV. |
 | M4 ✅ | Homebrew repo | Browse/search/install/update from repo.webosbrew.org. |
-| M5 | Files + Terminal | SFTP browser with upload/download; xterm PTY. |
+| M5 ✅ | Files + Terminal | SFTP browser with upload/download; xterm PTY. |
 | M6 | Info + Dev Mode renew + screenshot | |
 | M7 | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
 | M8 | Ship | Bridge published to npm (`npx lg-dev-manager-bridge`), README with screenshots, "preview" label removed. |

@@ -1,5 +1,6 @@
 import { deflateSync } from 'node:zlib';
 import { posix } from 'node:path';
+import { addLink, type Meta } from './fs.js';
 
 export interface MockApp {
   id: string;
@@ -24,6 +25,10 @@ export interface MockState {
   storeApps: MockApp[];
   files: Map<string, Buffer>;
   dirs: Set<string>;
+  /** Symlinks: path → target (relative or absolute). */
+  links: Map<string, string>;
+  /** Owners, modes and times that differ from the defaults (see fs.ts). */
+  meta: Map<string, Meta>;
   /** App ids launched, newest last — lets tests assert on launches. */
   launched: string[];
   /** Total / available KiB reported by `df`. */
@@ -151,12 +156,19 @@ export function createState(opts: { username: string; hbchannel?: boolean; apps?
     storeApps: opts.storeApps ?? MOCK_STORE_APPS,
     files: new Map(),
     dirs: new Set(['/', '/tmp', '/media', '/media/developer', '/home', '/home/root', '/etc']),
+    links: new Map(),
+    meta: new Map(),
     launched: [],
     diskKb: { total: 1_843_200, available: 1_204_400 },
   };
   for (const app of opts.apps ?? MOCK_APPS) addApp(state, app);
   if (!state.hbchannel) state.apps = state.apps.filter((a) => a.id !== 'org.webosbrew.hbchannel');
   addFile(state, '/etc/prefs/properties/machineName', Buffer.from('mock-soc\n'));
+  // Something to browse in the Files page: a text file, a symlinked folder and a dangling link.
+  const home = opts.username === 'root' ? '/home/root' : '/media/developer';
+  addFile(state, `${home}/notes.txt`, Buffer.from('Hello from the mock TV.\nThis file is here for the Files page.\n'));
+  addLink(state, `${home}/apps-link`, '/media/developer/apps');
+  addLink(state, `${home}/old-link`, 'gone');
   return state;
 }
 

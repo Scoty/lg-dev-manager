@@ -5,6 +5,7 @@ import ssh2 from 'ssh2';
 import { WebSocketServer } from 'ws';
 import { isLunaOnce, isSubscription, readsStdin, runCommand, runSubscription } from './shell.js';
 import { serveSftp } from './sftp.js';
+import { runInteractive, type PtyInfo } from './interactive.js';
 import { createState, type MockApp, type MockState } from './state.js';
 
 // ssh2 is CommonJS: use the default export under native Node ESM.
@@ -37,6 +38,8 @@ export interface MockTvOptions {
   storeApps?: MockApp[];
   /** Also listen on this port like webOS's second-screen service (3000), so network scans find the TV. */
   ssapPort?: number;
+  /** Grant PTY requests (default true). False: shells run without one, like TVs that refuse pty-req. */
+  pty?: boolean;
 }
 
 export interface MockTv {
@@ -126,6 +129,21 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
 
       client.on('session', (acceptSession) => {
         const session = acceptSession();
+        let pty: PtyInfo | null = null;
+        let shell: ReturnType<typeof runInteractive> | null = null;
+        session.on('pty', (accept, reject, info) => {
+          if (opts.pty === false) return reject?.();
+          pty = { rows: info.rows, cols: info.cols, term: info.term };
+          accept?.();
+        });
+        session.on('window-change', (accept, _reject, info) => {
+          shell?.resize(info.rows, info.cols);
+          if (pty) Object.assign(pty, { rows: info.rows, cols: info.cols });
+          accept?.();
+        });
+        session.on('shell', (accept) => {
+          shell = runInteractive(accept(), state, pty);
+        });
         session.on('sftp', (acceptSftp, rejectSftp) => {
           if (opts.sftp === false) return rejectSftp();
           serveSftp(acceptSftp(), state);
