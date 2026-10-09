@@ -6,6 +6,7 @@ import { Footer } from './Footer';
 import { CommandPalette } from './CommandPalette';
 import { ConsoleDock } from '../console/ConsoleDock';
 import { useTvInfoRefresh } from '../devices/useTvInfoRefresh';
+import { PhoneNotice } from './PhoneNotice';
 
 export function Layout() {
   const [drawer, setDrawer] = useState(false);
@@ -44,6 +45,7 @@ export function Layout() {
       <div className="main">
         <Topbar onOpenDrawer={() => setDrawer(true)} onOpenPalette={() => setPalette(true)} />
         <main className="content">
+          {!pathname.startsWith('/bridge') && <PhoneNotice />}
           <Outlet />
         </main>
         <Footer />

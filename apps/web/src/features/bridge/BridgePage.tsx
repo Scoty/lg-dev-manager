@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, REPO_URL } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
+import { PhoneNotice } from '../../shell/PhoneNotice';
 import { Card } from '../../components/Card';
 import { Icon } from '../../shell/icons';
 import { useBridge } from '../../bridge/BridgeProvider';
@@ -60,6 +61,8 @@ export function BridgePage() {
         accent="bridge"
         sub="Browsers can't open SSH connections to your TV, so a small helper runs on your computer and does it for this page. It only accepts this website and needs a pairing token."
       />
+      {/* On the setup page the phone warning can't be dismissed: this is where people try to make it work. */}
+      <PhoneNotice always />
       <div className="grid">
         <Card eyebrow="Step 1" title="Run the bridge" className="col-6">
           <div className="stack">

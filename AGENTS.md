@@ -121,6 +121,7 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 | Hosting | GitHub Pages with custom domain **lg.scoty.uk** (Cloudflare DNS), public preview from now, v1.0 at M10 | Decided |
 | Repository | **github.com/Scoty/lg-dev-manager** | Decided |
 | Test devices | Owner tests on both Dev Mode (SSH 9922) and rooted (SSH 22) TVs | Decided |
-| Milestone order | M8 Litefin repo (all webOS variants of the last 5 releases), M9 phone research, M10 ship (owner, Oct 2026) | Decided |
+| Milestone order | M8 Litefin repo (all webOS variants of the last 5 releases), M9 phone research (skipped for now), M10 ship (owner, Oct 2026) | Decided |
+| Phones and tablets | Not supported. A notice (`shell/PhoneNotice.tsx`) explains that phone workarounds are risky and asks for a desktop or laptop (owner, Oct 2026) | Decided |
 | Litefin repo (M8) | The **bridge** reads Litefin's GitHub releases and installs a build chosen by tag + variant; the browser never sends a URL | Decided (M8) |
 | Homebrew repo access | The **bridge** fetches repo.webosbrew.org (index, descriptions, icons, IPKs) so the site's CSP needs no new hosts; descriptions are rendered from an allow-list, never as raw HTML | Decided (M4) |

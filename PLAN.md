@@ -6,7 +6,7 @@ hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS
 
 > **Status:** M7 (Debug tools) done — system log, log levels (PmLog), kernel log, crash reports and the luna bus monitor. All of §3 is in place.
 > M8 (Litefin repo) done — every webOS build of the last 5 Litefin releases, installable straight onto the TV.
-> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M9 (phones, research), then M10 (Ship).
+> Public preview deploys to lg.scoty.uk on every push to `main`. M9 (phones) is skipped for now: phones and tablets get a notice to use a computer instead. Next: M10 (Ship).
 
 ---
 
@@ -185,7 +185,7 @@ lg-dev-manager/
 | M6 ✅ | Info + Dev Mode renew + screenshot | TV details, session countdown + renew, screenshots. |
 | M7 ✅ | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
 | M8 ✅ | Litefin repo | **Apps → Litefin repo**: the last 5 Litefin releases from GitHub, every webOS variant installable straight from the page (see §8). |
-| M9 | Phones (research) | Find out how the site could be used from a phone without Node/npx — options, trade-offs, a recommendation for the owner to pick (see §9). No code until a choice is made. |
+| M9 ⏸ | Phones (research) | **Skipped for now** (owner, Oct 2026). Phones and tablets see a notice that the bridge must run on the same computer, that the phone workarounds are risky, and to use a desktop or laptop instead. The research notes stay in §9 for later. |
 | M10 | Ship | Bridge published to npm (`npx lg-dev-manager-bridge`), README with screenshots, "preview" label removed. |
 
 Scope is **full parity before release** (v1.0 at M10). The site at **lg.scoty.uk** is already public as a *preview*:
@@ -254,7 +254,11 @@ Legacy, newer ones run Modern best, and sometimes an older version is wanted.
 
 ---
 
-## 9. M9 — Phones (research)
+## 9. M9 — Phones (research) — skipped for now
+
+**Status (Oct 2026):** skipped by the owner. Instead, `apps/web/src/shell/PhoneNotice.tsx` shows phone and tablet users
+a warning on every page (dismissible for the session; always shown on the Bridge page) that explains the risk and asks
+them to use a computer. The notes below are kept in case this is picked up again.
 
 **The problem.** A phone's browser can open lg.scoty.uk, but it still needs a bridge to speak SSH to the TV, and today
 the bridge is a Node program (`npx`) on the same computer as the browser. Phones can't run that normally.

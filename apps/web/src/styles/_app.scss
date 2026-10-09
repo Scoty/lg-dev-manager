@@ -963,3 +963,7 @@ button.log-row:hover { background: var(--bg-hover); }
 .litefin-help { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: var(--bg-muted); font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; }
 .litefin-help p { margin: 0; }
 .litefin-help-list { margin: 0; padding-left: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 18px; }
+
+/* Phones and tablets: "use a computer" notice above the page. */
+.phone-notice { margin-bottom: 16px; }
+.phone-notice .alert { align-items: flex-start; }
