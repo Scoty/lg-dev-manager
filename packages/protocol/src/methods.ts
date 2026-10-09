@@ -5,6 +5,7 @@ import { ScanResult } from './console';
 import { RepoPackage, WebUrl } from './repo';
 import { FileItem, FileName, MAX_READ_CHUNK, RemotePath } from './files';
 import { CrashReportFile, LogSource, PmLogContext, PmLogLevel } from './debug';
+import { LitefinRelease, LitefinVariant } from './litefin';
 
 /**
  * Bumped when the wire contract changes in a way an older peer can't handle (including new methods the
@@ -15,8 +16,9 @@ import { CrashReportFile, LogSource, PmLogContext, PmLogLevel } from './debug';
  *  v5 — M5: files.*, shell.*, device.storage path
  *  v6 — M6: devmode.status, devmode.renew, device.screenshot
  *  v7 — M7: logs.*, pmlog.*, crashes.*
+ *  v8 — M8: litefin.list, litefin.install
  */
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 
 const base64 = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/, 'Not base64');
 
@@ -408,6 +410,27 @@ export const Methods = {
   'crashes.read': {
     params: z.object({ device: DeviceTarget, path: RemotePath }),
     result: z.object({ text: z.string(), truncated: z.boolean() }),
+  },
+  /**
+   * The latest Litefin releases with every webOS build (M8). The bridge fetches GitHub's release list itself and keeps
+   * it for a few minutes; `refresh` fetches it again.
+   */
+  'litefin.list': {
+    params: z.object({ refresh: z.boolean().optional() }).optional(),
+    result: z.object({
+      releases: z.array(LitefinRelease),
+      fetchedAt: z.number(),
+      /** Set when GitHub couldn't be reached and this is the list fetched earlier: why. */
+      stale: z.string().optional(),
+    }),
+  },
+  /**
+   * Install one build of a listed release: the bridge looks the file up in the list it fetched (the client never sends
+   * a URL), then installs it like a Homebrew repo app (Homebrew Channel, or the Dev Mode installer). Progress on `opId`.
+   */
+  'litefin.install': {
+    params: z.object({ device: DeviceTarget, tag: z.string().min(1).max(100), variant: LitefinVariant, opId: z.string().max(64) }),
+    result: z.object({ appId: z.string(), version: z.string(), via: z.enum(['devmode', 'hbchannel']) }),
   },
   /** Delete a crash report. Only files in the crash folders. */
   'crashes.delete': {

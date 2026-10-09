@@ -32,6 +32,7 @@ export const NAV: NavSection[] = [
         children: [
           { key: 'apps-installed', text: 'Installed', to: '/apps/installed' },
           { key: 'apps-homebrew', text: 'Homebrew repo', to: '/apps/homebrew' },
+          { key: 'apps-litefin', text: 'Litefin repo', to: '/apps/litefin' },
         ],
       },
       { key: 'files', text: 'Files', icon: 'files', to: '/files' },

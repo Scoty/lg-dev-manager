@@ -174,55 +174,12 @@ export class RepoClient {
    * Download a manifest's IPK into memory (counted against the bridge's upload budget), checking its size and
    * sha256. Returns the data and a function that releases the budget.
    */
-  async download(manifest: RepoManifest, progress?: Progress, trace: HttpTrace = untraced): Promise<{ data: Buffer; sha256: string; done: () => void }> {
-    const url = new URL(manifest.ipkUrl);
-    const expected = manifest.ipkHash?.sha256.toLowerCase();
-    // The budget grows with the bytes actually received, so a missing or wrong content-length can't dodge it.
-    const frees: (() => void)[] = [];
-    const done = () => frees.splice(0).forEach((f) => f());
-    const data = await trace(url.host, `GET ${url.href}`, async () => {
-      try {
-        const res = await this.safeGet(url.href, 300_000).catch((e: Error) => {
-          if (e instanceof RpcError) throw e;
-          throw new RpcError(RepoErrorCodes.DownloadFailed, `Couldn't download ${manifest.id}.`, e.message);
-        });
-        if (!res.ok || !res.body) {
-          await res.body?.cancel().catch(() => {});
-          throw new RpcError(RepoErrorCodes.DownloadFailed, `Couldn't download ${manifest.id} (HTTP ${res.status}).`, url.href);
-        }
-        // content-length is the compressed size when the response is encoded: only trust it for plain bodies.
-        const encoded = !!res.headers.get('content-encoding') && res.headers.get('content-encoding') !== 'identity';
-        const length = (!encoded && Number(res.headers.get('content-length'))) || manifest.ipkSize || 0;
-        if (length > MAX_UPLOAD_BYTES) {
-          await res.body.cancel().catch(() => {});
-          throw tooBig(manifest.id);
-        }
-        return await readBody(res, MAX_UPLOAD_BYTES, (got, chunk) => {
-          frees.push(this.budget.reserve(chunk));
-          progress?.({
-            stage: 'upload',
-            percent: length ? Math.min(100, Math.floor((got / length) * 100)) : undefined,
-            text: 'Downloading the IPK…',
-          });
-        }).catch((e: Error) => {
-          if (e instanceof RpcError) throw e;
-          throw new RpcError(RepoErrorCodes.DownloadFailed, `Couldn't download ${manifest.id}.`, e.message);
-        });
-      } catch (e) {
-        done();
-        throw e;
-      }
-    });
-    const sha256 = createHash('sha256').update(data).digest('hex');
-    if (expected && sha256 !== expected) {
-      done();
-      throw new RpcError(
-        AppsErrorCodes.ChecksumMismatch,
-        `The downloaded IPK for ${manifest.id} doesn't match the repository's checksum.`,
-        `expected ${expected}, got ${sha256}`,
-      );
-    }
-    return { data, sha256, done };
+  download(manifest: RepoManifest, progress?: Progress, trace: HttpTrace = untraced): Promise<{ data: Buffer; sha256: string; done: () => void }> {
+    return downloadIpk(
+      { url: manifest.ipkUrl, id: manifest.id, size: manifest.ipkSize, sha256: manifest.ipkHash?.sha256, budget: this.budget, trustedOrigin: this.origin, checksumFrom: 'the repository’s' },
+      progress,
+      trace,
+    );
   }
 
   private load(refresh: boolean, trace: HttpTrace): Promise<Index> {
@@ -268,23 +225,8 @@ export class RepoClient {
     return fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(timeoutMs), headers: { accept: '*/*' } });
   }
 
-  /**
-   * GET a URL that came from an app entry (icons, screenshots, IPKs): http(s) only, redirects followed by hand,
-   * and every hop outside the repository itself must be a public address — no loopback, LAN or link-local.
-   */
-  private async safeGet(href: string, timeoutMs: number): Promise<Response> {
-    const signal = AbortSignal.timeout(timeoutMs);
-    let url = new URL(href);
-    for (let hop = 0; ; hop++) {
-      if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new RpcError(RepoErrorCodes.BadResponse, 'Only http(s) links can be fetched.', url.href);
-      if (url.origin !== this.origin) await assertPublicHost(url);
-      const res = await fetch(url, { redirect: 'manual', signal, headers: { accept: '*/*' } });
-      const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
-      if (!location) return res;
-      await res.body?.cancel().catch(() => {});
-      if (hop >= MAX_REDIRECTS) throw new RpcError(RepoErrorCodes.BadResponse, 'Too many redirects.', href);
-      url = new URL(location, url);
-    }
+  private safeGet(href: string, timeoutMs: number): Promise<Response> {
+    return safeGet(href, timeoutMs, this.origin);
   }
 
   /** GET from the repository itself: refuses redirects to other sites. */
@@ -303,6 +245,85 @@ export class RepoClient {
   }
 }
 
+/**
+ * GET a URL that came from an app entry or a release list (icons, screenshots, IPKs): http(s) only, redirects followed
+ * by hand, and every hop outside `trustedOrigin` (the configured source itself) must be a public address — no
+ * loopback, LAN or link-local.
+ */
+export async function safeGet(href: string, timeoutMs: number, trustedOrigin?: string): Promise<Response> {
+  const signal = AbortSignal.timeout(timeoutMs);
+  let url = new URL(href);
+  for (let hop = 0; ; hop++) {
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new RpcError(RepoErrorCodes.BadResponse, 'Only http(s) links can be fetched.', url.href);
+    if (url.origin !== trustedOrigin) await assertPublicHost(url);
+    const res = await fetch(url, { redirect: 'manual', signal, headers: { accept: '*/*' } });
+    const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+    if (!location) return res;
+    await res.body?.cancel().catch(() => {});
+    if (hop >= MAX_REDIRECTS) throw new RpcError(RepoErrorCodes.BadResponse, 'Too many redirects.', href);
+    url = new URL(location, url);
+  }
+}
+
+/**
+ * Download an IPK into memory (counted against the bridge's upload budget), checking its size and, when known, its
+ * sha256. Returns the data and a function that releases the budget.
+ */
+export async function downloadIpk(
+  o: { url: string; id: string; size?: number; sha256?: string; budget: UploadBudget; trustedOrigin?: string; checksumFrom: string },
+  progress?: Progress,
+  trace: HttpTrace = untraced,
+): Promise<{ data: Buffer; sha256: string; done: () => void }> {
+  const url = new URL(o.url);
+  const expected = o.sha256?.toLowerCase();
+  // The budget grows with the bytes actually received, so a missing or wrong content-length can't dodge it.
+  const frees: (() => void)[] = [];
+  const done = () => frees.splice(0).forEach((f) => f());
+  const data = await trace(url.host, `GET ${url.href}`, async () => {
+    try {
+      const res = await safeGet(url.href, 300_000, o.trustedOrigin).catch((e: Error) => {
+        if (e instanceof RpcError) throw e;
+        throw new RpcError(RepoErrorCodes.DownloadFailed, `Couldn't download ${o.id}.`, e.message);
+      });
+      if (!res.ok || !res.body) {
+        await res.body?.cancel().catch(() => {});
+        throw new RpcError(RepoErrorCodes.DownloadFailed, `Couldn't download ${o.id} (HTTP ${res.status}).`, url.href);
+      }
+      // content-length is the compressed size when the response is encoded: only trust it for plain bodies.
+      const encoded = !!res.headers.get('content-encoding') && res.headers.get('content-encoding') !== 'identity';
+      const length = (!encoded && Number(res.headers.get('content-length'))) || o.size || 0;
+      if (length > MAX_UPLOAD_BYTES) {
+        await res.body.cancel().catch(() => {});
+        throw tooBig(o.id);
+      }
+      return await readBody(res, MAX_UPLOAD_BYTES, (got, chunk) => {
+        frees.push(o.budget.reserve(chunk));
+        progress?.({
+          stage: 'upload',
+          percent: length ? Math.min(100, Math.floor((got / length) * 100)) : undefined,
+          text: 'Downloading the IPK…',
+        });
+      }).catch((e: Error) => {
+        if (e instanceof RpcError) throw e;
+        throw new RpcError(RepoErrorCodes.DownloadFailed, `Couldn't download ${o.id}.`, e.message);
+      });
+    } catch (e) {
+      done();
+      throw e;
+    }
+  });
+  const sha256 = createHash('sha256').update(data).digest('hex');
+  if (expected && sha256 !== expected) {
+    done();
+    throw new RpcError(
+      AppsErrorCodes.ChecksumMismatch,
+      `The downloaded IPK for ${o.id} doesn't match ${o.checksumFrom} checksum.`,
+      `expected ${expected}, got ${sha256}`,
+    );
+  }
+  return { data, sha256, done };
+}
+
 async function assertPublicHost(url: URL) {
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const addresses = isIP(host) ? [host] : (await lookup(host, { all: true }).catch(() => [])).map((a) => a.address);
@@ -315,7 +336,7 @@ async function assertPublicHost(url: URL) {
 const tooBig = (id: string) => new RpcError(AppsErrorCodes.UploadTooLarge, `${id} is larger than the bridge can download (${MAX_UPLOAD_BYTES / 1024 / 1024} MB).`);
 
 /** Read a body up to `maxBytes`. `onChunk` may throw (e.g. the budget is full); the download is then cancelled. */
-async function readBody(res: Response, maxBytes: number, onChunk?: (got: number, chunk: number) => void): Promise<Buffer> {
+export async function readBody(res: Response, maxBytes: number, onChunk?: (got: number, chunk: number) => void): Promise<Buffer> {
   if (!res.body) return Buffer.alloc(0);
   const chunks: Buffer[] = [];
   let got = 0;

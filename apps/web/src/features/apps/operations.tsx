@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { APP_ID_HBCHANNEL, AppsErrorCodes, RepoErrorCodes, type AppInfo, type OpProgress, type RepoPackage } from '@lgdm/protocol';
+import { APP_ID_HBCHANNEL, AppsErrorCodes, LitefinErrorCodes, RepoErrorCodes, type AppInfo, type OpProgress, type RepoPackage } from '@lgdm/protocol';
 import { newOpId, onOpProgress, uploadToBridge, useRpc } from '../../bridge/useRpc';
 import { BridgeError } from '../../bridge/client';
 import { Modal } from '../../components/Modal';
@@ -49,7 +49,7 @@ function installHint(e: unknown) {
   if (code === AppsErrorCodes.InstallFailed) return 'The TV rejected the package. Check that it is a webOS IPK made for this TV.';
   if (code === AppsErrorCodes.ChecksumMismatch) return 'The download or the copy to the TV was damaged. Try again; if it keeps failing, the repository entry may be broken.';
   if (code === AppsErrorCodes.Conflict) return 'An app with the same id came from the LG Content Store (or is built in). Uninstall that one on the TV first.';
-  if (code === RepoErrorCodes.DownloadFailed || code === RepoErrorCodes.Unreachable) return 'Check this computer’s internet connection and try again.';
+  if (code === RepoErrorCodes.DownloadFailed || code === RepoErrorCodes.Unreachable || code === LitefinErrorCodes.Unreachable) return 'Check this computer’s internet connection and try again.';
   return null;
 }
 
@@ -141,16 +141,34 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
       });
       if (!ok) return false;
     }
-    const opId = newOpId();
     const verb = opts.update ? 'Updating' : channel === 'beta' ? 'Installing the beta of' : 'Installing';
-    setOp({ kind: 'repo', verb, subject: pkg.title, phase: 'copy', text: 'Starting…' });
+    const target = toTarget(device);
+    return runWebInstall(verb, pkg.title, (opId) => client.call('apps.installFromRepo', { device: target, id: pkg.id, channel, opId }, 20 * 60_000));
+  };
+
+  /** Install one build of a Litefin release from GitHub (M8). */
+  const installLitefin = async (tag: string, variant: string, subject: string) => {
+    if (!device || !client || running) return false;
+    const target = toTarget(device);
+    return runWebInstall('Installing', subject, (opId) => client.call('litefin.install', { device: target, tag, variant, opId }, 20 * 60_000));
+  };
+
+  /** An install the bridge downloads from the web (Homebrew repo, Litefin), with the progress dialog. */
+  const runWebInstall = async (
+    verb: string,
+    subject: string,
+    run: (opId: string) => Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel' }>,
+  ) => {
+    if (!device || !client) return false;
+    const opId = newOpId();
+    setOp({ kind: 'repo', verb, subject, phase: 'copy', text: 'Starting…' });
     const off = onOpProgress(client, opId, (p) => {
       if (p.stage === 'cleanup') return;
       const phase = phaseOf(p.stage);
       setOp((s) => (s && !s.done && s.error === undefined ? { ...s, phase, percent: p.percent, text: p.text } : s));
     });
     try {
-      const res = await client.call('apps.installFromRepo', { device: toTarget(device), id: pkg.id, channel, opId }, 20 * 60_000);
+      const res = await run(opId);
       setOp((s) => (s ? { ...s, done: res } : s));
       refresh(device);
       return true;
@@ -297,5 +315,5 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
     </Modal>
   );
 
-  return { install, installFromRepo, remove, launch, busy: running, dialog };
+  return { install, installFromRepo, installLitefin, remove, launch, busy: running, dialog };
 }

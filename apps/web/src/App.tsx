@@ -14,6 +14,7 @@ import { SyslogPage, DmesgPage } from './features/debug/LogPages';
 import { PmLogPage } from './features/debug/PmLogPage';
 import { CrashesPage } from './features/debug/CrashesPage';
 import { LunaMonitorPage } from './features/debug/LunaMonitorPage';
+import { LitefinPage } from './features/litefin/LitefinPage';
 import { InfoPage } from './features/info/InfoPage';
 
 /** A fresh wizard on every visit, including "Add a TV" clicked while already on the page. */
@@ -46,6 +47,7 @@ export function App() {
                 <Route path="apps" element={<Navigate to="/apps/installed" replace />} />
                 <Route path="apps/installed" element={<InstalledAppsPage />} />
                 <Route path="apps/homebrew" element={<RepoPage />} />
+                <Route path="apps/litefin" element={<LitefinPage />} />
                 <Route path="files" element={<FilesPage />} />
                 <Route path="terminal" element={<TerminalPage />} />
                 <Route path="info" element={<InfoPage />} />

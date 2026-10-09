@@ -305,6 +305,27 @@ export async function installFromRepo(
   if (!manifest) {
     throw new RpcError(RepoErrorCodes.NoManifest, `${pkg.title} has no ${channel === 'beta' ? 'beta' : 'release'} to install.`);
   }
+  return installDownloadable(
+    pool,
+    device,
+    { id: pkg.id, title: pkg.title, version: manifest.version, ipkUrl: manifest.ipkUrl, sha256: manifest.ipkHash?.sha256 },
+    () => repo.download(manifest, progress, trace),
+    progress,
+  );
+}
+
+/**
+ * Install an IPK that lives on the web (installPackage in apps.component.ts): refuse when a store or system app has the
+ * id; on a TV with Homebrew Channel let it download and install the URL itself; otherwise (or if that fails for a
+ * reason other than the installer) download it here and use the Dev Mode installer.
+ */
+export async function installDownloadable(
+  pool: SshRunner,
+  device: DeviceTarget,
+  pkg: { id: string; title: string; version: string; ipkUrl: string; sha256?: string },
+  download: () => Promise<{ data: Buffer; sha256: string; done: () => void }>,
+  progress?: Progress,
+): Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel' }> {
   const location = await findInstallLocation(pool, device, pkg.id).catch(() => null);
   if (location && location !== 'developer') {
     throw new RpcError(
@@ -314,10 +335,22 @@ export async function installFromRepo(
         : `Another app with the same id (${pkg.id}) is already installed. If it came from the LG Content Store, uninstall it first.`,
     );
   }
+  // Homebrew Channel's installer insists on a checksum: without one, download here and install from a local copy
+  // (installIpk still uses Homebrew Channel when present, so root is kept).
+  if (!pkg.sha256) {
+    progress?.({ stage: 'upload', text: 'Downloading the IPK…' });
+    const { data, done } = await download();
+    try {
+      const res = await installIpk(pool, device, `${pkg.id}.ipk`, data, progress);
+      return { appId: res.appId || pkg.id, version: pkg.version, via: res.via };
+    } finally {
+      done();
+    }
+  }
   if (await hasHbChannel(pool, device)) {
     try {
-      await hbInstallUrl(pool, device, manifest.ipkUrl, manifest.ipkHash?.sha256, 'The TV is downloading the IPK…', progress);
-      return { appId: pkg.id, version: manifest.version, via: 'hbchannel' };
+      await hbInstallUrl(pool, device, pkg.ipkUrl, pkg.sha256, 'The TV is downloading the IPK…', progress);
+      return { appId: pkg.id, version: pkg.version, via: 'hbchannel' };
     } catch (e) {
       // Like installByManifest: retry with the dev install unless the installer ran out of space, and never for
       // Homebrew Channel itself.
@@ -325,10 +358,10 @@ export async function installFromRepo(
     }
   }
   progress?.({ stage: 'upload', text: 'Downloading the IPK…' });
-  const { data, sha256, done } = await repo.download(manifest, progress, trace);
+  const { data, sha256, done } = await download();
   try {
     const appId = await devInstall(pool, device, data, sha256, progress);
-    return { appId: appId || pkg.id, version: manifest.version, via: 'devmode' };
+    return { appId: appId || pkg.id, version: pkg.version, via: 'devmode' };
   } finally {
     done();
   }

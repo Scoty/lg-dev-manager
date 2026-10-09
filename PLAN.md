@@ -5,7 +5,8 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS).
 
 > **Status:** M7 (Debug tools) done — system log, log levels (PmLog), kernel log, crash reports and the luna bus monitor. All of §3 is in place.
-> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M8 (Litefin repo), then M9 (phones), then M10 (Ship).
+> M8 (Litefin repo) done — every webOS build of the last 5 Litefin releases, installable straight onto the TV.
+> Public preview deploys to lg.scoty.uk on every push to `main`. Next: M9 (phones, research), then M10 (Ship).
 
 ---
 
@@ -183,7 +184,7 @@ lg-dev-manager/
 | M5 ✅ | Files + Terminal | SFTP browser with upload/download; xterm PTY. |
 | M6 ✅ | Info + Dev Mode renew + screenshot | TV details, session countdown + renew, screenshots. |
 | M7 ✅ | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
-| M8 | Litefin repo | **Apps → Litefin repo**: the last 5 Litefin releases from GitHub, every webOS variant installable straight from the page (see §8). |
+| M8 ✅ | Litefin repo | **Apps → Litefin repo**: the last 5 Litefin releases from GitHub, every webOS variant installable straight from the page (see §8). |
 | M9 | Phones (research) | Find out how the site could be used from a phone without Node/npx — options, trade-offs, a recommendation for the owner to pick (see §9). No code until a choice is made. |
 | M10 | Ship | Bridge published to npm (`npx lg-dev-manager-bridge`), README with screenshots, "preview" label removed. |
 
@@ -216,43 +217,40 @@ Recorded in the AGENTS.md "Decisions" table.
 
 ---
 
-## 8. M8 — Litefin repo
+## 8. M8 — Litefin repo ✅
 
 **Why.** [Litefin](https://github.com/MoazSalem/litefin) (a lightweight Jellyfin client) publishes several webOS builds per
-release — `Litefin-<version>-webOS-Modern.ipk`, `…-Normal.ipk`, `…-Legacy.ipk`, `…-Ultra-Legacy-NoService.ipk` — but the
-Homebrew repository can only carry one (the current Normal build). Older TVs need Legacy / Ultra Legacy, newer ones run
-Modern best, and sometimes an older version is wanted.
+release — `Litefin-<version>-webOS-Modern.ipk`, `…-Normal.ipk`, `…-Legacy.ipk`, `…-Ultra-Legacy.ipk`,
+`…-Ultra-Legacy-NoService.ipk` — but the Homebrew repository can only carry one of them. Older TVs need Legacy / Ultra
+Legacy, newer ones run Modern best, and sometimes an older version is wanted.
 
-**What.**
-- New sidebar entry **Apps → Litefin repo** (`/apps/litefin`), next to Installed and Homebrew repo.
-- The **last 5 releases**, newest first, from `https://github.com/MoazSalem/litefin/releases` — published releases only
-  (no drafts, no pre-releases).
-- One row per release (version, date, release notes link), one **column per variant**: Modern · Normal · Legacy ·
-  Ultra Legacy (other webOS variants that show up, e.g. `-NoService`, get their own column or a note; Tizen `.wgt` files
-  are ignored). A cell is empty when that release has no such build.
-- Each cell: **Install** straight onto the active TV (no download to the computer first), plus the file size. The bridge
-  downloads the IPK and installs it the same way as Homebrew repo installs (Dev Mode installer, or Homebrew Channel on
-  rooted TVs), with the same progress dialog.
-- Variant help from the release notes: Modern — webOS 22+ (2021+ sets); Normal — webOS 6+ (2019+), *try this first*;
-  Legacy — webOS 3+ (2017/2018); Ultra Legacy — webOS 1/2 (pre-2017). The TV's own webOS version (known from
-  `device.info`) highlights the suggested column.
-- Shows which Litefin version is installed on the TV (`apps.list`), and marks that version as installed. All variants share
-  one app id, so installing another variant replaces the current one — the UI says so before installing.
+**What (as built).**
+- Sidebar **Apps → Litefin repo** (`/apps/litefin`).
+- The **last 5 published releases** (no drafts, no pre-releases or `-beta`/`-rc` tags), newest first, one row each
+  (version, date, release-notes link, Latest / Installed badges) and **one column per webOS build**, in the release
+  notes' order: Modern · Normal · Legacy · Ultra Legacy · Ultra Legacy (no service), unknown variants after. Tizen files,
+  `manifest.json` and files hosted anywhere else are ignored; a cell shows “—” when a release has no such build.
+- **Install** in every cell, straight onto the active TV, with the file size; same progress dialog as the Homebrew repo.
+  Installing over an installed Litefin asks first (all builds share the app id `org.litefin.app`, so it replaces it,
+  and it says when it is a downgrade).
+- The status line shows the installed Litefin version and whether a newer one is out. The **suggested build** for the TV
+  is highlighted from its webOS version, by the release notes' TV years: webOS 22+ → Modern, webOS 5/6 → Normal,
+  webOS 4 → Legacy, older → Ultra Legacy. A "Which build?" box repeats the release notes' guidance.
 
-**How (bridge, keeping the security rules).**
-- New RPCs `litefin.list` and `litefin.install` (or `apps.installFromUrl` restricted to this source). The bridge fetches
-  `api.github.com/repos/MoazSalem/litefin/releases` itself — the site's CSP needs no new hosts, and the browser never
-  sends the bridge an arbitrary URL: the bridge only downloads asset URLs it got from that API, and only from
-  `github.com/MoazSalem/litefin/releases/download/…` (following GitHub's redirect to its release-asset host).
-- Cache the release list in memory for ~10 minutes (GitHub allows 60 unauthenticated API calls per hour per IP).
-- Verify each download against the asset's `digest` (sha256) when GitHub provides one, and check it is an IPK
-  (`ar` archive with a `control.tar.gz`) before installing — same checks as Homebrew repo installs.
-- Mock: a fake GitHub releases API in `tools/mock-tv` (`LGDM_LITEFIN_URL`), with pre-releases, drafts, missing variants,
-  a bad checksum and more than 5 releases, so the filtering is tested.
-- Tests: bridge integration tests (filtering, variant parsing, checksum, install) and a Playwright test of the page.
-
-**To decide while building.** Whether to make the source configurable (other GitHub projects with several builds) —
-default: Litefin only, built so another source can be added later.
+**How.**
+- RPCs `litefin.list` (cached 10 minutes; a refresh button asks again) and `litefin.install` (`tag` + `variant` only — the
+  browser never sends a URL). The bridge reads `api.github.com/repos/MoazSalem/litefin/releases?per_page=100` itself, so
+  the site's CSP needs no new host, and only downloads files listed there whose URL is exactly
+  `github.com/MoazSalem/litefin/releases/download/<tag>/<file>` (GitHub's redirect to its file host must be a public
+  address, like Homebrew repo downloads).
+- Downloads are checked against GitHub's sha256 `digest` when the release has one. On rooted TVs Homebrew Channel
+  downloads and installs the file itself (with that checksum); without a digest the bridge downloads it and installs a
+  local copy. Otherwise the Dev Mode installer, as for the Homebrew repo (shared `installDownloadable` / `downloadIpk`).
+- GitHub's rate limit (60 calls an hour per network) is reported in words; when GitHub can't be reached the last list
+  is still shown, marked as from earlier.
+- Mock: `tools/mock-tv/src/github.ts` (`startMockGithub`, bridge env `LGDM_LITEFIN_URL`) with a pre-release, a draft,
+  more than five releases, a release missing builds, a wrong digest, a build without a digest, an odd `v.1.5.1` tag
+  and files hosted elsewhere. Tests: `apps/bridge/src/litefin.test.ts`, `apps/web/e2e/litefin.spec.ts`.
 
 ---
 

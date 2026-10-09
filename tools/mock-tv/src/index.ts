@@ -18,6 +18,7 @@ export { MOCK_APPS, MOCK_DEVMODE_TOKEN, MOCK_STORE_APPS, devApp, storeApp, fakeI
 export { MOCK_REPO_APPS, startMockRepo, type MockRepo, type MockRepoApp } from './repo.js';
 export { startMockLge, type MockLge } from './lge.js';
 export { CRASH_DIR, SYSLOG, type DebugState } from './debug.js';
+export { LITEFIN_MOCK_APP_ID, MOCK_LITEFIN_RELEASES, startMockGithub, type MockGithub, type MockLitefinRelease } from './github.js';
 
 export interface MockTvOptions {
   /** `prisoner` (Dev Mode) or `root` (rooted). */

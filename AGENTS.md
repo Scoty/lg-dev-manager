@@ -87,9 +87,10 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 - Keep e2e fast: set up TVs with `addDevModeTv` / `addRootedTv` (saved straight into the browser's store); only tests about
   the add-device wizard use `addDevModeTvWithWizard` / `addRootedTvWithWizard`. No fixed waits (`waitForTimeout`).
 - User flows that touch the TV get a Playwright test against the mock TVs (`apps/web/e2e/devices-apps.spec.ts`,
-  `repo.spec.ts`, `files-terminal.spec.ts`, `info.spec.ts`, `debug.spec.ts`). The rig's TVs are shared by parallel tests, so each test uses app ids no other test touches.
+  `repo.spec.ts`, `files-terminal.spec.ts`, `info.spec.ts`, `debug.spec.ts`, `litefin.spec.ts`). The rig's TVs are shared by parallel tests, so each test uses app ids no other test touches.
 - Debug tools on the mock TV (followed logs, `PmLogCtl`, `ls-monitor -j`, crash reports) live in `tools/mock-tv/src/debug.ts`;
   followed logs run until the client closes the channel.
+- Litefin's GitHub releases are faked by `tools/mock-tv/src/github.ts` (`startMockGithub`, bridge env `LGDM_LITEFIN_URL`).
 - LG's Developer Mode session service is faked by `tools/mock-tv/src/lge.ts` (`startMockLge`, bridge env `LGDM_LGE_URL`).
 - The Homebrew repository is faked by `tools/mock-tv/src/repo.ts` (`startMockRepo`); point a bridge at it with
   `LGDM_REPO_URL`. Add catalogue entries there for new repo states.
@@ -121,4 +122,5 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 | Repository | **github.com/Scoty/lg-dev-manager** | Decided |
 | Test devices | Owner tests on both Dev Mode (SSH 9922) and rooted (SSH 22) TVs | Decided |
 | Milestone order | M8 Litefin repo (all webOS variants of the last 5 releases), M9 phone research, M10 ship (owner, Oct 2026) | Decided |
+| Litefin repo (M8) | The **bridge** reads Litefin's GitHub releases and installs a build chosen by tag + variant; the browser never sends a URL | Decided (M8) |
 | Homebrew repo access | The **bridge** fetches repo.webosbrew.org (index, descriptions, icons, IPKs) so the site's CSP needs no new hosts; descriptions are rendered from an allow-list, never as raw HTML | Decided (M4) |

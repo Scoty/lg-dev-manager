@@ -148,16 +148,24 @@ export const SUBSCRIPTIONS: Record<string, LunaSubscription> = {
     yield { returnValue: true, subscribed: true, statusText: 'Downloading…' };
     let data: Buffer;
     try {
-      data = await new Promise<Buffer>((resolve, reject) => {
-        const req = get(String(p.ipkUrl), { signal }, (res) => {
-          if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
-          const chunks: Buffer[] = [];
-          res.on('data', (c: Buffer) => chunks.push(c));
-          res.on('end', () => resolve(Buffer.concat(chunks)));
-          res.on('error', reject);
+      // Follows redirects, like the real service's fetch (GitHub release files redirect to their file host).
+      const fetchOnce = (url: string, hops: number): Promise<Buffer> =>
+        new Promise<Buffer>((resolve, reject) => {
+          const req = get(url, { signal }, (res) => {
+            const loc = res.headers.location;
+            if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && loc && hops < 5) {
+              res.resume();
+              return resolve(fetchOnce(new URL(loc, url).toString(), hops + 1));
+            }
+            if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
+            const chunks: Buffer[] = [];
+            res.on('data', (c: Buffer) => chunks.push(c));
+            res.on('end', () => resolve(Buffer.concat(chunks)));
+            res.on('error', reject);
+          });
+          req.on('error', reject);
         });
-        req.on('error', reject);
-      });
+      data = await fetchOnce(String(p.ipkUrl), 0);
     } catch (e) {
       yield { returnValue: false, errorText: `Download failed: ${(e as Error).message}` };
       return;

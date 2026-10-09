@@ -6,6 +6,7 @@ import {
   CMD_OUTPUT_EVENT,
   DeviceErrorCodes,
   ErrorCodes,
+  LITEFIN_APP_ID,
   LOG_LINES_EVENT,
   type LogLines,
   KEY_SERVER_PORT,
@@ -29,8 +30,9 @@ import { fetchKey } from '../devices/keyserver.js';
 import { checkConnection } from '../devices/ports.js';
 import { deviceInfo, generateKey, storageInfo, takeScreenshot } from '../devices/info.js';
 import { DEFAULT_LGE_URL, devModeStatus, renewDevMode } from '../devices/devmode.js';
-import { appIcon, hbChannelConfig, installFromRepo, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
+import { appIcon, hbChannelConfig, installDownloadable, installFromRepo, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
 import type { HttpTrace, RepoClient } from '../repo/repo.js';
+import type { LitefinClient } from '../litefin/litefin.js';
 import type { ShellSessions } from '../shell/shells.js';
 import { homeDir, listDir, makeDir, readChunk, removePath, renameFile, statFile, writeFile } from '../files/files.js';
 import type { UploadStore } from './uploads.js';
@@ -86,6 +88,8 @@ export interface Context {
   token: string;
   pool: SshPool;
   repo: RepoClient;
+  /** Litefin's GitHub releases (LGDM_LITEFIN_URL overrides, for tests). */
+  litefin: LitefinClient;
   /** LG's Developer Mode session service (LGDM_LGE_URL overrides, for tests). */
   lgeUrl?: string;
 }
@@ -278,6 +282,20 @@ export const handlers: HandlerMap = {
 
   'apps.installFromRepo': ({ device, id, channel, opId }, session, ctx) =>
     installFromRepo(sshFor(session, ctx), ctx.repo, device, id, channel ?? 'stable', progressFor(session, opId), httpTraceFor(session)),
+
+  'litefin.list': (params, session, { litefin }) => litefin.list({ refresh: params?.refresh, trace: httpTraceFor(session) }),
+  'litefin.install': async ({ device, tag, variant, opId }, session, ctx) => {
+    const progress = progressFor(session, opId);
+    const trace = httpTraceFor(session);
+    const { release, asset, url, fetch } = await ctx.litefin.download(tag, variant, progress, trace);
+    return installDownloadable(
+      sshFor(session, ctx),
+      device,
+      { id: LITEFIN_APP_ID, title: `Litefin ${release.version} (${asset.variant.replace(/-/g, ' ')})`, version: release.version, ipkUrl: url, sha256: asset.sha256 },
+      fetch,
+      progress,
+    );
+  },
 
   'repo.list': ({ refresh }, session, { repo }) => repo.list({ refresh, trace: httpTraceFor(session, true) }),
   'repo.image': ({ url }, session, { repo }) => repo.image(url, httpTraceFor(session, true)),

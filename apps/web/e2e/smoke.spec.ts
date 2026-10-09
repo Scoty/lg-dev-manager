@@ -11,6 +11,7 @@ const PAGES: [path: string, heading: RegExp][] = [
   ['/devices/new', /Add a\s*TV/],
   ['/apps/installed', /Installed\s*apps/],
   ['/apps/homebrew', /Homebrew\s*repository/],
+  ['/apps/litefin', /Litefin\s*repo/],
   ['/files', /^Files/],
   ['/terminal', /^Terminal/],
   ['/info', /Device\s*info/],

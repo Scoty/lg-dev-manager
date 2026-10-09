@@ -7,6 +7,7 @@
  *  - a fake Homebrew repository on 127.0.0.1:5298 (tools/mock-tv/src/repo.ts) the bridge uses instead of
  *    repo.webosbrew.org,
  *  - a fake LG Developer Mode session service (developer.lge.com) knowing the Dev Mode TV's token,
+ *  - a fake GitHub serving Litefin's releases (tools/mock-tv/src/github.ts) on 127.0.0.1:5297,
  *  - the bridge on 127.0.0.1:5299 serving the built web UI (apps/web/dist), pairing token "e2e-token".
  * Run with: pnpm --filter @lgdm/web e2e:server
  */
@@ -14,7 +15,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MOCK_DEVMODE_TOKEN, startMockLge, startMockRepo, startMockTv } from '@lgdm/mock-tv';
+import { MOCK_DEVMODE_TOKEN, startMockGithub, startMockLge, startMockRepo, startMockTv } from '@lgdm/mock-tv';
 import { startServer } from '../../bridge/src/server.js';
 
 export const E2E = {
@@ -24,6 +25,7 @@ export const E2E = {
   rootedPort: 2222,
   noPtyPort: 2223,
   repoPort: Number(process.env.E2E_REPO_PORT ?? 5298),
+  githubPort: Number(process.env.E2E_GITHUB_PORT ?? 5297),
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -37,6 +39,7 @@ const noPtyTv = await startMockTv({ username: 'root', password: 'alpine', pty: f
 // Followed logs tick faster than on a real TV, so tests waiting for new lines finish sooner.
 for (const tv of [devTv, rootTv, noPtyTv]) tv.state.debug.every = 150;
 const repo = await startMockRepo({ port: E2E.repoPort });
+const github = await startMockGithub({ port: E2E.githubPort });
 const lge = await startMockLge({ tokens: { [MOCK_DEVMODE_TOKEN]: (742 * 3600 + 15 * 60) * 1000 } });
 // Launching the Developer Mode app with { extend: true } resets the session at LG, like on a real TV.
 devTv.state.onDevmodeExtend = () => lge.sessions.set(MOCK_DEVMODE_TOKEN, Date.now() + 1000 * 3600 * 1000);
@@ -49,6 +52,7 @@ await startServer({
   webRoot: join(here, '..', 'dist'),
   repoUrl: repo.url,
   lgeUrl: lge.url,
+  litefinUrl: github.url,
   dev: true,
 });
 
@@ -57,3 +61,4 @@ console.log(`  Dev Mode TV 127.0.0.1:${devTv.sshPort} (key server ${devTv.keySer
 console.log(`  Rooted TV   127.0.0.1:${rootTv.sshPort} (root / alpine, Homebrew Channel)`);
 console.log(`  No-PTY TV   127.0.0.1:${noPtyTv.sshPort} (root / alpine, refuses PTYs)`);
 console.log(`  Repository  ${repo.url} (fake Homebrew repo, ${repo.apps.length} apps)`);
+console.log(`  Litefin     ${github.url} (fake GitHub releases)`);

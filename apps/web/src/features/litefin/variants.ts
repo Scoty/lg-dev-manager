@@ -1,0 +1,59 @@
+import type { LitefinRelease } from '@lgdm/protocol';
+
+/**
+ * Litefin's webOS builds, from its release notes ("Which version to use?", .github/RELEASE_NOTES_FOOTER.md in
+ * MoazSalem/litefin): one per hardware generation.
+ */
+export interface VariantInfo {
+  label: string;
+  /** Who it is for, in the release notes' words. */
+  target: string;
+  webos: string;
+}
+
+export const KNOWN_VARIANTS: Record<string, VariantInfo> = {
+  Modern: { label: 'Modern', target: 'High-end 2021+ TVs', webos: 'webOS 22+' },
+  Normal: { label: 'Normal', target: 'Most 2019+ TVs', webos: 'webOS 5+' },
+  Legacy: { label: 'Legacy', target: '2017–2018 TVs', webos: 'webOS 4' },
+  'Ultra-Legacy': { label: 'Ultra Legacy', target: 'Pre-2017 TVs', webos: 'webOS 1–3' },
+  'Ultra-Legacy-NoService': { label: 'Ultra Legacy, no service', target: 'Ultra Legacy without Litefin’s background service — if Ultra Legacy won’t start', webos: '' },
+};
+const ORDER = Object.keys(KNOWN_VARIANTS);
+
+export const variantInfo = (v: string): VariantInfo => KNOWN_VARIANTS[v] ?? { label: v.replace(/-/g, ' '), target: '', webos: '' };
+
+/** Every variant in these releases, in the release notes' order (newest hardware first), unknown ones after. */
+export function variantColumns(releases: readonly LitefinRelease[]): string[] {
+  const all = new Set(releases.flatMap((r) => r.assets.map((a) => a.variant)));
+  const known = ORDER.filter((v) => all.has(v));
+  const other = [...all].filter((v) => !ORDER.includes(v)).sort();
+  return [...known, ...other];
+}
+
+/**
+ * The build the release notes point this TV at, from its webOS version as the TV reports it (webOS 22 reports 7.x).
+ * The notes' TV years are the guide: Modern for 2021+ high-end sets (webOS 22+), Normal for 2019+ (its Chromium 63
+ * target runs on webOS 5's Chromium 68; the notes' "webOS 6+" undersells it), Legacy for 2017/2018 (webOS 4.x),
+ * Ultra Legacy before that. Null when the version is unknown.
+ */
+export function suggestedVariant(osVersion: string | undefined): string | null {
+  const major = Number(/^(\d+)/.exec(osVersion ?? '')?.[1]);
+  if (!Number.isFinite(major) || major <= 0) return null;
+  if (major >= 7) return 'Modern';
+  if (major >= 5) return 'Normal';
+  if (major >= 4) return 'Legacy';
+  return 'Ultra-Legacy';
+}
+
+/** "1.9.0" vs "1.10.0" — numeric, part by part. Negative when a < b. */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split(/[.-]/).map((x) => Number(x));
+  const pb = b.split(/[.-]/).map((x) => Number(x));
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] ?? 0;
+    const y = pb[i] ?? 0;
+    if (Number.isNaN(x) || Number.isNaN(y)) return a.localeCompare(b);
+    if (x !== y) return x - y;
+  }
+  return 0;
+}

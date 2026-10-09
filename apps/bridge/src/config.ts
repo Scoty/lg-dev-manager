@@ -17,6 +17,8 @@ export interface BridgeConfig {
   repoUrl?: string;
   /** LG's Developer Mode session service (default developer.lge.com; LGDM_LGE_URL overrides, for tests). */
   lgeUrl?: string;
+  /** Litefin's GitHub releases API (default api.github.com/repos/MoazSalem/litefin; LGDM_LITEFIN_URL overrides, for tests). */
+  litefinUrl?: string;
   dev: boolean;
 }
 
@@ -71,6 +73,7 @@ export function parseArgs(argv: string[]): BridgeConfig {
     webRoot: get('web-root') ?? process.env.LGDM_WEB_ROOT,
     repoUrl: process.env.LGDM_REPO_URL,
     lgeUrl: process.env.LGDM_LGE_URL,
+    litefinUrl: process.env.LGDM_LITEFIN_URL,
     dev: argv.includes('--dev'),
   };
 }

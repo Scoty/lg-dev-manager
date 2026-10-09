@@ -940,3 +940,26 @@ button.log-row:hover { background: var(--bg-hover); }
   .log-row { gap: 8px; padding: 0 8px; }
   .vlist-scroll { height: 60vh; }
 }
+
+/* ============ M8: Litefin repo ============ */
+.litefin-status { gap: 10px; font-size: 13px; flex-wrap: wrap; }
+.litefin-badge { margin-left: 6px; vertical-align: middle; }
+.litefin-table th, .litefin-table td { vertical-align: middle; }
+/* Keeps the screen-reader-only text (position: absolute) inside the scrolling table instead of widening the page. */
+.litefin-table td { position: relative; }
+.litefin-table thead th { text-transform: none; letter-spacing: 0; font-family: inherit; font-size: 12.5px; color: var(--t-base); white-space: nowrap; }
+/* The release column stays put while the builds scroll sideways on narrow screens. */
+.litefin-table thead th:first-child, .litefin-release { position: sticky; left: 0; z-index: 1; background: var(--bg-card); }
+.litefin-variant { display: block; font-weight: 600; }
+.litefin-variant-sub { display: block; font-size: 11px; font-weight: 400; color: var(--t-muted); }
+.litefin-table .is-suggested { background: var(--primary-soft); }
+.litefin-table thead th.is-suggested { box-shadow: inset 0 3px 0 var(--primary); }
+.litefin-release { text-align: left; white-space: nowrap; font-weight: 400; }
+.litefin-version { font-weight: 700; font-size: 13.5px; }
+.litefin-date { display: block; font-size: 11.5px; margin-top: 2px; }
+.litefin-date a { color: var(--primary); font-weight: 600; }
+.litefin-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.litefin-size { font-size: 11px; }
+.litefin-help { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: var(--bg-muted); font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; }
+.litefin-help p { margin: 0; }
+.litefin-help-list { margin: 0; padding-left: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 18px; }
