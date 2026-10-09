@@ -144,8 +144,8 @@ export function AuthFields({
           ) : (
             rootedHint && (
               <span className="field-help">
-                Homebrew Channel’s default root password is <span className="mono">alpine</span>. A key is safer than the default
-                password.
+                Homebrew Channel sets root’s password to <span className="mono">alpine</span> until you add an SSH key to{' '}
+                <span className="mono">/home/root/.ssh/authorized_keys</span> — after that only the key works. A key is safer.
               </span>
             )
           )}

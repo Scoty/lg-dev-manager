@@ -73,6 +73,15 @@ const PREPARE: { title: string; body: ReactNode }[] = [
   },
 ];
 
+/**
+ * Starting login per mode. Rooted TVs get Homebrew Channel's placeholder root password (`alpine`, set by its
+ * services/startup.sh until an SSH key is added) so the common case needs no typing.
+ */
+const ROOTED_DEFAULT_PASSWORD = 'alpine';
+function initialAuth(m: SetupMode): AuthDraft {
+  return m === 'rooted' ? { kind: 'password', password: ROOTED_DEFAULT_PASSWORD } : emptyAuth(AUTH_KINDS[m][0]!);
+}
+
 function Stepper({ steps, current }: { steps: { id: Step; label: string }[]; current: Step }) {
   const idx = steps.findIndex((s) => s.id === current);
   return (
@@ -110,7 +119,7 @@ export function AddDevicePage() {
   const [port, setPort] = useState(MODE_DEFAULTS.rooted.port);
   const [username, setUsername] = useState(MODE_DEFAULTS.rooted.username);
   const [description, setDescription] = useState('');
-  const [auth, setAuth] = useState<AuthDraft>(emptyAuth('password'));
+  const [auth, setAuth] = useState<AuthDraft>(initialAuth('rooted'));
   const [keyUsable, setKeyUsable] = useState(true);
   const [showErrors, setShowErrors] = useState(false);
 
@@ -136,7 +145,7 @@ export function AddDevicePage() {
     setMode(m);
     setPort(MODE_DEFAULTS[m].port);
     setUsername(MODE_DEFAULTS[m].username);
-    setAuth(emptyAuth(AUTH_KINDS[m][0]!));
+    setAuth(initialAuth(m));
     setPorts(null);
   };
 
@@ -536,7 +545,11 @@ function VerifyHint({ error, step, mode }: { error: unknown; step?: VerifyStepId
     return mode === 'devmode' ? (
       <>The TV rejected the key. Turn Key Server off and on in the Developer Mode app and try again — the key changes when Developer Mode is re-enabled.</>
     ) : (
-      <>Check the password or key. For a new key, make sure its public key is in the TV’s authorized_keys.</>
+      <>
+        Homebrew Channel’s root password is <span className="mono">alpine</span> — unless an SSH key has been added to{' '}
+        <span className="mono">/home/root/.ssh/authorized_keys</span>, which turns password login off. Then log in with that key
+        (Private key). For a new key, make sure its public key is in that file.
+      </>
     );
   }
   if (code === DeviceErrorCodes.Unreachable || code === DeviceErrorCodes.Timeout) {

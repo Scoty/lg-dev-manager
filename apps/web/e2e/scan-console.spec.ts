@@ -18,10 +18,11 @@ test.describe('add-device wizard: rooted first and network scan', () => {
     await found.click();
     await expect(page.getByLabel('IP address')).toHaveValue('127.0.0.1');
     await expect(page.getByText('This is an LG TV, but its SSH server is off')).toBeVisible();
-    await expect(page.getByText('Restart the TV')).toBeVisible();
+    await expect(page.getByText('System reboot')).toBeVisible();
+    // Homebrew Channel's placeholder root password is already filled in.
+    await expect(page.getByLabel(/Password for/)).toHaveValue('alpine');
 
     // Trying anyway: the failed login points at the same fix.
-    await page.getByLabel(/Password for/).fill('alpine');
     await page.getByRole('button', { name: 'Verify & add' }).click();
     await expect(page.getByText('Couldn’t log in')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('This is an LG TV, but its SSH server is off')).toBeVisible();

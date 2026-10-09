@@ -11,6 +11,10 @@ import { anyOpen, checkConnection, DEFAULT_PORTS, type PortSet } from './ports.j
  *  - a quick sweep of this computer's /24 networks for the webOS second-screen port (3000/3001), which is
  *    open whenever a webOS TV is on — even with SSH off, so we can tell the user what to turn on.
  * Each TV found is then port-checked (22, 9922, 9991). Only outgoing connections; nothing listens.
+ *
+ * Port 3000/3001 alone isn't proof (other TVs and dev servers use them), so a sweep-only hit must also look like
+ * webOS: its second-screen WebSocket answers a request in SSAP's JSON shape, or its SSH server is dropbear (what
+ * webOS Dev Mode and Homebrew Channel run). SSDP hits are already filtered to webOS answers.
  */
 
 const SSDP_ADDR = '239.255.255.250';
@@ -152,6 +156,8 @@ async function sweep(hosts: string[], ports: readonly number[]): Promise<string[
 
 const ipKey = (ip: string) => ip.split('.').reduce((n, p) => n * 256 + (Number(p) || 0), 0);
 
+export { probeSsap } from './webos.js';
+
 export async function scanNetwork(opts: ScanOptions = {}): Promise<ScanResult[]> {
   const timeoutMs = opts.timeoutMs ?? 3000;
   const ports = opts.ports ?? DEFAULT_PORTS;
@@ -176,8 +182,9 @@ export async function scanNetwork(opts: ScanOptions = {}): Promise<ScanResult[]>
   }
 
   const results = await Promise.all(
-    [...byHost.entries()].map(async ([host, e]): Promise<ScanResult> => {
+    [...byHost.entries()].map(async ([host, e]): Promise<ScanResult | null> => {
       const [desc, p] = await Promise.all([e.hit ? fetchDescription(e.hit) : Promise.resolve<{ name?: string; modelName?: string }>({}), checkConnection(host, ports, 1500)]);
+      if (!e.via.has('ssdp') && !p.webos) return null; // port 3000/3001 open, but not webOS
       return {
         host,
         ...(desc.name ? { name: desc.name } : {}),
@@ -188,5 +195,5 @@ export async function scanNetwork(opts: ScanOptions = {}): Promise<ScanResult[]>
       };
     }),
   );
-  return results.sort((a, b) => ipKey(a.host) - ipKey(b.host));
+  return results.filter((r): r is ScanResult => r !== null).sort((a, b) => ipKey(a.host) - ipKey(b.host));
 }

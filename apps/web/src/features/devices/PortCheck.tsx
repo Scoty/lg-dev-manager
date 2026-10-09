@@ -12,20 +12,19 @@ const PORTS = [
 ] as const;
 
 /**
- * The TV answers but Homebrew Channel's SSH server is off. It only starts at boot, so the TV must be restarted
- * after turning it on.
+ * The TV answers but Homebrew Channel's SSH server is off. Homebrew Channel only starts it at boot
+ * (services/startup.sh), and its Settings panel has a "System reboot" item for exactly this.
  */
 export function SshOffHint() {
   return (
     <Alert kind="warning" title="This is an LG TV, but its SSH server is off">
       <ol className="hint-steps">
-        <li>On the TV, open <b>Homebrew Channel</b> → <b>Settings</b>.</li>
+        <li>On the TV, open <b>Homebrew Channel</b> and go to <b>Settings</b>.</li>
         <li>Turn on <b>SSH Server</b>.</li>
         <li>
-          <b>Restart the TV</b> — the SSH server only starts when the TV boots. Use Settings → General → Restart, or unplug it for
-          a few seconds (just switching it off with the remote may not be enough).
+          On the same screen, select <b>System reboot</b> — Homebrew Channel’s settings only take effect after a reboot.
         </li>
-        <li>Come back here and press <b>Check</b> again.</li>
+        <li>When the TV is back on, press <b>Check</b> here again.</li>
       </ol>
       If Homebrew Channel isn’t installed, the TV isn’t rooted — choose <b>Developer Mode</b> instead.
     </Alert>
@@ -87,7 +86,7 @@ function PortHint({ result, mode, port }: { result: PortResult; mode: SetupMode;
     if (result.webos) return <SshOffHint />;
     return (
       <Alert kind="warning" title="SSH on port 22 isn’t answering">
-        Turn on <b>SSH Server</b> in the Homebrew Channel settings on the TV, then restart the TV.
+        In Homebrew Channel → <b>Settings</b>, turn on <b>SSH Server</b>, then select <b>System reboot</b> on the same screen.
       </Alert>
     );
   }

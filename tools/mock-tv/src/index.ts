@@ -2,6 +2,7 @@ import { generateKeyPairSync, timingSafeEqual } from 'node:crypto';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import { createServer as createNetServer, type AddressInfo, type Server as NetServer } from 'node:net';
 import ssh2 from 'ssh2';
+import { WebSocketServer } from 'ws';
 import { isSubscription, runCommand, runSubscription } from './shell.js';
 import { serveSftp } from './sftp.js';
 import { createState, type MockApp, type MockState } from './state.js';
@@ -79,7 +80,8 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
 
   const forwards = new Set<NetServer>();
 
-  const ssh = new SshServer({ hostKeys: [hostKey] }, (client) => {
+  // webOS's SSH servers (Dev Mode and Homebrew Channel) are dropbear; the network scan looks for that banner.
+  const ssh = new SshServer({ hostKeys: [hostKey], ident: 'dropbear_2022.83' }, (client) => {
     client.on('authentication', (ctx) => {
       if (ctx.username !== username) return ctx.reject();
       if (ctx.method === 'publickey') {
@@ -170,8 +172,23 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
 
   const sshPort = await listen(ssh as never, opts.sshPort ?? 0);
   const keyServerPort = await listen(keySrv, opts.keyServerPort ?? 0);
-  // Second-screen stand-in: accepts TCP connections and closes them (only its being open matters).
-  const ssap: NetServer | null = opts.ssapPort === undefined ? null : createNetServer((s) => s.end());
+  // Second-screen stand-in: a WebSocket that answers unpaired requests the way webOS's SSAP service does.
+  const ssap = opts.ssapPort === undefined ? null : createHttpServer((_req, res) => res.writeHead(426).end());
+  if (ssap) {
+    const wss = new WebSocketServer({ server: ssap });
+    wss.on('connection', (sock) => {
+      sock.on('error', () => {}); // scanners hang up abruptly
+      sock.on('message', (raw) => {
+        let id: unknown;
+        try {
+          id = (JSON.parse(raw.toString()) as { id?: unknown }).id;
+        } catch {
+          /* not JSON */
+        }
+        sock.send(JSON.stringify({ type: 'error', id, error: '401 insufficient permissions (not registered)', payload: {} }));
+      });
+    });
+  }
   const ssapPort = ssap ? await listen(ssap, opts.ssapPort!) : undefined;
 
   return {

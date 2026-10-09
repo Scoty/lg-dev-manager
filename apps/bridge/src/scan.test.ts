@@ -1,13 +1,27 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startMockTv, type MockTv } from '@lgdm/mock-tv';
-import { parseDescription, parseSsdpResponse, scanNetwork } from './devices/scan.js';
+import { createServer, type AddressInfo, type Server } from 'node:net';
+import { parseDescription, parseSsdpResponse, probeSsap, scanNetwork } from './devices/scan.js';
 import { checkConnection } from './devices/ports.js';
+import { sshBanner } from './devices/webos.js';
 
 let tv: MockTv;
+/** Something else with "port 3000" open — e.g. another brand of TV or a dev server. */
+let other: Server;
+let otherPort: number;
 beforeAll(async () => {
   tv = await startMockTv({ ssapPort: 0 });
+  other = createServer((s) => {
+    s.on('error', () => {});
+    s.end('HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi');
+  });
+  await new Promise<void>((r) => other.listen(0, '127.0.0.1', () => r()));
+  otherPort = (other.address() as AddressInfo).port;
 });
-afterAll(() => tv.close());
+afterAll(async () => {
+  other.close();
+  await tv.close();
+});
 
 describe('SSDP parsing', () => {
   it('keeps LG webOS answers and ignores other devices', () => {
@@ -45,5 +59,30 @@ describe('scan', () => {
       keyServer: false,
       webos: true,
     });
+  });
+});
+
+describe('telling LG TVs from other devices', () => {
+  const ports = () => ({ ssh22: 1, ssh9922: tv.sshPort, keyServer: tv.keyServerPort, webos: [tv.ssapPort!] });
+
+  it('recognises webOS by its second-screen WebSocket reply', async () => {
+    expect(await probeSsap('127.0.0.1', tv.ssapPort!, false)).toBe(true);
+    expect(await probeSsap('127.0.0.1', otherPort, false)).toBe(false);
+    expect(await probeSsap('127.0.0.1', 1, false)).toBe(false);
+  });
+
+  it('reads the SSH banner', async () => {
+    expect(await sshBanner('127.0.0.1', tv.sshPort)).toMatch(/^SSH-2\.0-dropbear/);
+    expect(await sshBanner('127.0.0.1', 1)).toBeNull();
+  });
+
+  it('drops a device that only has port 3000 open', async () => {
+    const tvs = await scanNetwork({ ssdp: false, networks: [], extraHosts: ['127.0.0.1'], ports: { ...ports(), ssh9922: 1, keyServer: 1, webos: [otherPort] } });
+    expect(tvs).toEqual([]);
+  });
+
+  it('keeps a device whose second-screen port is quiet but whose SSH is dropbear', async () => {
+    const tvs = await scanNetwork({ ssdp: false, networks: [], extraHosts: ['127.0.0.1'], ports: { ...ports(), webos: [otherPort] } });
+    expect(tvs.map((t) => t.host)).toEqual(['127.0.0.1']);
   });
 });
