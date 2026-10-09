@@ -11,8 +11,12 @@ const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : unde
 const omitEmpty = <T extends Record<string, unknown>>(o: T) =>
   Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
 
-/** Port of DeviceManagerService.getDeviceInfo (src/app/core/services/device-manager.service.ts). */
+/**
+ * Port of DeviceManagerService.getDeviceInfo (src/app/core/services/device-manager.service.ts). Each source is
+ * optional here: whatever the TV answers is returned, and it only fails if neither system info nor OS info works.
+ */
 export async function deviceInfo(pool: SshRunner, device: DeviceTarget): Promise<ResultOf<'device.info'>> {
+  let systemError: unknown;
   const systemInfo = await lunaCall(
     pool,
     device,
@@ -20,10 +24,14 @@ export async function deviceInfo(pool: SshRunner, device: DeviceTarget): Promise
     { keys: ['firmwareVersion', 'modelName', 'sdkVersion', 'otaId'] },
     true,
     false,
-  );
+  ).catch((e: unknown) => {
+    systemError = e;
+    return {} as Record<string, unknown>;
+  });
   const osInfo = await lunaCall(pool, device, 'luna://com.palm.systemservice/osInfo/query', {
     parameters: ['device_name', 'webos_manufacturing_version', 'webos_release'],
   }).catch(() => null);
+  if (systemError && !osInfo) throw systemError;
 
   let otaId = str(systemInfo.otaId);
   if (!otaId) {

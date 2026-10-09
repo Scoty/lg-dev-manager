@@ -24,6 +24,8 @@ export interface MockState {
   dirs: Set<string>;
   /** App ids launched, newest last — lets tests assert on launches. */
   launched: string[];
+  /** luna-send-pub prints nothing (seen on a real rooted TV); luna-send still works. */
+  lunaPubSilent?: boolean;
   /** Total / available KiB reported by `df`. */
   diskKb: { total: number; available: number };
 }

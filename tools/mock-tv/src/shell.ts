@@ -72,6 +72,7 @@ export async function runSubscription(
   signal: AbortSignal,
 ): Promise<CommandResult> {
   const [, cmd, uri, rest] = LUNA_SUB.exec(command)!;
+  if (cmd === 'luna-send-pub' && state.lunaPubSilent) return { stdout: '', code: 0 };
   const parsed = parseLuna(cmd!, rest!, state);
   if (!('params' in parsed)) return parsed;
   const sub = SUBSCRIPTIONS[uri!];
@@ -94,6 +95,7 @@ export function runCommand(command: string, ctx: CommandContext): CommandResult 
   const luna = LUNA_ONCE.exec(command);
   if (luna) {
     const [, cmd, uri, rest] = luna;
+    if (cmd === 'luna-send-pub' && state.lunaPubSilent) return { stdout: '', code: 0 };
     const parsed = parseLuna(cmd!, rest!, state);
     if (!('params' in parsed)) return parsed;
     return { stdout: `${JSON.stringify(handleLuna(uri!, parsed.params, state))}\n`, code: 0 };

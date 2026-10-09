@@ -441,6 +441,7 @@ body.has-drawer-open .console-dock { z-index: 10; }
 .cons-entry.is-manual .cons-cmd { font-weight: 600; }
 .cons-meta { display: flex; gap: 10px; align-items: center; white-space: nowrap; font-size: 11px; }
 .cons-dur { color: var(--t-light); min-width: 44px; text-align: right; }
+.cons-nooutput { color: var(--t-light); font-style: italic; }
 .cons-status { color: var(--t-muted); display: inline-flex; align-items: center; gap: 5px; }
 .cons-status.is-ok { color: var(--success); }
 .cons-status.is-err { color: var(--danger); font-weight: 600; }

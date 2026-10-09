@@ -129,3 +129,45 @@ describe('ssh + luna', () => {
     expect(res.errorText).toContain("it's");
   });
 });
+
+describe('luna output quirks', () => {
+  it('finds the JSON line among stray output', async () => {
+    const { parseLunaOutput } = await import('./ssh/luna.js');
+    expect(parseLunaOutput('{"returnValue":true}\n')).toEqual({ returnValue: true });
+    expect(parseLunaOutput('warning: something\n{"returnValue":true,"a":1}\n')).toEqual({ returnValue: true, a: 1 });
+    expect(parseLunaOutput('')).toBeNull();
+    expect(parseLunaOutput('[1,2]')).toBeNull();
+  });
+
+  it('retries with luna-send on a rooted TV whose luna-send-pub prints nothing', async () => {
+    const silentRoot = await startMockTv({ username: 'root', password: 'alpine', lunaPubSilent: true });
+    const silentDev = await startMockTv({ lunaPubSilent: true });
+    try {
+      const { deviceInfo } = await import('./devices/info.js');
+      const root = { host: silentRoot.host, port: silentRoot.sshPort, username: 'root', auth: { kind: 'password' as const, password: 'alpine' } };
+      expect(await deviceInfo(pool, root)).toMatchObject({ modelName: 'MOCK55TV', osVersion: '8.0.0' });
+
+      // Dev Mode can't use luna-send, so the error says exactly what came back.
+      const dev = { host: silentDev.host, port: silentDev.sshPort, username: 'prisoner', auth: { kind: 'key' as const, privateKey: silentDev.privateKey, passphrase: silentDev.passphrase } };
+      const err = await lunaCall(pool, dev, 'luna://com.webos.service.tv.systemproperty/getSystemInfo').catch((e: RpcError) => e);
+      expect(err).toMatchObject({ code: 'luna_bad_response' });
+      expect((err as RpcError).detail).toContain('luna-send-pub: exit code 0\nstdout: (empty)\nstderr: (empty)');
+    } finally {
+      await Promise.all([silentRoot.close(), silentDev.close()]);
+    }
+  });
+});
+
+describe('luna subscriptions on a silent luna-send-pub', () => {
+  it('installs on a rooted TV via luna-send', async () => {
+    const tv = await startMockTv({ username: 'root', password: 'alpine', lunaPubSilent: true });
+    try {
+      const { installIpk } = await import('./apps/apps.js');
+      const { fakeIpk } = await import('@lgdm/mock-tv');
+      const d = { host: tv.host, port: tv.sshPort, username: 'root', auth: { kind: 'password' as const, password: 'alpine' } };
+      expect(await installIpk(pool, d, 'x.ipk', fakeIpk('com.example.silent'))).toEqual({ appId: 'com.example.silent', via: 'devmode' });
+    } finally {
+      await tv.close();
+    }
+  });
+});

@@ -6,7 +6,7 @@ import { describeError } from '../components/ErrorAlert';
 import { toTarget } from '../devices/store';
 import { useDevices } from '../devices/useDevices';
 import { Icon } from '../shell/icons';
-import { consoleStore, type ConsoleEntry } from './store';
+import { consoleStore, consoleTarget, type ConsoleEntry } from './store';
 
 const PREF_KEY = 'lgdm-console';
 const MIN_H = 140;
@@ -72,13 +72,14 @@ function Entry({ e, expanded, onToggle }: { e: ConsoleEntry; expanded: boolean; 
   const show = e.source === 'manual' || expanded;
   return (
     <div className={`cons-entry is-${e.source}${e.running ? ' is-running' : ''}`}>
-      <button type="button" className="cons-line" onClick={onToggle} aria-expanded={hasOutput ? show : undefined} disabled={!hasOutput && e.source === 'bridge'}>
+      <button type="button" className="cons-line" onClick={onToggle} aria-expanded={hasOutput ? show : undefined} disabled={!hasOutput}>
         <span className="cons-time">{time(e.startedAt)}</span>
         <span className="cons-target">{e.target}</span>
         <span className="cons-cmd">
           <span className="cons-prompt">{e.kind === 'sftp' || e.kind === 'tunnel' || e.kind === 'http' ? '⇄' : '$'}</span> {e.command}
         </span>
         <span className="cons-meta">
+          {!hasOutput && !e.running && e.kind !== 'sftp' && e.kind !== 'tunnel' && e.kind !== 'http' && <span className="cons-nooutput">no output</span>}
           <Status e={e} />
           <span className="cons-dur">{dur(e.durationMs)}</span>
         </span>
@@ -101,7 +102,18 @@ export function ConsoleDock() {
   useConsoleFeed();
   const entries = useSyncExternalStore(consoleStore.subscribe, consoleStore.getSnapshot);
   const { ready, client } = useRpc();
-  const { active } = useDevices();
+  const { active: saved } = useDevices();
+  // The TV being added in the wizard (once its login works) wins over the saved active TV.
+  const pending = useSyncExternalStore(consoleTarget.subscribe, consoleTarget.getSnapshot);
+  const active = useMemo(
+    () =>
+      pending
+        ? { name: pending.name, host: pending.host, port: pending.port, username: pending.username, target: pending.device }
+        : saved
+          ? { name: saved.name, host: saved.host, port: saved.port, username: saved.username, target: toTarget(saved) }
+          : null,
+    [pending, saved],
+  );
   const [prefs, setPrefs] = useState(loadPrefs);
   const [manual, setManual] = useState(false);
   const [input, setInput] = useState('');
@@ -153,7 +165,7 @@ export function ConsoleDock() {
     consoleStore.startManual(opId, `${active.username}@${active.host}:${active.port}`, command);
     setRunningId(opId);
     try {
-      const r = await client.call('cmd.stream', { device: toTarget(active), command, opId }, 30 * 60_000);
+      const r = await client.call('cmd.stream', { device: active.target, command, opId }, 30 * 60_000);
       consoleStore.finishManual(opId, r);
     } catch (e) {
       consoleStore.finishManual(opId, { error: describeError(e).message });

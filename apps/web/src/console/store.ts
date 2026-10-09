@@ -1,4 +1,4 @@
-import type { CmdLog } from '@lgdm/protocol';
+import type { CmdLog, DeviceTarget } from '@lgdm/protocol';
 
 /** One line in the console: a command the bridge ran for this tab, or one the user typed. */
 export interface ConsoleEntry {
@@ -79,3 +79,31 @@ class ConsoleStore {
 }
 
 export const consoleStore = new ConsoleStore();
+
+/**
+ * A TV the console can send commands to that isn't saved yet — the one being set up in the add-device wizard,
+ * once its login has worked. Takes precedence over the active TV while set.
+ */
+export interface ConsoleTarget {
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  device: DeviceTarget;
+}
+
+class ConsoleTargetStore {
+  private value: ConsoleTarget | null = null;
+  private listeners = new Set<() => void>();
+  subscribe = (fn: () => void) => {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  };
+  getSnapshot = () => this.value;
+  set(v: ConsoleTarget | null) {
+    this.value = v;
+    this.listeners.forEach((fn) => fn());
+  }
+}
+
+export const consoleTarget = new ConsoleTargetStore();

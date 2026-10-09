@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DeviceErrorCodes, type ScanResult } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
@@ -9,6 +9,7 @@ import { Icon, type IconName } from '../../shell/icons';
 import { useRpc } from '../../bridge/useRpc';
 import { addDevice, setActiveDeviceId } from '../../devices/store';
 import { useDevices } from '../../devices/useDevices';
+import { consoleTarget } from '../../console/store';
 import { AuthFields } from './AuthFields';
 import { PortCheck, SshOffHint, type PortResult } from './PortCheck';
 import { ScanPanel, tvLabel } from './ScanPanel';
@@ -233,6 +234,21 @@ export function AddDevicePage() {
     ([DeviceErrorCodes.Unreachable, DeviceErrorCodes.Timeout] as string[]).includes(describeError(verify.error).code);
   const sshOff =
     loginUnreachable && mode !== 'devmode' && port === 22 && portsFor === host.trim() && !!ports?.webos && !ports.ssh22 && !checking;
+
+  // Once the login works, the console can send commands to this TV even though it isn't saved yet.
+  const loggedIn = !!verify?.login && !!verify.auth && !saved;
+  useEffect(() => {
+    if (!loggedIn || !verify?.auth) return;
+    consoleTarget.set({
+      name: trimmedName,
+      host: host.trim(),
+      port,
+      username,
+      device: { host: host.trim(), port, username, auth: verify.auth },
+    });
+    return () => consoleTarget.set(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedIn, verify?.auth]);
 
   const prev = () => {
     const i = steps.findIndex((s) => s.id === step);

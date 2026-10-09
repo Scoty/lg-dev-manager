@@ -34,6 +34,8 @@ export interface MockTvOptions {
   apps?: MockApp[];
   /** Also listen on this port like webOS's second-screen service (3000), so network scans find the TV. */
   ssapPort?: number;
+  /** luna-send-pub prints nothing and exits 0, like on one real rooted TV; luna-send still answers. */
+  lunaPubSilent?: boolean;
 }
 
 export interface MockTv {
@@ -71,6 +73,7 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
   const username = opts.username ?? 'prisoner';
   const passphrase = opts.passphrase ?? 'A1B2C3';
   const state = createState({ username, hbchannel: opts.hbchannel, apps: opts.apps });
+  state.lunaPubSilent = opts.lunaPubSilent;
   const hostKey = pem().privateKey;
   // Dev Mode keys are passphrase-protected traditional PEM ("Proc-Type: 4,ENCRYPTED").
   const { privateKey } = pem('aes-128-cbc', passphrase);
