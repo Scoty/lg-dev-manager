@@ -326,8 +326,13 @@ it). The site shows a notice when the connected bridge is older than the one rel
 1. Bump the versions, update this plan, commit, push; wait for CI and the Pages deploy (the site is live then).
 2. Tag both: `git tag -a web-vX.Y.Z` and `git tag -a bridge-vX.Y.Z`, push the tags.
 3. `bridge-v*` runs **Publish bridge to npm** (`.github/workflows/release-bridge.yml`): checks the tag against the
-   package version, builds, tests and publishes with provenance (secret `NPM_TOKEN`, or npm trusted publishing).
-   By hand instead: `pnpm build`, then `npm login` and `pnpm --filter lg-dev-manager-bridge publish --access public`.
+   package version, builds, tests and publishes with **npm trusted publishing** (OIDC, no token stored; provenance).
+   Setup on npmjs.com → package → Settings → Trusted publisher → GitHub Actions: `Scoty` / `lg-dev-manager` /
+   `release-bridge.yml`. npm drops an unused trusted publisher after 48 hours, so add it right before the first tag
+   that should use it. npm no longer accepts plain tokens for publishing (only ones that bypass 2FA, being phased out).
+   **1.0.0 was published by hand** (the package must exist before a trusted publisher can be added):
+   `pnpm build`, then in `apps/bridge`: `pnpm pack`, `npm login --auth-type=web`,
+   `npm publish ./lg-dev-manager-bridge-1.0.0.tgz --access public` (approve 2FA in the browser).
 4. The package contains `dist/cli.js` (protocol bundled), `web/` (the built site, served as the local page),
    `LICENSE`, `NOTICE` and its README — copied in by `apps/bridge/scripts/prepack.mjs`.
 5. Create GitHub releases for both tags with the notes from `CHANGELOG.md`.

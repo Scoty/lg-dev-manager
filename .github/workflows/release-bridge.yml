@@ -1,8 +1,12 @@
 name: Publish bridge to npm
 
-# Pushing a tag bridge-vX.Y.Z publishes apps/bridge as lg-dev-manager-bridge@X.Y.Z, with npm provenance (the package
-# page then links back to this workflow run and commit). Needs the repository secret NPM_TOKEN (an npm "automation"
-# or granular token allowed to publish lg-dev-manager-bridge) — or npm trusted publishing set up for this workflow.
+# Pushing a tag bridge-vX.Y.Z publishes apps/bridge as lg-dev-manager-bridge@X.Y.Z with npm trusted publishing:
+# GitHub proves to npm that this workflow, in this repository, is publishing — no npm token is stored anywhere, and
+# the package page links back to the run (provenance).
+#
+# One-time setup (see PLAN.md §11): on npmjs.com → lg-dev-manager-bridge → Settings → Trusted publisher → GitHub
+# Actions: user "Scoty", repository "lg-dev-manager", workflow "release-bridge.yml". npm drops a trusted publisher that
+# hasn't published within 48 hours of being added, so add it right before pushing the next bridge tag.
 on:
   push:
     tags: ['bridge-v*']
@@ -15,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # npm provenance / trusted publishing
+      id-token: write # trusted publishing + provenance
     steps:
       - uses: actions/checkout@v7
         with:
@@ -26,6 +30,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@11
       - run: pnpm install --frozen-lockfile
       - name: Tag matches the package version
         env:
@@ -35,6 +41,10 @@ jobs:
           test "$TAG" = "bridge-v$version" || { echo "Tag $TAG doesn't match apps/bridge/package.json version $version"; exit 1; }
       - run: pnpm build
       - run: pnpm test
-      - run: pnpm --filter lg-dev-manager-bridge publish --access public --provenance --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # pnpm pack runs prepack (bundles the web app, LICENSE, NOTICE) and resolves workspace: versions;
+      # npm publish then authenticates with the workflow's OIDC identity.
+      - name: Publish
+        working-directory: apps/bridge
+        run: |
+          pnpm pack
+          npm publish ./lg-dev-manager-bridge-*.tgz --access public --provenance
