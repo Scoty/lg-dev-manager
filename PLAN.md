@@ -36,7 +36,7 @@ plus raw TCP to the Dev Mode **key server on port 9991**. A web page cannot open
   network calls the browser can't. It is the replacement for the Rust half of the Tauri app.
   It is **stateless about devices**: it gets connection details with each call and keeps them in memory only
   while an SSH connection is pooled (idle connections close after 2 minutes).
-  Distributed as `npx lg-dev-manager-bridge`, and later as a double-click single binary for Windows/macOS/Linux.
+  Distributed as a terminal command: `npx lg-dev-manager-bridge` (needs Node 22+). No desktop app, installer or binary downloads (owner decision).
 - The bridge can **also serve the Web UI itself** (`http://localhost:5199`), so the app works fully
   offline and without the public site at all.
 
@@ -70,7 +70,7 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 | Bridge | **Node 22 + TypeScript**, `ws`, `ssh2` (SSH + SFTP) | Pure JS SSH, no native build step; runs on Windows, macOS and Linux (x64/ARM). |
 | Protocol | Shared `packages/protocol` with **zod** schemas | One source of truth for every RPC call + event. |
 | Tests | Vitest (unit), Playwright (UI smoke), a **mock TV** (ssh2 server) for bridge integration tests | Lets CI test without a real TV. |
-| CI/CD | GitHub Actions → GitHub Pages at lg.scoty.uk (UI), npm + release binaries (bridge) | |
+| CI/CD | GitHub Actions → GitHub Pages at lg.scoty.uk (UI), npm package (bridge CLI) | |
 
 ---
 
@@ -167,7 +167,7 @@ lg-dev-manager/
 | M5 | Files + Terminal | SFTP browser with upload/download; xterm PTY. |
 | M6 | Info + Dev Mode renew + screenshot | |
 | M7 | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
-| M8 | Ship | `npx` bridge + single-binary downloads published, README with screenshots, "preview" label removed. |
+| M8 | Ship | Bridge published to npm (`npx lg-dev-manager-bridge`), README with screenshots, "preview" label removed. |
 
 Scope is **full parity before release** (v1.0 at M8). The site at **lg.scoty.uk** is already public as a *preview*:
 every push to `main` deploys it, and it shows which features are still to come.

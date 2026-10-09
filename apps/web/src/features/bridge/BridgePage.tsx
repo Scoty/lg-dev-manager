@@ -64,7 +64,7 @@ export function BridgePage() {
         <Card eyebrow="Step 1" title="Run the bridge" className="col-6">
           <div className="stack">
             <div>
-              <div className="eyebrow">On this computer (Node 22+)</div>
+              <div className="eyebrow">In a terminal on this computer (Node 22+)</div>
               <div className="codeblock">npx lg-dev-manager-bridge</div>
             </div>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>

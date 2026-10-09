@@ -93,6 +93,7 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 |---|---|---|
 | Browser↔TV transport | Local bridge over authenticated WebSocket | Decided (technical necessity) |
 | Where the bridge runs | On the user's own computer only, bound to `127.0.0.1`. No NAS / Docker / LAN mode (owner decision, Oct 2026) | Decided |
+| Bridge distribution | A terminal command only: `npx lg-dev-manager-bridge` (Node 22+). No desktop/tray app, installers, single binaries, or running the bridge on the TV (owner decision, Oct 2026) | Decided |
 | UI framework | React 19 + Vite + TypeScript | Decided |
 | v1 scope | **Full parity** with the desktop app (all of PLAN.md §3, incl. Debug tools) before the public release | Decided |
 | Device/key storage | **Browser only** (IndexedDB + export/import); bridge is stateless and never writes device details to disk | Decided (owner, Oct 2026) |
