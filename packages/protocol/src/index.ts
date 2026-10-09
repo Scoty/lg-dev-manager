@@ -1,3 +1,4 @@
 export * from './envelope';
 export * from './methods';
 export * from './device';
+export * from './apps';

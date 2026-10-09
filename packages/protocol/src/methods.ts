@@ -1,8 +1,21 @@
 import { z } from 'zod';
 import { DeviceTarget } from './device';
+import { AppId, AppInfo, MAX_CHUNK_BYTES, MAX_UPLOAD_BYTES } from './apps';
 
-/** Bumped when the wire contract changes incompatibly. UI and bridge must agree. */
-export const PROTOCOL_VERSION = 1;
+/**
+ * Bumped when the wire contract changes in a way an older peer can't handle (including new methods the
+ * UI depends on), so a stale bridge gets a clear "update" message instead of unknown_method errors.
+ *  v2 — M3: device.info/storage/generateKey, apps.*, upload.*
+ */
+export const PROTOCOL_VERSION = 2;
+
+const base64 = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/, 'Not base64');
+/** Absolute POSIX path without `..` segments. */
+const RemotePath = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine((p) => p.startsWith('/') && !p.split('/').includes('..') && !p.includes('\0'), 'Not an absolute path');
 
 /** Default port the bridge listens on (and serves the UI from). */
 export const DEFAULT_BRIDGE_PORT = 5199;
@@ -54,6 +67,33 @@ export const Methods = {
     params: z.object({ device: DeviceTarget }),
     result: z.object({ latencyMs: z.number(), root: z.boolean() }),
   },
+  /**
+   * Model, webOS and firmware version — what the add-device wizard shows after a test login.
+   * Port of DeviceManagerService.getDeviceInfo. Fields the TV doesn't report are omitted.
+   */
+  'device.info': {
+    params: z.object({ device: DeviceTarget }),
+    result: z.object({
+      modelName: z.string().optional(),
+      osVersion: z.string().optional(),
+      firmwareVersion: z.string().optional(),
+      otaId: z.string().optional(),
+      socName: z.string().optional(),
+    }),
+  },
+  /** `df` of the developer partition (KiB). Null if the TV gave no usable answer. */
+  'device.storage': {
+    params: z.object({ device: DeviceTarget }),
+    result: z.object({ total: z.number(), used: z.number(), available: z.number() }).nullable(),
+  },
+  /**
+   * Make a new ed25519 key pair for a TV (the original's "App key"). The private key goes back to the
+   * browser to be saved with the device; the bridge keeps nothing.
+   */
+  'device.generateKey': {
+    params: z.object({ comment: z.string().max(64).optional() }),
+    result: z.object({ privateKey: z.string(), publicKey: z.string(), fingerprint: z.string() }),
+  },
   /** Forget pooled SSH connections (all, or for one device). */
   'device.disconnect': {
     params: z.object({ device: DeviceTarget.optional() }),
@@ -84,6 +124,56 @@ export const Methods = {
       falseAsError: z.boolean().optional(),
     }),
     result: z.record(z.unknown()),
+  },
+
+  /** Installed apps: `applicationManager/dev/listApps`, falling back to `listApps` (app-manager.service.ts). */
+  'apps.list': {
+    params: z.object({ device: DeviceTarget }),
+    result: z.object({ apps: z.array(AppInfo) }),
+  },
+  'apps.launch': {
+    params: z.object({ device: DeviceTarget, id: AppId, params: z.record(z.unknown()).optional() }),
+    result: z.object({}),
+  },
+  /** An app's icon file, for the apps list. Image files only, up to 1 MiB. */
+  'apps.icon': {
+    params: z.object({ device: DeviceTarget, path: RemotePath }),
+    result: z.object({ mime: z.string(), base64: z.string() }),
+  },
+  /** Uninstall via `appInstallService/dev/remove`. Streams `op.progress` (stage `remove`). */
+  'apps.remove': {
+    params: z.object({ device: DeviceTarget, id: AppId, opId: z.string().max(64) }),
+    result: z.object({}),
+  },
+  /**
+   * Install an IPK previously sent with `upload.*`. Uses Homebrew Channel's installer when the TV has it
+   * (served to the TV over an SSH reverse tunnel), otherwise copies it to /media/developer/temp and runs
+   * `appInstallService/dev/install`. Streams `op.progress`. The upload is discarded afterwards.
+   */
+  'apps.install': {
+    params: z.object({ device: DeviceTarget, uploadId: z.string().max(64), opId: z.string().max(64) }),
+    result: z.object({ appId: z.string().optional(), via: z.enum(['devmode', 'hbchannel']) }),
+  },
+
+  /**
+   * Send a file from the browser to the bridge in chunks. It is kept in the bridge's memory (never on disk),
+   * belongs to this connection, and is dropped when used, discarded, or the connection closes.
+   */
+  'upload.begin': {
+    params: z.object({ name: z.string().min(1).max(255), size: z.number().int().min(1).max(MAX_UPLOAD_BYTES) }),
+    result: z.object({ uploadId: z.string() }),
+  },
+  'upload.chunk': {
+    params: z.object({
+      uploadId: z.string().max(64),
+      offset: z.number().int().min(0),
+      data: base64.max(Math.ceil(MAX_CHUNK_BYTES / 3) * 4),
+    }),
+    result: z.object({ received: z.number() }),
+  },
+  'upload.discard': {
+    params: z.object({ uploadId: z.string().max(64) }),
+    result: z.object({}),
   },
 } as const;
 

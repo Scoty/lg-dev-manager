@@ -2,7 +2,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { startMockTv, type MockTv } from '@lgdm/mock-tv';
+import { fakeIpk, startMockTv, type MockTv } from '@lgdm/mock-tv';
 import { PROTOCOL_VERSION } from '@lgdm/protocol';
 import { startServer } from './server.js';
 
@@ -71,5 +71,59 @@ describe('device RPCs over WebSocket', () => {
   it('device.disconnect closes pooled connections', async () => {
     const res = await call('device.disconnect', {});
     expect(res.result.closed).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('uploads and installs over WebSocket', () => {
+  const dev = () => device('S3cr3t-pa55');
+
+  it('uploads in chunks, installs with op.progress events, and drops the upload', async () => {
+    const ipk = fakeIpk('com.example.ws', '3.1.0', 'WS App', 150_000);
+    const { result: begin } = await call('upload.begin', { name: 'ws.ipk', size: ipk.length });
+    let offset = 0;
+    while (offset < ipk.length) {
+      const part = ipk.subarray(offset, offset + 64 * 1024);
+      const res = await call('upload.chunk', { uploadId: begin.uploadId, offset, data: part.toString('base64') });
+      offset += part.length;
+      expect(res.result.received).toBe(offset);
+    }
+    const before = frames.length;
+    const res = await call('apps.install', { device: dev(), uploadId: begin.uploadId, opId: 'op-1' });
+    expect(res.result).toEqual({ appId: 'com.example.ws', via: 'devmode' });
+    const progress = frames.slice(before).map((f) => JSON.parse(f)).filter((m) => m.event === 'op.progress');
+    expect(progress.length).toBeGreaterThan(3);
+    expect(progress.every((m) => m.data.opId === 'op-1')).toBe(true);
+    expect(tv.state.apps.some((a) => a.id === 'com.example.ws')).toBe(true);
+    const again = await call('apps.install', { device: dev(), uploadId: begin.uploadId, opId: 'op-2' });
+    expect(again.error.code).toBe('upload_not_found');
+  });
+
+  it('rejects out-of-order chunks and incomplete uploads', async () => {
+    const { result } = await call('upload.begin', { name: 'x.ipk', size: 10 });
+    const bad = await call('upload.chunk', { uploadId: result.uploadId, offset: 5, data: Buffer.from('12345').toString('base64') });
+    expect(bad.error.code).toBe('bad_request');
+    await call('upload.chunk', { uploadId: result.uploadId, offset: 0, data: Buffer.from('12345').toString('base64') });
+    const res = await call('apps.install', { device: dev(), uploadId: result.uploadId, opId: 'op-3' });
+    expect(res.error.code).toBe('upload_incomplete');
+    expect((await call('upload.discard', { uploadId: result.uploadId })).result).toEqual({});
+  });
+
+  it('rejects uploads larger than announced', async () => {
+    const { result } = await call('upload.begin', { name: 'x.ipk', size: 3 });
+    const res = await call('upload.chunk', { uploadId: result.uploadId, offset: 0, data: Buffer.from('12345').toString('base64') });
+    expect(res.error.code).toBe('upload_too_large');
+  });
+
+  it('validates app ids and icon paths before touching the TV', async () => {
+    expect((await call('apps.launch', { device: dev(), id: 'x; reboot' })).error.code).toBe('bad_request');
+    expect((await call('apps.icon', { device: dev(), path: '/media/../etc/shadow.png' })).error.code).toBe('bad_request');
+    expect((await call('apps.icon', { device: dev(), path: 'relative.png' })).error.code).toBe('bad_request');
+  });
+
+  it('lists, launches and removes apps', async () => {
+    const list = await call('apps.list', { device: dev() });
+    expect(list.result.apps.map((a: { id: string }) => a.id)).toContain('com.example.ws');
+    expect((await call('apps.launch', { device: dev(), id: 'com.example.ws' })).result).toEqual({});
+    expect((await call('apps.remove', { device: dev(), id: 'com.example.ws', opId: 'op-4' })).result).toEqual({});
   });
 });

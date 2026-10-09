@@ -6,6 +6,7 @@ import type { Session } from './rpc/handlers.js';
 import { serveStatic } from './http/static.js';
 import { BRIDGE_VERSION } from './version.js';
 import { SshPool } from './ssh/pool.js';
+import { UploadStore } from './rpc/uploads.js';
 
 export const RPC_PATH = '/rpc';
 
@@ -44,6 +45,7 @@ export function startServer(config: BridgeConfig, pool = new SshPool()): Promise
       emit: (event, data) => {
         if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ event, data }));
       },
+      uploads: new UploadStore(),
     };
     // Unpaired sockets get a short window to authenticate.
     const authTimer = setTimeout(() => {
@@ -58,7 +60,10 @@ export function startServer(config: BridgeConfig, pool = new SshPool()): Promise
         ws.close(4401, 'unauthorized');
       }
     });
-    ws.on('close', () => clearTimeout(authTimer));
+    ws.on('close', () => {
+      clearTimeout(authTimer);
+      session.uploads.clear();
+    });
   });
 
   http.on('close', () => pool.close());

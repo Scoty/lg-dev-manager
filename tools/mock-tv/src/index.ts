@@ -1,14 +1,17 @@
 import { generateKeyPairSync, timingSafeEqual } from 'node:crypto';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { createServer as createNetServer, type AddressInfo, type Server as NetServer } from 'node:net';
 import ssh2 from 'ssh2';
+import { isSubscription, runCommand, runSubscription } from './shell.js';
+import { serveSftp } from './sftp.js';
+import { createState, type MockApp, type MockState } from './state.js';
 
 // ssh2 is CommonJS: use the default export under native Node ESM.
 const { Server: SshServer, utils } = ssh2;
-import { runCommand } from './shell.js';
 
 export { runCommand, unquote } from './shell.js';
-export { MOCK_APPS, LUNA } from './luna.js';
+export { LUNA, SUBSCRIPTIONS } from './luna.js';
+export { MOCK_APPS, devApp, fakeIpk, makeIconPng, type MockApp, type MockState } from './state.js';
 
 export interface MockTvOptions {
   /** `prisoner` (Dev Mode) or `root` (rooted). */
@@ -20,6 +23,14 @@ export interface MockTvOptions {
   host?: string;
   sshPort?: number;
   keyServerPort?: number;
+  /** Serve the SFTP subsystem (default true). False makes the bridge fall back to `cat` over exec. */
+  sftp?: boolean;
+  /** Homebrew Channel installed: its luna service answers and installs IPKs from a URL. */
+  hbchannel?: boolean;
+  /** Allow SSH remote port forwarding (default true) — used to serve IPKs to Homebrew Channel. */
+  forwarding?: boolean;
+  /** Apps present at start (default MOCK_APPS). */
+  apps?: MockApp[];
 }
 
 export interface MockTv {
@@ -31,6 +42,10 @@ export interface MockTv {
   passphrase: string;
   /** Encrypted PEM exactly as the key server serves it. */
   privateKey: string;
+  /** Live state (apps, files, launches) for assertions. */
+  state: MockState;
+  /** Extra public keys (OpenSSH line) accepted for login, e.g. an app-generated key. */
+  authorize(publicKeyLine: string): void;
   close(): Promise<void>;
 }
 
@@ -45,42 +60,86 @@ const pem = (cipher?: string, passphrase?: string) =>
 
 const same = (a: Buffer, b: Buffer) => a.length === b.length && timingSafeEqual(a, b);
 
-/** Start a fake TV: an SSH server answering luna-send and a few shell commands, plus a key server. */
+/** Start a fake TV: an SSH server answering luna-send and the shell commands the bridge uses, plus a key server. */
 export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
   const host = opts.host ?? '127.0.0.1';
   const username = opts.username ?? 'prisoner';
   const passphrase = opts.passphrase ?? 'A1B2C3';
+  const state = createState({ username, hbchannel: opts.hbchannel, apps: opts.apps });
   const hostKey = pem().privateKey;
   // Dev Mode keys are passphrase-protected traditional PEM ("Proc-Type: 4,ENCRYPTED").
   const { privateKey } = pem('aes-128-cbc', passphrase);
-  const userKey = utils.parseKey(privateKey, passphrase);
-  if (userKey instanceof Error) throw userKey;
-  const allowedPub = (Array.isArray(userKey) ? userKey[0] : userKey).getPublicSSH();
+  const parsedUserKey = utils.parseKey(privateKey, passphrase);
+  if (parsedUserKey instanceof Error) throw parsedUserKey;
+  const allowed = [Array.isArray(parsedUserKey) ? parsedUserKey[0]! : parsedUserKey];
+
+  const forwards = new Set<NetServer>();
 
   const ssh = new SshServer({ hostKeys: [hostKey] }, (client) => {
     client.on('authentication', (ctx) => {
       if (ctx.username !== username) return ctx.reject();
-      if (ctx.method === 'publickey' && same(ctx.key.data, allowedPub)) {
-        if (!ctx.signature) return ctx.accept(); // key probe
-        const k = utils.parseKey(privateKey, passphrase);
-        const key = Array.isArray(k) ? k[0] : k;
-        if (key && !(key instanceof Error) && key.verify(ctx.blob!, ctx.signature, ctx.hashAlgo)) return ctx.accept();
+      if (ctx.method === 'publickey') {
+        const key = allowed.find((k) => same(ctx.key.data, k.getPublicSSH()));
+        if (key) {
+          if (!ctx.signature) return ctx.accept(); // key probe
+          if (key.verify(ctx.blob!, ctx.signature, ctx.hashAlgo)) return ctx.accept();
+        }
         return ctx.reject();
       }
       if (ctx.method === 'password' && opts.password !== undefined && ctx.password === opts.password) return ctx.accept();
       return ctx.reject(opts.password !== undefined ? ['publickey', 'password'] : ['publickey']);
     });
+
     client.on('ready', () => {
-      client.on('session', (accept) => {
-        const session = accept();
+      // Remote port forwarding: listen on the "TV's" loopback and tunnel connections back to the client.
+      client.on('request', (accept, reject, name, info) => {
+        if (name !== 'tcpip-forward' || opts.forwarding === false) return reject?.();
+        const { bindAddr, bindPort } = info as { bindAddr: string; bindPort: number };
+        const srv = createNetServer((sock) => {
+          client.forwardOut(bindAddr, (srv.address() as AddressInfo).port, sock.remoteAddress ?? '127.0.0.1', sock.remotePort ?? 0, (err, ch) => {
+            if (err) return sock.destroy();
+            sock.pipe(ch).pipe(sock);
+            ch.on('close', () => sock.destroy());
+            sock.on('error', () => ch.close());
+          });
+        });
+        srv.listen(bindPort, '127.0.0.1', () => {
+          forwards.add(srv);
+          accept?.((srv.address() as AddressInfo).port);
+        });
+        client.once('close', () => {
+          srv.close();
+          forwards.delete(srv);
+        });
+      });
+
+      client.on('session', (acceptSession) => {
+        const session = acceptSession();
+        session.on('sftp', (acceptSftp, rejectSftp) => {
+          if (opts.sftp === false) return rejectSftp();
+          serveSftp(acceptSftp(), state);
+        });
         session.on('exec', (acceptExec, _reject, info) => {
           const stream = acceptExec();
+          if (isSubscription(info.command)) {
+            const ac = new AbortController();
+            stream.on('close', () => ac.abort());
+            stream.on('data', () => {});
+            runSubscription(info.command, state, (line) => stream.writable && stream.write(line), ac.signal).then((res) => {
+              if (res.stderr && stream.writable) stream.stderr.write(res.stderr);
+              if (stream.writable) {
+                stream.exit(res.code);
+                stream.end();
+              }
+            });
+            return;
+          }
           const stdin: Buffer[] = [];
           stream.on('data', (c: Buffer) => stdin.push(c));
           stream.on('end', () => {
-            const res = runCommand(info.command, { username, stdin: Buffer.concat(stdin).toString('utf8') });
+            const res = runCommand(info.command, { state, stdin: Buffer.concat(stdin) });
             if (res.code === -1) return; // hang
-            if (res.stdout) stream.write(res.stdout);
+            if (res.stdout.length) stream.write(res.stdout);
             if (res.stderr) stream.stderr.write(res.stderr);
             stream.exit(res.code);
             stream.end();
@@ -116,10 +175,18 @@ export async function startMockTv(opts: MockTvOptions = {}): Promise<MockTv> {
     password: opts.password,
     passphrase,
     privateKey,
-    close: () =>
-      Promise.all([
+    state,
+    authorize(line: string) {
+      const k = utils.parseKey(line);
+      if (k instanceof Error) throw k;
+      allowed.push(Array.isArray(k) ? k[0]! : k);
+    },
+    close: () => {
+      for (const f of forwards) f.close();
+      return Promise.all([
         new Promise<void>((r) => ssh.close(() => r())),
         new Promise<void>((r) => keySrv.close(() => r())),
-      ]).then(() => undefined),
+      ]).then(() => undefined);
+    },
   };
 }
