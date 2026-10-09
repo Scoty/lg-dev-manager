@@ -1,4 +1,15 @@
+import { connect } from 'node:net';
 import { addDevModeTvWithWizard, addRootedTv, expect, test } from './fixtures';
+
+/** Something answers on this computer's port 22 (an SSH server) — then 127.0.0.1 looks like a TV with root SSH on. */
+const sshdRunning = () =>
+  new Promise<boolean>((resolve) => {
+    const s = connect(22, '127.0.0.1');
+    s.setTimeout(1000);
+    s.once('connect', () => (s.destroy(), resolve(true)));
+    s.once('error', () => resolve(false));
+    s.once('timeout', () => (s.destroy(), resolve(false)));
+  });
 
 test.describe('add-device wizard: rooted first and network scan', () => {
   test('rooted is recommended and preselected', async ({ paired: page }) => {
@@ -10,6 +21,8 @@ test.describe('add-device wizard: rooted first and network scan', () => {
   });
 
   test('finds the TV on the network, and explains that root SSH is off', async ({ paired: page, errors }) => {
+    // The rig's fake TV is 127.0.0.1, whose port 22 must be closed for "root SSH off" (CI stops the runner's sshd).
+    test.skip(await sshdRunning(), 'An SSH server runs on this computer (port 22), so the fake TV looks like it has root SSH on.');
     await page.goto('/#/devices/new');
     await page.getByRole('button', { name: 'Next' }).click();
     const found = page.getByRole('option', { name: /127\.0\.0\.1/ });

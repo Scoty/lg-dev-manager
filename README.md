@@ -20,7 +20,7 @@ Browsers can't open SSH connections, so the app has two parts:
 
 ## Development
 
-Requires Node 22+ and pnpm.
+Requires Node 24 LTS (see `.nvmrc`) and pnpm. The bridge itself runs on Node 22 or newer.
 
 ```bash
 pnpm install

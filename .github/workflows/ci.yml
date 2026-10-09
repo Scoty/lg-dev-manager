@@ -12,11 +12,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          # Active LTS, pinned in .nvmrc (the bridge itself still supports Node 22+ for people running it).
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
@@ -26,17 +27,22 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          # Active LTS, pinned in .nvmrc (the bridge itself still supports Node 22+ for people running it).
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @lgdm/web exec playwright install --with-deps chromium
+      # The rig's fake TV is 127.0.0.1; the runner's own SSH server on port 22 would make it look like a rooted TV
+      # with SSH on (the wizard test needs that port closed).
+      - name: Stop the runner's SSH server
+        run: sudo systemctl stop ssh.socket ssh.service 2>/dev/null || sudo systemctl stop ssh 2>/dev/null || true
       # Built UI served by a real bridge, talking to mock TVs (apps/web/e2e/server.ts).
       - run: pnpm e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-traces

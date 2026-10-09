@@ -67,7 +67,7 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 | Web UI | **Vite + React 19 + TypeScript**, React Router, TanStack Query | Mainstream, fast, easy to host statically. |
 | Styling | **Port of Adminator 2026 SCSS tokens + components** (no Bootstrap) | Same CSS variables, light/dark via `data-theme`, shell/sidebar/topbar. |
 | Terminal | **xterm.js** (+ fit, search, web-links addons) | Same as original. |
-| Bridge | **Node 22 + TypeScript**, `ws`, `ssh2` (SSH + SFTP) | Pure JS SSH, no native build step; runs on Windows, macOS and Linux (x64/ARM). |
+| Bridge | **Node (22+ supported, built and tested on 24 LTS) + TypeScript**, `ws`, `ssh2` (SSH + SFTP) | Pure JS SSH, no native build step; runs on Windows, macOS and Linux (x64/ARM). |
 | Protocol | Shared `packages/protocol` with **zod** schemas | One source of truth for every RPC call + event. |
 | Tests | Vitest (unit), Playwright (UI smoke), a **mock TV** (ssh2 server) for bridge integration tests | Lets CI test without a real TV. |
 | CI/CD | GitHub Actions → GitHub Pages at lg.scoty.uk (UI), npm package (bridge CLI) | |
