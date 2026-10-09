@@ -112,5 +112,31 @@ export async function takeScreenshot(pool: SshRunner, device: DeviceTarget, meth
     return { mime: 'image/png', base64: data.toString('base64') };
   } finally {
     await rmFile(pool, device, path).catch(() => {});
+    await sweepOldShots(pool, device).catch(() => {});
   }
+}
+
+const SHOT_NAME = /^devman_shot_(\d+)\.png$/;
+/** How old a leftover capture must be before it is swept (a capture in progress elsewhere is never touched). */
+export const SHOT_SWEEP_AGE_MS = 5 * 60_000;
+
+/**
+ * Screenshots are never kept on the TV: each capture is read back and deleted straight away. If an earlier
+ * capture was interrupted (bridge stopped, connection lost) its file can be left in /tmp, so every screenshot
+ * also removes leftovers older than a few minutes. /tmp is in RAM and is emptied when the TV restarts anyway.
+ */
+export async function sweepOldShots(pool: SshRunner, device: DeviceTarget): Promise<number> {
+  const res = await pool.exec(device, 'ls /tmp', { timeoutMs: 20_000, maxOutput: 1024 * 1024 });
+  if (res.exitCode !== 0) return 0;
+  const cutoff = Date.now() - SHOT_SWEEP_AGE_MS;
+  const old = res.stdout
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((n) => {
+      const m = SHOT_NAME.exec(n);
+      return !!m && Number(m[1]) < cutoff;
+    })
+    .slice(0, 200);
+  if (old.length) await pool.exec(device, `rm -f ${old.map((n) => shellQuote(`/tmp/${n}`)).join(' ')}`, { timeoutMs: 20_000 });
+  return old.length;
 }

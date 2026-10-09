@@ -119,7 +119,7 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [x] System info (`tv.systemproperty/getSystemInfo`, `osInfo/query`, `sdx/getDeviceUuid`) — model, webOS, firmware, OTA ID, SoC
 - [x] **Dev Mode session**: live countdown from `developer.lge.com/secure/CheckDevModeSession.dev` (token from `/var/luna/preferences/devmode_enabled`, never shown in the console), one-click renew (Developer Mode app launched with `{ extend: true }`) — `devmode.status`, `devmode.renew`
 - [x] Automatic renewal: renew URL, shell script generator (cron), IFTTT steps
-- [x] Screenshot (`capture/executeOneShot`, fallback `tv.capture/executeOneShot` at 1920×1080) → shown + downloadable, layer choice — `device.screenshot` (root)
+- [x] Screenshot (`capture/executeOneShot`, fallback `tv.capture/executeOneShot` at 1920×1080) → layer choice — `device.screenshot` (root). The TV's temp file is deleted at once (and leftovers from interrupted captures swept); shots are kept in this browser (IndexedDB) as a gallery: older/newer arrows, thumbnails, select, download one or many (.zip), delete
 - [x] Homebrew Channel card: installed / latest version, rooted, install or update
 
 ### Debug

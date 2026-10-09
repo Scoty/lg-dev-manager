@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MOCK_DEVMODE_TOKEN, startMockLge, startMockTv, type MockLge, type MockTv } from '@lgdm/mock-tv';
 import type { DeviceTarget } from '@lgdm/protocol';
 import { devModeStatus, devModeToken, renewDevMode } from './devices/devmode.js';
-import { takeScreenshot } from './devices/info.js';
+import { SHOT_SWEEP_AGE_MS, takeScreenshot } from './devices/info.js';
 import { RpcError } from './rpc/errors.js';
 import { SshPool } from './ssh/pool.js';
 import { LoggedSsh } from './ssh/logged.js';
@@ -94,6 +94,20 @@ describe('screenshots', () => {
     expect(shot.mime).toBe('image/png');
     expect(Buffer.from(shot.base64, 'base64').subarray(1, 4).toString()).toBe('PNG');
     expect([...rootTv.state.files.keys()].filter((f) => f.startsWith('/tmp/devman_shot_'))).toEqual([]);
+  });
+
+  it('sweeps captures an interrupted run left behind, but not recent ones', async () => {
+    const old = `/tmp/devman_shot_${Date.now() - SHOT_SWEEP_AGE_MS - 60_000}.png`;
+    const recent = `/tmp/devman_shot_${Date.now() - 10_000}.png`;
+    rootTv.state.files.set(old, Buffer.from('x'));
+    rootTv.state.files.set(recent, Buffer.from('x'));
+    rootTv.state.files.set('/tmp/other.png', Buffer.from('x'));
+    await takeScreenshot(pool, rooted(rootTv));
+    expect(rootTv.state.files.has(old)).toBe(false);
+    expect(rootTv.state.files.has(recent)).toBe(true);
+    expect(rootTv.state.files.has('/tmp/other.png')).toBe(true);
+    rootTv.state.files.delete(recent);
+    rootTv.state.files.delete('/tmp/other.png');
   });
 
   it('falls back to the older capture service, at 1920×1080 when it insists on a size', async () => {

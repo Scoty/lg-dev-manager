@@ -18,6 +18,7 @@ import { useInstalledApps } from '../apps/queries';
 import { hasUpdate } from '../repo/logic';
 import { useHbChannel, useRepoIndex } from '../repo/queries';
 import { saveBlob } from '../files/transfer';
+import { ScreenshotCard } from './ScreenshotCard';
 import { fmtCountdown, parseRemaining, renewScript, resetUrl } from './renewScript';
 
 /** Device info (InfoComponent in the original): the TV, its Developer Mode session, screenshots and Homebrew Channel. */
@@ -301,85 +302,6 @@ function AutoRenewDialog({ open, onClose, device, token }: { open: boolean; onCl
         )}
       </div>
     </Modal>
-  );
-}
-
-const METHODS = [
-  { id: 'DISPLAY', label: 'Everything' },
-  { id: 'VIDEO', label: 'Video only' },
-  { id: 'GRAPHIC', label: 'UI only' },
-] as const;
-
-function ScreenshotCard({ device, className }: { device: SavedDevice; className: string }) {
-  const { ready, call } = useRpc();
-  const [method, setMethod] = useState<(typeof METHODS)[number]['id']>('DISPLAY');
-  const [busy, setBusy] = useState(false);
-  const [shot, setShot] = useState<{ url: string; blob: Blob; at: Date } | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const root = device.username === 'root';
-
-  const take = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await call('device.screenshot', { device: toTarget(device), method }, 60_000);
-      const bin = atob(r.base64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      setShot({ url: `data:${r.mime};base64,${r.base64}`, blob: new Blob([bytes], { type: r.mime }), at: new Date() });
-    } catch (e) {
-      setError(e);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const download = () => {
-    if (!shot) return;
-    const blob = shot.blob;
-    const stamp = shot.at.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    saveBlob(blob, `${device.name.replace(/[^A-Za-z0-9._-]+/g, '-')}-${stamp}.png`);
-  };
-
-  return (
-    <Card eyebrow="Screen" title="Screenshot" className={className}>
-      {!root ? (
-        <Alert kind="info" title="Needs a rooted TV">
-          Screenshots use the TV’s capture service, which only root can call. Developer Mode logins can’t take them.
-        </Alert>
-      ) : (
-        <div className="stack">
-          <div className="row">
-            <div className="tabs pills" role="group" aria-label="What to capture">
-              {METHODS.map((m) => (
-                <button key={m.id} type="button" aria-pressed={method === m.id} className={`tab${method === m.id ? ' is-active' : ''}`} onClick={() => setMethod(m.id)}>
-                  {m.label}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="btn btn--primary" onClick={take} disabled={busy || !ready}>
-              {busy ? <span className="spinner sm" /> : <Icon name="image" />} Take screenshot
-            </button>
-            {shot && (
-              <button type="button" className="btn btn--ghost" onClick={download}>
-                <Icon name="download" /> Download
-              </button>
-            )}
-          </div>
-          {error !== null && <ErrorAlert error={error} title="Couldn’t take a screenshot" />}
-          {shot ? (
-            <figure className="screenshot">
-              <img src={shot.url} alt={`Screenshot of ${device.name}`} />
-              <figcaption className="muted">Taken {shot.at.toLocaleTimeString()}</figcaption>
-            </figure>
-          ) : (
-            <div className="screenshot screenshot--empty">
-              <Icon name="image" />
-              <span>“Everything” is what’s on screen; “Video only” and “UI only” capture one layer.</span>
-            </div>
-          )}
-        </div>
-      )}
-    </Card>
   );
 }
 

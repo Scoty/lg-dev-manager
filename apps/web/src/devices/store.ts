@@ -66,11 +66,13 @@ export const ExportFile = z.object({
 export type ExportFile = z.infer<typeof ExportFile>;
 
 const DB_NAME = 'lgdm';
-const DB_VERSION = 1;
+/** 2: screenshots (features/info/shots.ts). */
+const DB_VERSION = 2;
 const STORE = 'devices';
+export const SHOTS_STORE = 'screenshots';
 const ACTIVE_KEY = 'lgdm-active-device';
 
-function req<T>(r: IDBRequest<T>): Promise<T> {
+export function req<T>(r: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
@@ -78,13 +80,23 @@ function req<T>(r: IDBRequest<T>): Promise<T> {
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
-function db(): Promise<IDBDatabase> {
+/** This browser's database: saved TVs and the screenshots taken of them. */
+export function db(): Promise<IDBDatabase> {
   dbPromise ??= new Promise((resolve, reject) => {
     const open = indexedDB.open(DB_NAME, DB_VERSION);
     open.onupgradeneeded = () => {
-      if (!open.result.objectStoreNames.contains(STORE)) open.result.createObjectStore(STORE, { keyPath: 'id' });
+      const d = open.result;
+      if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE, { keyPath: 'id' });
+      if (!d.objectStoreNames.contains(SHOTS_STORE)) d.createObjectStore(SHOTS_STORE, { keyPath: 'id' }).createIndex('deviceId', 'deviceId');
     };
-    open.onsuccess = () => resolve(open.result);
+    open.onsuccess = () => {
+      // Another tab upgrading the database: let it, and reopen on next use.
+      open.result.onversionchange = () => {
+        open.result.close();
+        dbPromise = null;
+      };
+      resolve(open.result);
+    };
     open.onerror = () => {
       dbPromise = null;
       reject(open.error);
@@ -97,6 +109,33 @@ async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
   const d = await db();
   return req(fn(d.transaction(STORE, mode).objectStore(STORE)));
 }
+
+/** Delete every screenshot of one TV (index 'deviceId'). */
+export async function deleteDeviceShots(deviceId: string): Promise<void> {
+  const d = await db();
+  await new Promise<void>((resolve, reject) => {
+    const t = d.transaction(SHOTS_STORE, 'readwrite');
+    const cur = t.objectStore(SHOTS_STORE).index('deviceId').openKeyCursor(IDBKeyRange.only(deviceId));
+    cur.onsuccess = () => {
+      const c = cur.result;
+      if (!c) return;
+      t.objectStore(SHOTS_STORE).delete(c.primaryKey);
+      c.continue();
+    };
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+  });
+  shotListeners.forEach((fn) => fn());
+}
+
+export async function clearShots(): Promise<void> {
+  const d = await db();
+  await req(d.transaction(SHOTS_STORE, 'readwrite').objectStore(SHOTS_STORE).clear());
+  shotListeners.forEach((fn) => fn());
+}
+
+/** Told when screenshots are added or removed (features/info/shots.ts subscribes). */
+export const shotListeners = new Set<() => void>();
 
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((fn) => fn());
@@ -146,8 +185,10 @@ export async function setDeviceInfo(id: string, info: TvInfo): Promise<void> {
   notify();
 }
 
+/** Remove a TV, and the screenshots taken of it. */
 export async function removeDevice(id: string): Promise<void> {
   await tx('readwrite', (s) => s.delete(id));
+  await deleteDeviceShots(id).catch(() => {});
   if (getActiveDeviceId() === id) {
     const rest = await listDevices();
     setActiveDeviceId(rest[0]?.id ?? null);
@@ -198,8 +239,9 @@ export async function importDevices(json: unknown): Promise<number> {
   return file.devices.length;
 }
 
-/** Remove every saved device and the active selection from this browser. */
+/** Remove every saved device, their screenshots and the active selection from this browser. */
 export async function clearAllDevices(): Promise<void> {
   await tx('readwrite', (s) => s.clear());
+  await clearShots().catch(() => {});
   setActiveDeviceId(null);
 }

@@ -51,9 +51,48 @@ test('rooted: screenshot with a layer choice, and download', async ({ paired: pa
 
   await page.getByRole('button', { name: 'UI only' }).click();
   await page.getByRole('button', { name: 'Take screenshot' }).click();
-  await expect(page.getByAltText('Screenshot of Info Root')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByAltText(/^Screenshot of Info Root/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('.shots-meta')).toContainText('1 of 1');
+  await expect(page.locator('.shots-meta')).toContainText('UI only');
   const dl = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Download' }).click();
+  await page.locator('.shots-meta').getByRole('button', { name: 'Download' }).click();
   expect((await dl).suggestedFilename()).toMatch(/^Info-Root-\d{4}-\d\d-\d\dT[\d-]+\.png$/);
+
+  // A second one: the gallery shows the newest, with the older one to the left.
+  await page.getByRole('button', { name: 'Everything' }).click();
+  await page.getByRole('button', { name: 'Take screenshot' }).click();
+  await expect(page.locator('.shots-meta')).toContainText('2 of 2', { timeout: 30_000 });
+  await expect(page.locator('.shot-thumb')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Older screenshot' }).click();
+  await expect(page.locator('.shots-meta')).toContainText('1 of 2');
+  await expect(page.locator('.shots-meta')).toContainText('UI only');
+  await page.getByRole('group', { name: /Screenshot viewer/ }).press('ArrowRight');
+  await expect(page.locator('.shots-meta')).toContainText('2 of 2');
+
+  // They survive a reload (kept in this browser).
+  await page.reload();
+  await expect(page.locator('.shots-meta')).toContainText('2 of 2', { timeout: 30_000 });
+
+  // Download all as a zip with both PNGs.
+  const zdl = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download all (.zip)' }).click();
+  const zfile = await zdl;
+  expect(zfile.suggestedFilename()).toMatch(/^Info-Root-.*-screenshots\.zip$/);
+  const z = readFileSync(await zfile.path());
+  expect(z.subarray(0, 4).toString('hex')).toBe('504b0304');
+  expect(z.readUInt16LE(z.length - 22 + 10)).toBe(2);
+
+  // Select one and delete it (confirmed first).
+  await page.getByRole('checkbox', { name: 'Select screenshot 1' }).check({ force: true });
+  await expect(page.locator('.shots-bar')).toContainText('1 selected');
+  await page.getByRole('button', { name: 'Delete 1…' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+  await expect(page.locator('.shots-meta')).toContainText('1 of 1');
+  await expect(page.locator('.shots-meta')).toContainText('Everything');
+
+  await page.getByRole('button', { name: 'Delete all…' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+  await expect(page.locator('.shots-meta')).toHaveCount(0);
+  await expect(page.getByText('kept in this browser, not on the TV')).toBeVisible();
   expect(errors).toEqual([]);
 });

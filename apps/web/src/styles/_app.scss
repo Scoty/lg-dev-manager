@@ -68,6 +68,16 @@ button.nav-link { width: 100%; text-align: left; }
 .workspace-text { flex: 1; }
 .workspace-name, .workspace-role { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hero-title .accent { white-space: nowrap; }
+/* Page intros use the width they have (Adminator caps them at 60ch, which wrapped short lines early). */
+.hero-text { flex: 1; min-width: 0; }
+.hero-sub { max-width: none; }
+/* Pill groups sit in toolbars and rows next to inputs and buttons: no underline-tab margin, or they ride high. */
+.tabs.pills { margin-bottom: 0; }
+.stack > .tabs.pills { align-self: flex-start; }
+/* The real checkbox is hidden behind .box; show keyboard focus on the box. */
+.check input:indeterminate + .box { background: var(--primary); border-color: var(--primary); }
+.check input:indeterminate + .box::after { content: ''; width: 8px; height: 0; border-top: 1.8px solid #fff; }
+.check input:focus-visible + .box { box-shadow: 0 0 0 3px var(--primary-ring); border-color: var(--primary); }
 @media (max-width: 520px) { .bridge-pill span:not(.dot) { display: none; } .bridge-pill { padding: 9px; } }
 
 /* ============ M3: shared controls ============ */
@@ -178,7 +188,7 @@ button.dd-menu-item { width: 100%; text-align: left; background: none; border: 0
 .input-row { display: flex; gap: 8px; }
 .input-row .input { flex: 1; min-width: 0; }
 .codeblock--wrap { white-space: pre-wrap; word-break: break-all; }
-.auth-fields .tabs.pills { flex-wrap: wrap; margin-bottom: 0; }
+.auth-fields .tabs.pills { flex-wrap: wrap; }
 .data-toolbar .switch { white-space: nowrap; }
 
 /* ---- Wizard ---- */
@@ -750,9 +760,40 @@ kbd {
 .copybox code { flex: 1; min-width: 0; font-size: 12px; overflow-wrap: anywhere; color: var(--t-base); }
 .plain-list.numbered { list-style: decimal; }
 .renew-script { max-height: 40vh; white-space: pre; overflow: auto; }
-.screenshot { margin: 0; }
-.screenshot img { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-muted); }
-.screenshot figcaption { margin-top: 6px; font-size: 12px; }
+/* Screenshot gallery: viewer with older/newer arrows, meta line, thumbnail strip (oldest left), selection bar. */
+.shots-viewer {
+  position: relative; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-muted); outline: 0;
+}
+.shots-viewer:focus-visible { box-shadow: 0 0 0 3px var(--primary-ring); border-color: var(--primary); }
+.shots-viewer img { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 10px; }
+.shots-viewer-blank { aspect-ratio: 16 / 9; max-height: 60vh; }
+.shots-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--bg-card); color: var(--t-base); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+  cursor: pointer; transition: opacity 160ms, border-color 160ms;
+}
+.shots-nav:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.shots-nav:disabled { opacity: 0.35; cursor: default; }
+.shots-nav svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2.2; fill: none; }
+.shots-nav.prev { left: 12px; }
+.shots-nav.next { right: 12px; }
+.shots-meta, .shots-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; }
+.shots-meta .spacer, .shots-bar .spacer { flex: 1; }
+.shots-strip { display: flex; gap: 10px; overflow-x: auto; list-style: none; margin: 0; padding: 3px 3px 8px; }
+.shot-thumb { position: relative; flex: 0 0 auto; }
+.shot-thumb-btn {
+  display: block; width: 128px; aspect-ratio: 16 / 9; padding: 0; overflow: hidden; cursor: pointer;
+  border-radius: 8px; border: 2px solid var(--border); background: var(--bg-muted); transition: border-color 160ms;
+}
+.shot-thumb-btn:hover { border-color: var(--t-light); }
+.shot-thumb-btn img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.shot-thumb.is-current .shot-thumb-btn { border-color: var(--primary); }
+.shot-thumb.is-selected .shot-thumb-btn { box-shadow: 0 0 0 3px var(--primary-ring); }
+.shot-thumb-check { position: absolute; top: 6px; left: 6px; }
+.shot-thumb-check .box { box-shadow: var(--shadow-sm); }
+.btn--danger-ghost { color: var(--danger); }
+.btn--danger-ghost:hover { border-color: var(--danger); }
 .screenshot--empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center;
   aspect-ratio: 16 / 9; max-height: 320px; border-radius: 10px; border: 1px dashed var(--border); color: var(--t-muted); font-size: 13px; padding: 16px;
