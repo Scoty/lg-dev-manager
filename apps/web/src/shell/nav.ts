@@ -1,3 +1,4 @@
+import { REPO_URL } from '@lgdm/protocol';
 import type { IconName } from './icons';
 
 export interface NavChild {
@@ -61,7 +62,7 @@ export const NAV: NavSection[] = [
     label: 'Links',
     items: [
       { key: 'homebrew-site', text: 'webOS Homebrew', icon: 'store', href: 'https://www.webosbrew.org/' },
-      { key: 'source', text: 'Source code', icon: 'github', href: 'https://github.com/IfSugar/lg-dev-manager' },
+      { key: 'source', text: 'Source code', icon: 'github', href: REPO_URL },
     ],
   },
 ];

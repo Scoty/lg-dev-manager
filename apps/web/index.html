@@ -7,19 +7,8 @@
     <meta name="description" content="Manage LG webOS TVs in Developer Mode or rooted — install apps, browse files, open a shell." />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <title>LG Dev Manager</title>
-    <script>
-      // Early paint: apply the saved / system theme before React mounts to avoid a flash.
-      (function () {
-        try {
-          var saved = localStorage.getItem('lgdm-theme');
-          var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          var theme = saved === 'light' || saved === 'dark' ? saved : dark ? 'dark' : 'light';
-          document.documentElement.setAttribute('data-theme', theme);
-        } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'light');
-        }
-      })();
-    </script>
+    <meta name="referrer" content="no-referrer" />
+    <script src="./theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

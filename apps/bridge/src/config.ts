@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_BRIDGE_PORT } from '@lgdm/protocol';
+import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT } from '@lgdm/protocol';
 
 export interface BridgeConfig {
   host: string;
@@ -16,12 +16,6 @@ export interface BridgeConfig {
   dev: boolean;
 }
 
-/** Origins that are always allowed: the public Pages site and local dev servers. */
-export const DEFAULT_ORIGINS = [
-  'https://ifsugar.github.io',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-];
 
 const stateDir = () => process.env.LGDM_STATE_DIR ?? join(homedir(), '.lg-dev-manager');
 
@@ -67,7 +61,7 @@ export function parseArgs(argv: string[]): BridgeConfig {
   return {
     host,
     port,
-    allowedOrigins: [...new Set([...DEFAULT_ORIGINS, ...self, ...extra])],
+    allowedOrigins: [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...self, ...extra])],
     token: loadOrCreateToken(argv.includes('--reset-token')),
     webRoot: get('web-root') ?? process.env.LGDM_WEB_ROOT,
     dev: argv.includes('--dev'),

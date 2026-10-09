@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { defaultBridgeUrl } from './settings';
 
 describe('defaultBridgeUrl', () => {
-  it('uses localhost bridge from GitHub Pages', () => {
-    expect(defaultBridgeUrl({ protocol: 'https:', host: 'ifsugar.github.io', hostname: 'ifsugar.github.io' })).toBe(
+  it('uses localhost bridge from the public site', () => {
+    expect(defaultBridgeUrl({ protocol: 'https:', host: 'lg.scoty.uk', hostname: 'lg.scoty.uk' })).toBe(
       'ws://127.0.0.1:5199/rpc',
     );
   });

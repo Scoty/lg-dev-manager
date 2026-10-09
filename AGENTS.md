@@ -11,8 +11,10 @@ browse the Homebrew repo, manage files, open a shell, read logs, renew the Dev M
 
 It has two parts (see `PLAN.md` §1 for why):
 
-- `apps/web` — static React UI, hosted on GitHub Pages, styled after **Adminator 2026**.
-- `apps/bridge` — small Node service that owns all SSH/SFTP/TCP traffic to the TV.
+- `apps/web` — static React UI, hosted at **https://lg.scoty.uk** (GitHub Pages), styled after **Adminator 2026**.
+  It is the only place user settings are stored.
+- `apps/bridge` — small, **stateless** Node service that owns all SSH/SFTP/TCP traffic to the TV.
+- `tools/mock-tv` — fake webOS TV (SSH + luna-send + key server) for tests and UI development.
 - `packages/protocol` — the shared, typed contract between the two. **Change it first, then both sides.**
 
 ## Golden rules
@@ -21,9 +23,13 @@ It has two parts (see `PLAN.md` §1 for why):
    `packages/protocol`, implemented in the bridge. No generic "open socket to host:port" RPC — ever.
 2. **Bridge security stays on.** Default bind `127.0.0.1`, Origin allowlist, pairing token required.
    Don't add flags that disable these without an explicit, documented reason.
-3. **Private keys and passwords never reach the browser's storage** and never appear in logs.
-   They live in the bridge's ares-cli-compatible store (`~/.webos/ose/novacom-devices.json`, `~/.ssh/`).
-   Redact them in error messages.
+3. **User settings live only in the browser.** Saved TVs (names, addresses, keys, passwords) are kept in
+   IndexedDB (`apps/web/src/devices/store.ts`) and the bridge pairing in `localStorage`. Nothing is ever sent to
+   the website or any third party. Device details go **only to the paired bridge**, inside the RPC that needs them.
+   The bridge must **never persist** device details (no device files, no caches on disk) and must **never log or
+   echo** keys/passwords — not in logs, error messages or `detail`. Only its own pairing token is stored on disk.
+   Keep the production Content-Security-Policy strict (no third-party/inline scripts, no new `connect-src` hosts
+   without a reason), and never render TV-supplied text as HTML.
 4. **Behavioural parity with the original.** When implementing a feature, read the matching code in
    dev-manager-desktop (`src/app/**` for UI flow, `src-tauri/src/**` for backend behaviour) and keep its
    luna calls, paths and fallbacks (e.g. `dev/listApps` → `listApps`, IPK temp dir `/media/developer/temp`).
@@ -33,7 +39,8 @@ It has two parts (see `PLAN.md` §1 for why):
    Both light and dark themes must work for every screen. No Bootstrap, no jQuery.
 6. **Destructive TV actions confirm first** (remove app, delete files, uninstall Homebrew Channel, reboot).
 7. **No secrets in the repo.** No tokens, keys, IPs of real devices, or personal hostnames in code,
-   tests, fixtures or screenshots.
+   tests, fixtures or screenshots. (The public site domain `lg.scoty.uk` is the one intended exception.)
+   Use RFC 5737 addresses (`192.0.2.x`) in examples and tests.
 
 ## Tech stack
 
@@ -46,9 +53,10 @@ It has two parts (see `PLAN.md` §1 for why):
 
 ```bash
 pnpm install
-pnpm dev            # web (Vite) + bridge together, with mock TV
+pnpm dev            # web (Vite) + bridge together
 pnpm dev:web        # UI only
 pnpm dev:bridge     # bridge only
+pnpm --filter @lgdm/mock-tv start   # fake Dev Mode TV on 127.0.0.1:9922 (SSH) / :9991 (key server)
 pnpm test           # unit + integration (uses mock TV)
 pnpm lint && pnpm typecheck
 pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
@@ -87,7 +95,8 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 | Where the bridge runs | Both: `npx`/binary on the user's computer (for the Pages site → localhost) **and** a Docker image for a NAS that also serves the UI on the LAN | Decided |
 | UI framework | React 19 + Vite + TypeScript | Decided |
 | v1 scope | **Full parity** with the desktop app (all of PLAN.md §3, incl. Debug tools) before the public release | Decided |
-| Device/key storage | Bridge side, ares-cli compatible (proposed) | Default |
+| Device/key storage | **Browser only** (IndexedDB + export/import); bridge is stateless and never writes device details to disk | Decided (owner, Oct 2026) |
 | Repo license | Apache-2.0 (proposed) | Default |
-| Hosting | GitHub Pages at release (after M7) | Decided |
+| Hosting | GitHub Pages with custom domain **lg.scoty.uk** (Cloudflare DNS), public preview from now, v1.0 at M8 | Decided |
+| Repository | **github.com/Scoty/lg-dev-manager** | Decided |
 | Test devices | Owner tests on both Dev Mode (SSH 9922) and rooted (SSH 22) TVs | Decided |

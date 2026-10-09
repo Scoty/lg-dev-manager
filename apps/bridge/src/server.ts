@@ -5,10 +5,11 @@ import { dispatch } from './rpc/dispatch.js';
 import type { Session } from './rpc/handlers.js';
 import { serveStatic } from './http/static.js';
 import { BRIDGE_VERSION } from './version.js';
+import { SshPool } from './ssh/pool.js';
 
 export const RPC_PATH = '/rpc';
 
-export function startServer(config: BridgeConfig): Promise<Server> {
+export function startServer(config: BridgeConfig, pool = new SshPool()): Promise<Server> {
   const http = createServer((req, res) => {
     if (req.url === '/healthz') {
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, version: BRIDGE_VERSION }));
@@ -51,7 +52,7 @@ export function startServer(config: BridgeConfig): Promise<Server> {
 
     ws.on('message', async (data, isBinary) => {
       if (isBinary) return;
-      const res = await dispatch(data.toString(), session, { token: config.token });
+      const res = await dispatch(data.toString(), session, { token: config.token, pool });
       if (res && ws.readyState === ws.OPEN) ws.send(JSON.stringify(res));
       if (res && 'error' in res && res.error.code === 'unauthorized' && !session.authed) {
         ws.close(4401, 'unauthorized');
@@ -59,6 +60,8 @@ export function startServer(config: BridgeConfig): Promise<Server> {
     });
     ws.on('close', () => clearTimeout(authTimer));
   });
+
+  http.on('close', () => pool.close());
 
   return new Promise((resolve, reject) => {
     http.once('error', reject);

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { DEFAULT_BRIDGE_PORT } from '@lgdm/protocol';
+import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, DOCKER_IMAGE } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
 import { Card } from '../../components/Card';
 import { Icon } from '../../shell/icons';
@@ -71,13 +71,13 @@ export function BridgePage() {
               <div className="eyebrow">On a NAS (Docker) — serves this UI too</div>
               <div className="codeblock">{`docker run -d --name lg-dev-manager --network host \\
   -v lgdm-data:/data \\
-  ghcr.io/ifsugar/lg-dev-manager --host 0.0.0.0`}</div>
+  ${DOCKER_IMAGE} --host 0.0.0.0`}</div>
             </div>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
               The bridge prints a <strong>pairing token</strong> when it starts. Publishing to npm and ghcr.io happens at release;
               until then run it from the repo with <span className="mono">pnpm dev:bridge</span>.
             </p>
-            {!['https://ifsugar.github.io', 'http://localhost:5173', 'http://127.0.0.1:5173'].includes(origin) &&
+            {!(DEFAULT_ALLOWED_ORIGINS as readonly string[]).includes(origin) &&
               !origin.endsWith(`:${DEFAULT_BRIDGE_PORT}`) && (
                 <Alert kind="warning">
                   This page is served from <span className="mono">{origin}</span>. Start the bridge with{' '}
