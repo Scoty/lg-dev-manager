@@ -155,7 +155,13 @@ button.dd-menu-item { width: 100%; text-align: left; background: none; border: 0
 .device-switcher { width: 100%; }
 .device-switcher .dd-menu { width: 100%; min-width: 0; }
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
-.row-actions .dd-menu, .data-cell-actions .dd-menu { z-index: 120; }
+/* Menus that float above the page (rendered in a portal, placed by Dropdown) — not clipped by table scrollers. */
+.dd-menu.dd-menu--floating {
+  position: fixed; top: 0; left: 0; right: auto; bottom: auto;
+  width: auto; max-width: calc(100vw - 16px);
+  z-index: 200; transform: none; transition: opacity 120ms ease;
+}
+.dd-menu.dd-menu--floating.is-placed { opacity: 1; visibility: visible; }
 
 /* ---- Forms ---- */
 .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

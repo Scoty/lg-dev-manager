@@ -107,9 +107,20 @@ test('devices: switch, edit, remove', async ({ paired: page, errors }) => {
   await expect(page.getByText('TV One is reachable')).toBeVisible({ timeout: 30_000 });
 
   await page.getByRole('button', { name: 'More actions for TV Two (bedroom)' }).click();
-  await page.getByRole('menuitem', { name: 'Remove from this browser' }).click();
+  // The menu of the last row must not be clipped by the table's scroll box (it used to need scrolling).
+  const removeItem = page.getByRole('menuitem', { name: 'Remove from this browser' });
+  await expect(removeItem).toBeInViewport({ ratio: 1 });
+  expect(await removeItem.evaluate(visibleAtCentre)).toBe(true);
+  await removeItem.click();
   await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click();
   await expect(page.getByRole('cell', { name: 'TV Two (bedroom)', exact: true })).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'TV One', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+/** True when the element is what you'd actually click at its centre (not clipped or covered). */
+function visibleAtCentre(el: Element) {
+  const r = el.getBoundingClientRect();
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return !!hit && el.contains(hit);
+}

@@ -236,6 +236,7 @@ function AppRow({
           <Dropdown
             label={`More actions for ${title}`}
             menuClassName="dd-menu--compact"
+            floating
             trigger={({ toggle, ...aria }) => (
               <button type="button" className="btn btn--icon btn--sm btn--ghost" aria-label={`More actions for ${title}`} onClick={toggle} {...aria}>
                 <Icon name="more" />

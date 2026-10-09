@@ -148,6 +148,7 @@ export function DevicesPage() {
                             <Dropdown
                               label={`More actions for ${d.name}`}
                               menuClassName="dd-menu--compact"
+                              floating
                               trigger={({ toggle, ...aria }) => (
                                 <button type="button" className="btn btn--icon" aria-label={`More actions for ${d.name}`} onClick={toggle} {...aria}>
                                   <Icon name="more" />
