@@ -32,6 +32,7 @@ for (const theme of ['light', 'dark'] as const) {
         await expect(page.getByText('Bridge connected')).toBeVisible();
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
         await expect(page.locator('.phone-notice')).toHaveCount(0); // desktop: no "use a computer" notice
+        await expect(page.locator('.d-footer')).toContainText('Not affiliated with or endorsed by LG Electronics');
         expect(errors, `console errors on ${path}`).toEqual([]);
       });
     }

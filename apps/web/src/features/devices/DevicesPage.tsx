@@ -1,3 +1,4 @@
+import { webosName } from '../../lib/webosVersion';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../../components/PageHeader';
@@ -31,7 +32,7 @@ export function DevicesPage() {
       toast({
         kind: 'success',
         title: `${d.name} is reachable`,
-        text: [modelLine(info?.modelName), info?.osVersion && `webOS ${info.osVersion}`, `${login.latencyMs} ms`, login.root ? 'root' : null]
+        text: [modelLine(info?.modelName), info?.osVersion && `webOS ${webosName(info.osVersion)}`, `${login.latencyMs} ms`, login.root ? 'root' : null]
           .filter(Boolean)
           .join(' · '),
       });
@@ -116,7 +117,7 @@ export function DevicesPage() {
                               {d.info?.modelName && (
                                 <div className="cell-sub" title={d.info.firmwareVersion ? `Firmware ${d.info.firmwareVersion}` : undefined}>
                                   {modelLine(d.info.modelName)}
-                                  {d.info.osVersion && <> · webOS {d.info.osVersion}</>}
+                                  {d.info.osVersion && <> · webOS {webosName(d.info.osVersion)}</>}
                                 </div>
                               )}
                               {d.description && <div className="cell-sub">{d.description}</div>}

@@ -9,6 +9,10 @@ renew the Dev Mode session and dig into logs and the luna bus.
 A web rebuild of [webosbrew/dev-manager-desktop](https://github.com/webosbrew/dev-manager-desktop), styled after
 [Adminator](https://github.com/puikinsh/adminator-admin-dashboard).
 
+> **Note:** LG Dev Manager is an independent, community project. It is not affiliated with, endorsed by or supported
+> by LG Electronics. LG and webOS are trademarks of LG Electronics. Rooting a TV or using Developer Mode is at your own
+> risk.
+
 ### Add a TV, install an app and update it
 
 ![Adding the Living Room TV with the wizard, installing Moonfin 2.8.2 from an IPK file and updating it to 2.9.0 from the Homebrew repository](docs/demo-basic.webp)
@@ -125,4 +129,4 @@ Contributors, human or AI: read [AGENTS.md](AGENTS.md) and [PLAN.md](PLAN.md) fi
 as you keep the license and the [NOTICE](NOTICE) file that credits its authors — this project, the original
 [dev-manager-desktop](https://github.com/webosbrew/dev-manager-desktop) by the webOS Homebrew team, and Adminator.
 
-Not affiliated with LG Electronics. webOS and LG are trademarks of LG Electronics.
+Not affiliated with or endorsed by LG Electronics. LG and webOS are trademarks of LG Electronics.

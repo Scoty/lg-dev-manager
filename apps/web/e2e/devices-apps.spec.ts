@@ -101,7 +101,7 @@ test('devices: switch, edit, remove', async ({ paired: page, errors }) => {
   await expect(page.getByRole('button', { name: /Active TV: TV One/ })).toContainText('LG C3 · Dev Mode');
 
   await page.goto('/#/devices');
-  await expect(page.getByRole('row', { name: /TV Two/ })).toContainText('LG C3 · OLED55C36LC · webOS 8.0.0');
+  await expect(page.getByRole('row', { name: /TV Two/ })).toContainText('LG C3 · OLED55C36LC · webOS 23 (8.0.0)');
   await page.getByRole('button', { name: 'Edit TV Two' }).click();
   await page.getByRole('dialog').getByLabel('Name').fill('TV Two (bedroom)');
   await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();

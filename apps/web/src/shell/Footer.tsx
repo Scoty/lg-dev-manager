@@ -14,6 +14,9 @@ export function Footer() {
         <a href="https://github.com/puikinsh/adminator-admin-dashboard" target="_blank" rel="noopener noreferrer">
           Adminator
         </a>
+        <div className="d-footer-note">
+          Not affiliated with or endorsed by LG Electronics. LG and webOS are trademarks of LG Electronics.
+        </div>
       </div>
       <div className="d-footer-meta">
         <span>web v{APP_VERSION}</span>

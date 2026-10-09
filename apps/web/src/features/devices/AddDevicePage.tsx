@@ -1,3 +1,4 @@
+import { webosName } from '../../lib/webosVersion';
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DeviceErrorCodes, type ScanResult } from '@lgdm/protocol';
@@ -504,7 +505,7 @@ export function AddDevicePage() {
                   </div>
                   <dl className="kv">
                     <dt>Model</dt><dd>{modelLine(verify.info.modelName) ?? '—'}</dd>
-                    <dt>webOS</dt><dd>{verify.info.osVersion ?? '—'}</dd>
+                    <dt>webOS</dt><dd>{webosName(verify.info.osVersion) ?? '—'}</dd>
                     <dt>Firmware</dt><dd className="mono">{verify.info.firmwareVersion ?? '—'}</dd>
                     <dt>Logged in as</dt><dd className="mono">{username}{verify.login?.root ? ' (root)' : ''}</dd>
                     <dt>Response time</dt><dd>{verify.login ? `${verify.login.latencyMs} ms` : '—'}</dd>

@@ -1,3 +1,4 @@
+import { webosName } from '../../lib/webosVersion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { APP_ID_HBCHANNEL } from '@lgdm/protocol';
@@ -87,7 +88,7 @@ function DeviceCard({ device }: { device: SavedDevice }) {
             <dt>Model</dt>
             <dd className="mono">{d.modelName ?? '—'}</dd>
             <dt>webOS</dt>
-            <dd>{d.osVersion ?? '—'}</dd>
+            <dd>{webosName(d.osVersion) ?? '—'}</dd>
             <dt>Firmware</dt>
             <dd className="mono">{d.firmwareVersion ?? '—'}</dd>
             <dt>OTA ID</dt>

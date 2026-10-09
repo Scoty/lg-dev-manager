@@ -35,3 +35,5 @@ Source, documentation and the from-source instructions: https://github.com/Scoty
 
 Apache-2.0 — see LICENSE and NOTICE (credits the original
 [dev-manager-desktop](https://github.com/webosbrew/dev-manager-desktop) and Adminator).
+
+Not affiliated with or endorsed by LG Electronics. LG and webOS are trademarks of LG Electronics.
