@@ -1,6 +1,6 @@
 {
   "name": "lg-dev-manager-bridge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local bridge for LG Dev Manager: lets the web app at lg.scoty.uk (or its local copy) manage LG webOS TVs over SSH",
   "license": "Apache-2.0",
   "author": "Scoty (https://github.com/Scoty)",
@@ -34,7 +34,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "scripts": {
     "dev": "tsx watch src/cli.ts --dev",

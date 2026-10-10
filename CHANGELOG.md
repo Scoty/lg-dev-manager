@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.1 — 2026-10-10
+
+- 📺 webOS versions show LG's name first: `26 (11.0.2)`, `25 (10.3.1)` (Device info, Devices, the add-TV wizard).
+- 🧭 The TV switcher stays at the bottom of the sidebar; opening a submenu no longer pushes it out of view.
+- 📦 The npm package is half the size (about 1 MB): the bundled web app leaves out the old `.woff` font copies,
+  which no supported browser loads. The npm page now shows the full project README.
+- 🟢 Node.js 22.12 or newer everywhere — npx and running from source (CI tests both 22.12 and 24).
+- ⚠️ "Not affiliated with or endorsed by LG Electronics" in the README and at the bottom of every page.
+- 🍿 README: why the Litefin repo exists, Node.js requirements, a bit more colour.
+- 🚀 The bridge is published from GitHub Actions with npm trusted publishing (no token).
+
 ## 1.0.0 — 2026-10-09
 
 Web app (`web-v1.0.0`, https://lg.scoty.uk) and bridge (`bridge-v1.0.0`, `npx lg-dev-manager-bridge`), released together.

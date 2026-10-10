@@ -54,6 +54,24 @@ test('apps page explains what is missing without a TV', async ({ paired: page })
   await expect(page.getByRole('heading', { name: 'Add your TV' })).toBeVisible();
 });
 
+test.describe('in a short window', () => {
+  test.use({ viewport: { width: 1280, height: 560 } });
+
+  test('the TV switcher stays at the bottom when submenus open', async ({ paired: page, errors }) => {
+    await page.goto('/#/debug/logs'); // Debug open
+    await page.getByRole('button', { name: 'Apps' }).click(); // and Apps
+    const footer = page.locator('.sidebar-footer');
+    await expect(footer).toBeInViewport({ ratio: 1 });
+    const box = await footer.boundingBox();
+    expect(box!.y + box!.height).toBeLessThanOrEqual(560);
+    // The menu itself scrolls to its last entry.
+    await page.getByRole('link', { name: 'Source code' }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole('link', { name: 'Source code' })).toBeInViewport();
+    await expect(footer).toBeInViewport({ ratio: 1 });
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('with the sidebar as an icon rail', () => {
   test.use({ viewport: { width: 900, height: 800 } });
 

@@ -46,8 +46,9 @@ It has two parts (see `PLAN.md` §1 for why):
 
 ## Tech stack
 
-- pnpm workspaces, TypeScript strict everywhere. Development and CI on Node 24 LTS (`.nvmrc`); the published bridge
-  supports Node ≥ 22 (`apps/bridge/package.json` engines) — don't use Node 24-only APIs in the bridge.
+- pnpm workspaces, TypeScript strict everywhere. **Node.js 22.12 or newer** for everything — the npm bridge and running
+  from source (`engines` in both package.json files; Vite needs 22.12). Development uses Node 24 LTS (`.nvmrc`); CI
+  builds and tests on both 22.12 and 24 — don't use Node 24-only APIs anywhere.
 - Web: Vite, React 19, React Router, TanStack Query, xterm.js, SCSS (Adminator tokens).
 - Bridge: `ws`, `ssh2`, zod. No native modules (must run on Windows, macOS and Linux, x64 and ARM).
 - Tests: Vitest, Playwright, `tools/mock-tv` (an ssh2 server that fakes webOS luna-send + filesystem).

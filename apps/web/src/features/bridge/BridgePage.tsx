@@ -75,7 +75,7 @@ export function BridgePage() {
         <Card eyebrow="Step 1" title="Run the bridge" className="col-6">
           <div className="stack">
             <div>
-              <div className="eyebrow">In a terminal on this computer (Node.js 22 or newer)</div>
+              <div className="eyebrow">In a terminal on this computer (Node.js 22.12 or newer)</div>
               <div className="codeblock">npx lg-dev-manager-bridge@latest</div>
             </div>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
@@ -96,7 +96,7 @@ pnpm install
 pnpm build
 pnpm bridge`}</div>
               <p style={{ margin: 0 }}>
-                Needs Node.js 24. To update later: <span className="mono">git pull</span>, <span className="mono">pnpm install</span>,{' '}
+                Needs Node.js 22.12 or newer. To update later: <span className="mono">git pull</span>, <span className="mono">pnpm install</span>,{' '}
                 <span className="mono">pnpm build</span>, then <span className="mono">pnpm bridge</span> again.
               </p>
             </details>

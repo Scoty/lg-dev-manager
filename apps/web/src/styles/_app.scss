@@ -999,3 +999,18 @@ button.log-row:hover { background: var(--bg-hover); }
 
 /* Footer: the "not affiliated with LG" note under the credits. */
 .d-footer-note { margin-top: 3px; font-size: 11.5px; color: var(--t-light); }
+
+/* Sidebar: the menu scrolls between the brand and the TV switcher, which always stays at the bottom of the window
+   (an open submenu used to push the switcher out of view). Applies to the full sidebar, the icon rail and the
+   mobile drawer alike. */
+.d-sidebar { overflow: hidden; }
+.sidebar-scroll {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 22px;
+  overflow-y: auto; overflow-x: hidden;
+  overscroll-behavior: contain;
+  margin: 0 -6px; padding: 0 6px; /* room for focus rings next to the scrollbar */
+}
+.sidebar-scroll::-webkit-scrollbar { width: 4px; }
+.sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.sidebar-footer { margin-top: 0; flex-shrink: 0; }

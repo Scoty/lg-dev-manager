@@ -336,6 +336,7 @@ it). The site shows a notice when the connected bridge is older than the one rel
    package npm *stages* the version and publishes only a `0.0.0-stage` placeholder (no files to run) until a maintainer
    approves it: `npm stage list lg-dev-manager-bridge`, then `npm stage approve <stage-id>`, or the Staged tab on
    npmjs.com. Test `npx` from outside the repository — inside `apps/bridge` npx finds the local package instead.
-4. The package contains `dist/cli.js` (protocol bundled), `web/` (the built site, served as the local page),
-   `LICENSE`, `NOTICE` and its README — copied in by `apps/bridge/scripts/prepack.mjs`.
+4. The package contains `dist/cli.js` (protocol bundled), `web/` (the built site without source maps and `.woff` fonts,
+   served as the local page), `LICENSE`, `NOTICE` and the root README with absolute links — all made by
+   `apps/bridge/scripts/prepack.mjs` (`apps/bridge/README.md` is generated, not in git).
 5. Create GitHub releases for both tags with the notes from `CHANGELOG.md`.

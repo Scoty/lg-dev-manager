@@ -11,13 +11,17 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # The oldest supported version (engines: >=22.12) and the active LTS the project is developed on (.nvmrc).
+        node: ['22.12', '24']
+    name: build (Node ${{ matrix.node }})
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
-          # Active LTS, pinned in .nvmrc (the bridge itself still supports Node 22+ for people running it).
-          node-version-file: .nvmrc
+          node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
@@ -31,7 +35,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
-          # Active LTS, pinned in .nvmrc (the bridge itself still supports Node 22+ for people running it).
+          # Active LTS, pinned in .nvmrc (Node 22.12+ is supported too; the build job checks both).
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile

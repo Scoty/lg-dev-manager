@@ -105,14 +105,17 @@ export function Sidebar() {
         </div>
       </Link>
 
-      {NAV.map((section) => (
-        <nav className="nav-section" key={section.label}>
-          <div className="nav-label">{section.label}</div>
-          {section.items.map((item) => (
-            <NavEntry key={item.key} item={item} pathname={pathname} />
-          ))}
-        </nav>
-      ))}
+      {/* Only the menu scrolls; the brand stays on top and the TV switcher at the bottom, like the console bar. */}
+      <div className="sidebar-scroll">
+        {NAV.map((section) => (
+          <nav className="nav-section" key={section.label}>
+            <div className="nav-label">{section.label}</div>
+            {section.items.map((item) => (
+              <NavEntry key={item.key} item={item} pathname={pathname} />
+            ))}
+          </nav>
+        ))}
+      </div>
 
       <div className="sidebar-footer">
         <DeviceSwitcher />
