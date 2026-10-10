@@ -1,0 +1,96 @@
+name: ✨ Feature request
+description: Suggest a new feature or an improvement for LG Dev Manager
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What's your idea?
+      description: A clear description of the feature you'd like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve?
+      description: What are you trying to do, and what makes it hard today?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app?
+      options:
+        - Devices / add-a-TV wizard
+        - Apps (installed, IPK install, Homebrew repository, Litefin repo)
+        - Files
+        - Terminal
+        - Device info / Developer Mode session
+        - Debug tools
+        - Console
+        - The bridge (app, npx, options)
+        - Look and layout
+        - Something new
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Which TVs is it for?
+      options:
+        - Rooted (Homebrew Channel)
+        - Developer Mode
+        - Both
+        - Doesn't matter
+    validations:
+      required: true
+
+  - type: dropdown
+    id: original
+    attributes:
+      label: Does the desktop webOS Dev Manager have it?
+      description: LG Dev Manager is a web rebuild of [dev-manager-desktop](https://github.com/webosbrew/dev-manager-desktop).
+      options:
+        - No, it's new
+        - Yes — LG Dev Manager is missing it or does it differently
+        - Not sure
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Mockups, examples from other apps, how it could work, alternatives you've considered.
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Want to help?
+      options:
+        - "Yes, I'd like to build it"
+        - "I can test it on my TV and give feedback"
+        - "Just sharing the idea"
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ### Want to build it?
+        After submitting, comment with how you would build it and wait for a maintainer to agree and assign the issue
+        to you before opening a pull request. Some ideas don't fit the project's rules — for example, the bridge only
+        ever listens on your own computer and never stores your TVs or keys. [AGENTS.md](https://github.com/Scoty/lg-dev-manager/blob/main/AGENTS.md)
+        lists them.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I've searched the existing issues and this hasn't been requested yet.
+          required: true
+        - label: If I build this, I'll wait for a maintainer to agree and assign it before opening a pull request.
+          required: true

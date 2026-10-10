@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Read me — getting started and how it works
+    url: https://github.com/Scoty/lg-dev-manager#readme
+    about: Running the bridge (app, npx or source code), pairing, adding a TV
+  - name: 🔒 Report a security problem privately
+    url: https://github.com/Scoty/lg-dev-manager/security/policy
+    about: Please don't open a public issue for security problems
+  - name: 🍺 Rooting your TV or Homebrew Channel itself
+    url: https://www.webosbrew.org/
+    about: Questions about rooting, Homebrew Channel or apps in the Homebrew repository belong to the webOS Homebrew project

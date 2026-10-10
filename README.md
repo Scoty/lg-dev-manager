@@ -188,6 +188,12 @@ pnpm app            # the standalone app for this computer → apps/bridge/relea
 `tools/mock-tv` fakes webOS TVs (SSH, luna-send, key server, logs) so everything can be tested without a TV.
 Contributors, human or AI: read [AGENTS.md](AGENTS.md) and [PLAN.md](PLAN.md) first.
 
+## 🙋 Problems and ideas
+
+[Open an issue](https://github.com/Scoty/lg-dev-manager/issues/new/choose): there are forms for bugs, connection
+problems and feature requests that ask for what helps track a problem down. Security problems: please report them
+privately (see the [security policy](https://github.com/Scoty/lg-dev-manager/security/policy)).
+
 ## 📄 License
 
 [Apache-2.0](LICENSE). You may use, change and share the app and its code freely, including commercially, as long

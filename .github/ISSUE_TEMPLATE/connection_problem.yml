@@ -1,0 +1,172 @@
+name: 🔌 Connection problem
+description: The bridge won't start or pair, a TV can't be found or added, or the connection drops
+title: "[Connection] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most connection problems have one of a few causes. Please check these first — it's often the quickest fix:
+
+        **Bridge**
+        - The bridge is running and its window is still open (closing it stops the bridge).
+        - The pairing token on the **Bridge** page is the one the bridge printed. After `--reset-token`, paste the new one.
+        - Only one bridge is running: a second one on the same port says the port is already in use.
+        - The app from the release: on first start, allow it — Windows: *More info → Run anyway*; macOS: *System
+          Settings → Privacy & Security → Open Anyway*.
+        - **macOS**: the bridge (or Terminal) is allowed to find devices on your local network — *System Settings →
+          Privacy & Security → Local Network*.
+        - The page is https://lg.scoty.uk or http://localhost:5199. Any other address needs `--allow-origin`.
+        - Your browser or an extension isn't blocking `ws://127.0.0.1:5199` (some privacy extensions and
+          corporate policies do).
+
+        **TV**
+        - The TV is on, and on the same network as this computer (not a guest Wi-Fi), with no VPN in between.
+        - **Rooted**: SSH is turned on in Homebrew Channel → Settings, and the root password or key is right.
+        - **Developer Mode**: the Developer Mode app is open on the TV, *Key Server* is on, the session hasn't
+          expired, and the passphrase matches the one the app shows.
+        - The TV's IP address hasn't changed (a fixed address in your router helps).
+
+        > [!CAUTION]
+        > **Never paste your pairing token, TV passwords, private keys or Dev Mode passphrases.** You may replace
+        > your TV's IP address with `192.0.2.10`.
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: What doesn't work?
+      options:
+        - The bridge won't start
+        - The page can't connect to the bridge / pairing fails
+        - The TV isn't found by the network scan
+        - Adding the TV fails (wizard)
+        - A saved TV can't be reached anymore
+        - The connection drops while using the app
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happens?
+      description: What you did, and what you saw.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Which of the checks above, restarting the TV or the bridge, another browser, …
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Your setup
+        Both versions are at the bottom right of every page. If the bridge doesn't connect, run it with `--version`.
+
+  - type: dropdown
+    id: bridge
+    attributes:
+      label: How do you run the bridge?
+      options:
+        - The app from the GitHub release (no Node.js)
+        - npx lg-dev-manager-bridge
+        - From the source code (pnpm bridge)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: page
+    attributes:
+      label: Which page do you use?
+      options:
+        - https://lg.scoty.uk
+        - The local page from the bridge (http://localhost:5199)
+        - Another address (with --allow-origin)
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Web app and bridge versions
+      placeholder: "web v1.0.2 · bridge v1.0.2"
+    validations:
+      required: true
+
+  - type: input
+    id: system
+    attributes:
+      label: Computer, operating system and browser
+      placeholder: "MacBook Air M2 · macOS 15.6 · Chrome 141"
+    validations:
+      required: true
+
+  - type: textarea
+    id: network
+    attributes:
+      label: Network
+      description: How the computer and the TV are connected. Mention VPNs, firewalls, mesh Wi-Fi, guest networks or several network cards.
+      placeholder: |
+        Computer: Wi-Fi, same router as the TV
+        TV: Ethernet
+        VPN: none / Firewall: Windows Defender
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: How should the TV connect?
+      options:
+        - Rooted — Homebrew Channel SSH (port 22)
+        - Developer Mode app (port 9922)
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: tv
+    attributes:
+      label: TV model and webOS version
+      description: From the TV's Settings → Support → TV Information, or Device info if it ever connected.
+      placeholder: "OLED55C3 · webOS 23 (8.3.0)"
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message
+      description: The red message in the app, with its **Technical details** if it has them.
+      render: text
+
+  - type: textarea
+    id: bridge-output
+    attributes:
+      label: Bridge output
+      description: Everything the bridge printed in its terminal window. **Remove the "Pairing token" line.**
+      render: shell
+
+  - type: textarea
+    id: browser-console
+    attributes:
+      label: Browser console errors
+      description: Developer tools (F12, or ⌥⌘I on macOS) → Console. Errors about `ws://127.0.0.1:5199` are especially useful.
+      render: text
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: For example of the Bridge page or the add-a-TV wizard.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I went through the checks at the top of this form.
+          required: true
+        - label: I've searched the existing issues and this hasn't been reported yet.
+          required: true
+        - label: I removed the pairing token, passwords, private keys and passphrases from everything I pasted.
+          required: true

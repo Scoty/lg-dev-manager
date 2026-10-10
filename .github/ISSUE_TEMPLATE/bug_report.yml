@@ -1,0 +1,269 @@
+name: 🐞 Bug report
+description: Something in LG Dev Manager doesn't work as it should
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! The more of this form you fill in, the faster it can be fixed —
+        most of it is a quick copy and paste.
+
+        > [!CAUTION]
+        > **Never paste your pairing token, TV passwords, private keys or Dev Mode passphrases.** The bridge prints
+        > the pairing token when it starts: delete that line from anything you paste. You may also replace your TV's
+        > IP address with `192.0.2.10`.
+        >
+        > Found a **security problem**? Please don't open an issue: see the [security policy](https://github.com/Scoty/lg-dev-manager/security/policy).
+
+        **Can't connect to the bridge or a TV at all?** The [🔌 Connection problem](https://github.com/Scoty/lg-dev-manager/issues/new?template=connection_problem.yml) form walks through the usual causes.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What went wrong?
+      description: A clear description of the bug.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where in the app?
+      options:
+        - Devices / add-a-TV wizard
+        - Installed apps
+        - Installing an IPK file
+        - Homebrew repository
+        - Litefin repo
+        - Files
+        - Terminal
+        - Device info / screenshots / Homebrew Channel
+        - Developer Mode session (renewal, countdown)
+        - Debug tools (system log, log levels, kernel log, crash reports, luna monitor)
+        - Console
+        - Bridge page / pairing
+        - Settings, backup export / import
+        - Look and layout (theme, sidebar, command palette)
+        - Somewhere else
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to Apps → Homebrew repository
+        2. Click Install on …
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual behavior
+      description: What did you expect to happen, and what happened instead?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does it happen?
+      options:
+        - Every time
+        - Sometimes
+        - It happened once
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Your setup
+        Both versions are at the bottom right of every page: **web v… · bridge v…**.
+
+  - type: dropdown
+    id: page
+    attributes:
+      label: Which page do you use?
+      options:
+        - https://lg.scoty.uk
+        - The local page from the bridge (http://localhost:5199)
+        - A development server (pnpm dev)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: bridge
+    attributes:
+      label: How do you run the bridge?
+      options:
+        - The app from the GitHub release (no Node.js)
+        - npx lg-dev-manager-bridge
+        - From the source code (pnpm bridge)
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Web app and bridge versions
+      description: Bottom right of any page. If the bridge doesn't connect, run it with `--version`.
+      placeholder: "web v1.0.2 · bridge v1.0.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Computer the bridge runs on
+      options:
+        - Windows (x64)
+        - Windows on ARM
+        - macOS — Apple Silicon
+        - macOS — Intel
+        - Linux (x64)
+        - Linux (ARM64)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: Operating system version
+      placeholder: "Windows 11 24H2 / macOS 15.6 / Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: "Chrome 141 / Firefox 143 / Safari 26 / Edge 141"
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version (npx and source code only)
+      description: The output of `node --version`. Leave empty if you use the app.
+      placeholder: "v24.21.0"
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Your TV
+        Model, webOS and firmware are on **Device info**. Leave these empty if the bug has nothing to do with a TV.
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: How is the TV connected?
+      options:
+        - Rooted — Homebrew Channel SSH (port 22)
+        - Developer Mode app (port 9922)
+        - Both (several TVs)
+        - Not a TV problem
+    validations:
+      required: true
+
+  - type: input
+    id: tv
+    attributes:
+      label: TV model, webOS and firmware
+      description: As shown on Device info.
+      placeholder: "OLED65C4 · webOS 24 (9.2.0) · firmware 23.20.56"
+
+  - type: input
+    id: hbchannel
+    attributes:
+      label: Homebrew Channel version (rooted TVs)
+      description: Device info → Homebrew Channel → Installed.
+      placeholder: "v0.7.2"
+
+  - type: markdown
+    attributes:
+      value: |
+        ## What the app says
+        Paste only the parts around the problem, and check them for tokens, passwords and keys first.
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message
+      description: The red message in the app. If it has **Technical details**, open them and copy that too.
+      render: text
+
+  - type: textarea
+    id: bridge-output
+    attributes:
+      label: Bridge output
+      description: |
+        Everything the bridge printed in its terminal window (lines starting with `[bridge]`).
+        **Remove the "Pairing token" line.**
+      render: shell
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console (bottom of the page)
+      description: |
+        The Console shows every command the bridge ran on the TV and its output. Open it, reproduce the problem, and
+        copy the related commands. Tick **Background reads** to also see the routine reads (app icons and such).
+      render: shell
+
+  - type: textarea
+    id: browser-console
+    attributes:
+      label: Browser console errors
+      description: |
+        Open the browser's developer tools (F12, or ⌥⌘I on macOS) → Console, reproduce the problem and copy the red
+        errors.
+      render: text
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or a recording
+      description: Drag and drop images or a short video here. Blur your TV's IP address if you like.
+
+  - type: dropdown
+    id: original
+    attributes:
+      label: Does the same thing work in the desktop webOS Dev Manager?
+      description: LG Dev Manager aims to behave like [dev-manager-desktop](https://github.com/webosbrew/dev-manager-desktop).
+      options:
+        - Didn't try
+        - Yes, it works there
+        - No, it fails there too
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Did it work in an earlier version? Something unusual about your network (VPN, firewall, several network cards)?
+
+  - type: markdown
+    attributes:
+      value: |
+        ### Want to fix it yourself?
+        Great! After submitting, comment with how you would fix it and wait for a maintainer to agree and assign the
+        issue to you before opening a pull request. Read [AGENTS.md](https://github.com/Scoty/lg-dev-manager/blob/main/AGENTS.md)
+        first: it explains how the project fits together and its rules.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I've searched the existing issues and this hasn't been reported yet.
+          required: true
+        - label: I'm on the latest version (reloaded the page, and the app shows no "Bridge v… is available" notice).
+          required: true
+        - label: I removed the pairing token, passwords, private keys and passphrases from everything I pasted.
+          required: true
