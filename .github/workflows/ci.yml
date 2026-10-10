@@ -28,10 +28,20 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-  # The standalone app (release-app.yml builds it for every OS): built and tested here on Linux so a change that
-  # breaks bundling shows up before a release.
+  # The standalone app, built and tested on every OS and CPU it is released for (release-app.yml uses the same
+  # runners), so a change that breaks it shows up before a release.
   app:
-    runs-on: ubuntu-latest
+    name: app (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: windows-x64, runner: windows-2025 }
+          - { target: macos-arm64, runner: macos-15 }
+          - { target: macos-x64, runner: macos-15-intel }
+          - { target: linux-x64, runner: ubuntu-24.04 }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -42,9 +52,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: node apps/bridge/scripts/build-app.mjs
-      - run: pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
-        env:
-          LGDM_APP: ${{ github.workspace }}/apps/bridge/release/bin/lg-dev-manager-bridge
+      - name: Test the app
+        shell: bash
+        run: |
+          app="$PWD/apps/bridge/release/bin/lg-dev-manager-bridge"
+          [ "$RUNNER_OS" = Windows ] && app="$app.exe"
+          LGDM_APP="$app" pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
 
   e2e:
     runs-on: ubuntu-latest
