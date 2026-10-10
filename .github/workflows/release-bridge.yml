@@ -41,10 +41,18 @@ jobs:
           test "$TAG" = "bridge-v$version" || { echo "Tag $TAG doesn't match apps/bridge/package.json version $version"; exit 1; }
       - run: pnpm build
       - run: pnpm test
-      # pnpm pack runs prepack (bundles the web app, LICENSE, NOTICE) and resolves workspace: versions;
-      # npm publish then authenticates with the workflow's OIDC identity.
+      # pnpm pack runs prepack (bundles the web app, LICENSE, NOTICE) and resolves workspace: versions.
+      - name: Pack
+        working-directory: apps/bridge
+        run: pnpm pack
+      # The tarball as npx runs it — installed, started, paired, SSH to mock TVs — before anyone can download it.
+      - name: Test the package
+        run: |
+          mkdir "$RUNNER_TEMP/npx" && cd "$RUNNER_TEMP/npx" && npm init -y >/dev/null
+          npm install --no-audit --no-fund "$GITHUB_WORKSPACE"/apps/bridge/lg-dev-manager-bridge-*.tgz
+          cd "$GITHUB_WORKSPACE"
+          LGDM_APP="$RUNNER_TEMP/npx/node_modules/lg-dev-manager-bridge/dist/cli.js" pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
+      # npm publish authenticates with the workflow's OIDC identity.
       - name: Publish
         working-directory: apps/bridge
-        run: |
-          pnpm pack
-          npm publish ./lg-dev-manager-bridge-*.tgz --access public --provenance
+        run: npm publish ./lg-dev-manager-bridge-*.tgz --access public --provenance

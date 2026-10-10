@@ -1,6 +1,7 @@
-// Checks a built standalone app (scripts/build-app.mjs) end to end: the packed local page, pairing, and SSH to the
-// mock TVs with a password and with an encrypted Dev Mode key — ssh2 runs bundled, without its native add-ons.
-// Skipped unless LGDM_APP points at the executable (CI sets it after building the app on each OS).
+// Checks a built bridge end to end, as users get it: the packed local page, pairing, and SSH to the mock TVs with a
+// password and with an encrypted Dev Mode key. Skipped unless LGDM_APP points at one of:
+// - the standalone app (scripts/build-app.mjs): ssh2 runs bundled, without its native add-ons;
+// - dist/cli.js of the npm package installed from its tarball (CI's npm-package job) — the npm build as npx runs it.
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { createServer, type AddressInfo } from 'node:net';
@@ -13,6 +14,9 @@ import { PROTOCOL_VERSION } from '@lgdm/protocol';
 import { BRIDGE_VERSION } from './version.js';
 
 const APP = process.env.LGDM_APP;
+/** The npm package's cli.js runs under this Node.js; the app is its own executable. */
+const IS_NPM = !!APP?.endsWith('.js');
+const run = (args: string[]): [string, string[]] => (IS_NPM ? [process.execPath, [APP!, ...args]] : [APP!, args]);
 const TOKEN = 'app-smoke-token-0123456789';
 
 const freePort = () =>
@@ -23,7 +27,7 @@ const freePort = () =>
     });
   });
 
-describe.skipIf(!APP)('standalone app', () => {
+describe.skipIf(!APP)(IS_NPM ? 'npm package' : 'standalone app', () => {
   let app: ChildProcess;
   let port: number;
   let devTv: MockTv;
@@ -47,7 +51,7 @@ describe.skipIf(!APP)('standalone app', () => {
   beforeAll(async () => {
     [devTv, rootTv] = await Promise.all([startMockTv({ passphrase: 'A1B2C3' }), startMockTv({ username: 'root', password: 'alpine' })]);
     port = await freePort();
-    app = spawn(APP!, ['--port', String(port), '--no-open'], {
+    app = spawn(...run(['--port', String(port), '--no-open']), {
       env: { ...process.env, LGDM_TOKEN: TOKEN, LGDM_STATE_DIR: mkdtempSync(join(tmpdir(), 'lgdm-app-')) },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -74,9 +78,12 @@ describe.skipIf(!APP)('standalone app', () => {
     await Promise.all([devTv?.close(), rootTv?.close()]);
   });
 
-  it('prints its version and the licenses it carries', () => {
-    expect(execFileSync(APP!, ['--version'], { encoding: 'utf8' }).trim()).toBe(BRIDGE_VERSION);
-    const licenses = execFileSync(APP!, ['--license'], { encoding: 'utf8' });
+  it('prints its version', () => {
+    expect(execFileSync(...run(['--version']), { encoding: 'utf8' }).trim()).toBe(BRIDGE_VERSION);
+  });
+
+  it.skipIf(IS_NPM)('prints the licenses it carries', () => {
+    const licenses = execFileSync(...run(['--license']), { encoding: 'utf8' });
     expect(licenses).toContain('Apache License');
     expect(licenses).toContain('LG Dev Manager contributors'); // NOTICE
     expect(licenses).toMatch(/Node\.js v\d+/);
@@ -96,9 +103,9 @@ describe.skipIf(!APP)('standalone app', () => {
     expect((await fetch(`http://127.0.0.1:${port}/devices`)).status).toBe(200); // unknown paths: the page
   });
 
-  it('pairs and says it is the app', async () => {
+  it('pairs and says how it was installed', async () => {
     const res = await rpc('system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
-    expect(res.result).toMatchObject({ bridgeVersion: BRIDGE_VERSION, distribution: 'app' });
+    expect(res.result).toMatchObject({ bridgeVersion: BRIDGE_VERSION, distribution: IS_NPM ? 'npm' : 'app' });
   });
 
   it('runs commands over SSH with a password and with an encrypted Dev Mode key', async () => {

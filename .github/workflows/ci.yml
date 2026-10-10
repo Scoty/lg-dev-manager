@@ -27,6 +27,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # The npm package exactly as npx runs it: packed, installed from the tarball, started, paired, SSH to mock TVs.
+      - name: Test the npm package
+        run: |
+          pnpm --filter lg-dev-manager-bridge pack --pack-destination "$RUNNER_TEMP/pkg"
+          mkdir "$RUNNER_TEMP/npx" && cd "$RUNNER_TEMP/npx" && npm init -y >/dev/null
+          npm install --no-audit --no-fund "$RUNNER_TEMP"/pkg/lg-dev-manager-bridge-*.tgz
+          cd "$GITHUB_WORKSPACE"
+          LGDM_APP="$RUNNER_TEMP/npx/node_modules/lg-dev-manager-bridge/dist/cli.js" pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
 
   # The standalone app, built and tested on every OS and CPU it is released for (release-app.yml uses the same
   # runners), so a change that breaks it shows up before a release.

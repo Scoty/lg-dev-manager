@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.3 — 2026-10-10
+
+- 🩹 `npx lg-dev-manager-bridge` works again: 1.0.2's npm package stopped at start with
+  `Cannot find package 'sea'` (the build dropped the `node:` prefix of a Node.js module). The app downloads
+  weren't affected.
+- 🧪 CI and the publish workflow now install and run the packed npm package exactly as npx does — start it, pair
+  and SSH to mock TVs — before anything is published.
+- 🐞 Issue forms for bugs, connection problems and feature requests, and a security policy.
+
 ## 1.0.2 — 2026-10-10
 
 - 🖥️ **The bridge as an app — no Node.js needed.** One download for Windows (`.exe`), macOS (`.dmg`, Apple
