@@ -35,6 +35,12 @@ importers:
       '@types/ws':
         specifier: ^8.5.0
         version: 8.18.2
+      esbuild:
+        specifier: ^0.27.7
+        version: 0.27.7
+      postject:
+        specifier: 1.0.0-alpha.6
+        version: 1.0.0-alpha.6
       tsup:
         specifier: ^8.5.0
         version: 8.5.1(postcss@8.5.29)(tsx@4.23.15)(typescript@5.9.3)
@@ -1059,6 +1065,10 @@ packages:
     resolution: {integrity: sha512-NOKm8xhkzAjzFx8B2v5OAHT+u5pRQc2UCa2Vq9jYL/31o2wi9mxBA7LIFs3sV5VSC49z6pEhfbMULvShKj26WA==}
     engines: {node: '>= 6'}
 
+  commander@9.5.0:
+    resolution: {integrity: sha512-KRs7WVDKg86PWiuAqhDrAQnTXZKraVcCc6vFdL14qrZ/DcWwuRo7VoiYXalXO7S5GKpqYiVEwCbgFDfxNHKJBQ==}
+    engines: {node: ^12.20.0 || >=14}
+
   confbox@0.1.8:
     resolution: {integrity: sha512-RMtmw0iFkeR4YV+fUOSucriAQNb9g8zFR52MWCtl+cCZOFRNL6zeB395vPzFhEjjn4fMxXudmELnl/KF/WrK6w==}
 
@@ -1342,6 +1352,11 @@ packages:
   postcss@8.5.29:
     resolution: {integrity: sha512-49cGhUbXj8Qenv0iTMxA1cFBzxXoctpC9Ujd77t1WcbJIr6nF/eI7g/8MgxrYldFRuAXvja7xQRwavoW7kgrxQ==}
     engines: {node: ^10 || ^12 || >=14}
+
+  postject@1.0.0-alpha.6:
+    resolution: {integrity: sha512-b9Eb8h2eVqNE8edvKdwqkrY6O7kAwmI8kcnBv1NScolYJbo59XUF0noFq+lxbC1yN20bmC0WBEbDC5H/7ASb0A==}
+    engines: {node: '>=14.0.0'}
+    hasBin: true
 
   pretty-format@27.5.1:
     resolution: {integrity: sha512-Qb1gy5OrP5+zDf2Bvnzdl3jsTf1qXVMazbvCoKhtKqVs4/YK4ozX4gKQJJVyNe+cajNPn0KoC0MC3FUmaHWEmQ==}
@@ -2496,6 +2511,8 @@ snapshots:
 
   commander@4.1.1: {}
 
+  commander@9.5.0: {}
+
   confbox@0.1.8: {}
 
   consola@3.4.2: {}
@@ -2785,6 +2802,10 @@ snapshots:
       nanoid: 3.3.20
       picocolors: 1.1.1
       source-map-js: 1.2.2
+
+  postject@1.0.0-alpha.6:
+    dependencies:
+      commander: 9.5.0
 
   pretty-format@27.5.1:
     dependencies:

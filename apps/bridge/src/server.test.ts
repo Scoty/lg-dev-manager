@@ -150,3 +150,37 @@ describe('bridge server under abuse', () => {
     expect(res && 'error' in res && res.error.detail).toBe('boom');
   });
 });
+
+describe('local page packed into the standalone app', () => {
+  let web: Server;
+  let base: string;
+  const files = new Map<string, Uint8Array>([
+    ['index.html', Buffer.from('<!doctype html><title>packed</title>')],
+    ['assets/app.js', Buffer.from('console.log(1)')],
+  ]);
+
+  beforeAll(async () => {
+    web = await startServer({ host: '127.0.0.1', port: 0, allowedOrigins: [ORIGIN], token: TOKEN, webRoot: files, dev: false });
+    base = `http://127.0.0.1:${(web.address() as AddressInfo).port}`;
+  });
+  afterAll(() => new Promise<void>((r) => web.close(() => r())));
+
+  it('serves the packed files, and the page for any other path', async () => {
+    const js = await fetch(`${base}/assets/app.js`);
+    expect(js.headers.get('content-type')).toContain('text/javascript');
+    expect(js.headers.get('cache-control')).toContain('immutable');
+    expect(await js.text()).toBe('console.log(1)');
+    for (const path of ['/', '/devices', '/assets/../../../etc/passwd', '/%2e%2e/%2e%2e/etc/passwd']) {
+      const res = await fetch(`${base}${path}`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('x-frame-options')).toBe('DENY');
+      expect(await res.text()).toContain('packed');
+    }
+  });
+
+  it('answers HEAD without a body and refuses other methods', async () => {
+    const head = await fetch(`${base}/assets/app.js`, { method: 'HEAD' });
+    expect(head.headers.get('content-length')).toBe('14');
+    expect((await fetch(`${base}/`, { method: 'POST' })).status).toBe(405);
+  });
+});

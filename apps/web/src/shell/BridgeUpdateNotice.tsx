@@ -4,6 +4,7 @@ import valid from 'semver/functions/valid';
 import { Alert } from '../components/Alert';
 import { useBridge } from '../bridge/BridgeProvider';
 import { BRIDGE_RELEASE } from '../lib/version';
+import { RELEASES_URL } from '@lgdm/protocol';
 
 const KEY = 'lgdm-bridge-update-dismissed';
 
@@ -48,10 +49,37 @@ export function BridgeUpdateNotice({ always = false }: { always?: boolean }) {
           )
         }
       >
-        Yours is v{status.bridgeVersion}. Stop it (Ctrl+C) and start it again with{' '}
-        <span className="mono">npx lg-dev-manager-bridge@latest</span> — or, if you run it from the repository,{' '}
-        <span className="mono">git pull</span>, <span className="mono">pnpm install</span>, <span className="mono">pnpm build</span> and{' '}
-        <span className="mono">pnpm bridge</span>. Your pairing stays the same.
+        Yours is v{status.bridgeVersion}.{' '}
+        {status.distribution === 'app' ? (
+          <>
+            Close it, download the new version from the{' '}
+            <a href={RELEASES_URL} target="_blank" rel="noopener noreferrer">
+              releases page
+            </a>{' '}
+            and start that one instead.
+          </>
+        ) : status.distribution === 'source' ? (
+          <>
+            In the repository run <span className="mono">git pull</span>, <span className="mono">pnpm install</span>,{' '}
+            <span className="mono">pnpm build</span> and <span className="mono">pnpm bridge</span>.
+          </>
+        ) : status.distribution === 'npm' ? (
+          <>
+            Stop it (Ctrl+C) and start it again with <span className="mono">npx lg-dev-manager-bridge@latest</span>.
+          </>
+        ) : (
+          <>
+            Stop it (Ctrl+C) and start it again with <span className="mono">npx lg-dev-manager-bridge@latest</span> — or,
+            if you run it from the repository, <span className="mono">git pull</span>, <span className="mono">pnpm install</span>,{' '}
+            <span className="mono">pnpm build</span> and <span className="mono">pnpm bridge</span>; if you use the app,
+            download the new version from the{' '}
+            <a href={RELEASES_URL} target="_blank" rel="noopener noreferrer">
+              releases page
+            </a>
+            .
+          </>
+        )}{' '}
+        Your pairing stays the same.
       </Alert>
     </div>
   );

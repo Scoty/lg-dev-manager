@@ -42,6 +42,8 @@ export const Methods = {
       protocolVersion: z.number().int(),
       bridgeVersion: z.string(),
       platform: z.string(),
+      /** How the bridge was installed, so the site can say how to update it (bridges before 1.0.2 don't say). */
+      distribution: z.enum(['app', 'npm', 'source']).optional(),
     }),
   },
   'system.ping': {
@@ -456,3 +458,6 @@ export const DEFAULT_ALLOWED_ORIGINS = [PUBLIC_WEB_ORIGIN] as const;
 export const DEV_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'] as const;
 
 export const REPO_URL = 'https://github.com/Scoty/lg-dev-manager';
+
+/** Where the standalone app (no Node.js needed) is downloaded from. */
+export const RELEASES_URL = `${REPO_URL}/releases/latest`;

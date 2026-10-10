@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, DEV_ALLOWED_ORIGINS, REPO_URL } from '@lgdm/protocol';
+import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, DEV_ALLOWED_ORIGINS, RELEASES_URL, REPO_URL } from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
 import { PhoneNotice } from '../../shell/PhoneNotice';
 import { BridgeUpdateNotice } from '../../shell/BridgeUpdateNotice';
@@ -83,6 +83,16 @@ export function BridgePage() {
               stops the bridge. It also serves this app at <span className="mono">http://localhost:{DEFAULT_BRIDGE_PORT}</span> if
               you’d rather not use the website.
             </p>
+            <div className="bridge-app">
+              <div className="eyebrow">No Node.js? Download the app instead</div>
+              <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                The same bridge as one file for Windows, macOS and Linux — nothing else to install. Open it: a window shows
+                the token.
+              </p>
+              <a className="btn btn--sm btn--ghost" href={RELEASES_URL} target="_blank" rel="noopener noreferrer">
+                <Icon name="download" /> Download the app
+              </a>
+            </div>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
               On macOS, the first time the bridge looks for or connects to your TV, the system asks whether your terminal app may
               find devices on your local network — choose <strong>Allow</strong>.

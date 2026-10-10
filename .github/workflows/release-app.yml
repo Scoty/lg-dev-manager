@@ -1,0 +1,106 @@
+name: Release the bridge app
+
+# Pushing a tag bridge-vX.Y.Z (the same tag that publishes the npm package, release-bridge.yml) builds the standalone
+# bridge app — Node.js and the bridge in one executable, no Node.js needed — on one runner per OS and CPU, tests each
+# build against the mock TVs, and publishes them as the GitHub release "LG Dev Manager X.Y.Z" with that version's
+# CHANGELOG.md section as notes. Run it by hand (Actions → Release the bridge app → Run workflow) to rebuild the
+# release of an existing tag. Nothing to set up: it uses the workflow's own GITHUB_TOKEN.
+on:
+  push:
+    tags: ['bridge-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)build the release for, e.g. bridge-v1.0.2
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-app-${{ inputs.tag || github.ref_name }}
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: windows-x64, runner: windows-2025 }
+          - { target: macos-arm64, runner: macos-15 }
+          - { target: macos-x64, runner: macos-15-intel }
+          - { target: linux-x64, runner: ubuntu-24.04 }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          # The app packs the node binary that runs the build: the active LTS from .nvmrc.
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tag matches the package version
+        shell: bash
+        run: |
+          version=$(node -p "require('./apps/bridge/package.json').version")
+          test "$TAG" = "bridge-v$version" || { echo "Tag $TAG doesn't match apps/bridge/package.json version $version"; exit 1; }
+      - run: pnpm build
+      - run: node apps/bridge/scripts/build-app.mjs
+      # The built executable against the mock TVs: local page, pairing, SSH with a password and with a Dev Mode key.
+      - name: Test the app
+        shell: bash
+        run: |
+          app="$PWD/apps/bridge/release/bin/lg-dev-manager-bridge"
+          [ "$RUNNER_OS" = Windows ] && app="$app.exe"
+          LGDM_APP="$app" pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: app-${{ matrix.target }}
+          path: |
+            apps/bridge/release/*.exe
+            apps/bridge/release/*.dmg
+            apps/bridge/release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release and upload its files
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: app-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums and notes
+        run: |
+          version="${TAG#bridge-v}"
+          (cd dist && sha256sum lg-dev-manager-bridge-* > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          node apps/bridge/scripts/release-notes.mjs "$version" "$TAG" > notes.md
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version="${TAG#bridge-v}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "LG Dev Manager $version" --notes-file notes.md
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "LG Dev Manager $version" --notes-file notes.md --verify-tag --latest
+          fi

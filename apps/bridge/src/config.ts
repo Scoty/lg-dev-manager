@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, DEV_ALLOWED_ORIGINS } from '@lgdm/protocol';
+import type { WebUi } from './http/static.js';
+import { standaloneUi } from './standalone.js';
 
 export interface BridgeConfig {
   host: string;
@@ -12,8 +14,8 @@ export interface BridgeConfig {
   allowedOrigins: string[];
   /** Pairing token the UI must present in `system.hello`. */
   token: string;
-  /** Directory with the built web UI to serve over HTTP, if any. */
-  webRoot?: string;
+  /** The built web UI to serve over HTTP (a folder, or the files packed into the standalone app), if any. */
+  webRoot?: WebUi;
   /** Homebrew repository API (default repo.webosbrew.org; LGDM_REPO_URL overrides, for tests). */
   repoUrl?: string;
   /** LG's Developer Mode session service (default developer.lge.com; LGDM_LGE_URL overrides, for tests). */
@@ -60,13 +62,20 @@ export function loadOrCreateToken(reset = false): string {
 }
 
 /**
- * The web UI that comes with the bridge, served at http://localhost:<port>/ (the "local page"): `web/` in the npm
- * package, or the repository's own build (apps/web/dist) when run from a clone. None: only lg.scoty.uk is used.
+ * The web UI that comes with the bridge, served at http://localhost:<port>/ (the "local page"): packed into the
+ * standalone app, `web/` in the npm package, or the repository's own build (apps/web/dist) when run from a clone.
+ * None: only lg.scoty.uk is used.
  */
-export function bundledUi(): string | undefined {
+export function bundledUi(): WebUi | undefined {
+  const packed = standaloneUi();
+  if (packed) return packed;
   for (const rel of ['../web/', '../../web/dist/']) {
-    const dir = fileURLToPath(new URL(rel, import.meta.url));
-    if (existsSync(join(dir, 'index.html'))) return dir;
+    try {
+      const dir = fileURLToPath(new URL(rel, import.meta.url));
+      if (existsSync(join(dir, 'index.html'))) return dir;
+    } catch {
+      /* no file location (the standalone app): nothing on disk to serve */
+    }
   }
   return undefined;
 }

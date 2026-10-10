@@ -5,7 +5,7 @@ import { bridgeUrlProblem, loadSettings, saveSettings, type BridgeSettings } fro
 export type BridgeStatus =
   | { state: 'unpaired' }
   | { state: 'connecting' }
-  | { state: 'connected'; bridgeVersion: string; platform: string }
+  | { state: 'connected'; bridgeVersion: string; platform: string; distribution?: 'app' | 'npm' | 'source' }
   | { state: 'error'; code: string; message: string };
 
 interface BridgeContextValue {
@@ -40,7 +40,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       if (gen !== generation.current) return c.close();
       attempt.current = 0;
       setClient(c);
-      setStatus({ state: 'connected', bridgeVersion: hello.bridgeVersion, platform: hello.platform });
+      setStatus({ state: 'connected', bridgeVersion: hello.bridgeVersion, platform: hello.platform, distribution: hello.distribution });
       c.onClose = (reason) => {
         if (gen !== generation.current) return;
         setClient(null);

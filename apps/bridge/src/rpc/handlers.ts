@@ -1,6 +1,7 @@
 import { StringDecoder } from 'node:string_decoder';
 import { timingSafeEqual } from 'node:crypto';
 import { platform } from 'node:os';
+import { distribution } from '../standalone.js';
 import { randomUUID } from 'node:crypto';
 import {
   CMD_LOG_EVENT,
@@ -132,7 +133,7 @@ export const handlers: HandlerMap = {
       );
     }
     session.authed = true;
-    return { protocolVersion: PROTOCOL_VERSION, bridgeVersion: BRIDGE_VERSION, platform: platform() };
+    return { protocolVersion: PROTOCOL_VERSION, bridgeVersion: BRIDGE_VERSION, platform: platform(), distribution: distribution() };
   },
   'system.ping': () => ({ now: Date.now() }),
 

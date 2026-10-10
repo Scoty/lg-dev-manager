@@ -28,6 +28,24 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  # The standalone app (release-app.yml builds it for every OS): built and tested here on Linux so a change that
+  # breaks bundling shows up before a release.
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: node apps/bridge/scripts/build-app.mjs
+      - run: pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
+        env:
+          LGDM_APP: ${{ github.workspace }}/apps/bridge/release/bin/lg-dev-manager-bridge
+
   e2e:
     runs-on: ubuntu-latest
     steps:

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2 — 2026-10-10
+
+- 🖥️ **The bridge as an app — no Node.js needed.** One download for Windows (`.exe`), macOS (`.dmg`, Apple
+  Silicon and Intel) and Linux (`.tar.gz`, x64 and ARM64) on the GitHub release. Open it: it shows the pairing
+  token and opens https://lg.scoty.uk. It carries Node.js, the bridge and the local page in one file.
+- 🔄 The "new bridge available" notice says how to update the way you run it: the app, npx or the source code.
+- 🧩 The Bridge page lists the app as a third way to run the bridge.
+- 💬 Starting a second bridge on the same port says that one is probably already running.
+- 🧾 `--license` prints the licenses of the bridge and everything it includes.
+
 ## 1.0.1 — 2026-10-10
 
 - 📺 webOS versions show LG's name first: `26 (11.0.2)`, `25 (10.3.1)` (Device info, Devices, the add-TV wizard).

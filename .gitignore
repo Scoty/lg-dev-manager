@@ -9,6 +9,7 @@ playwright-report/
 test-results/
 # Copied in by apps/bridge/scripts/prepack.mjs for the npm package
 apps/bridge/web/
+apps/bridge/release/
 apps/bridge/LICENSE
 apps/bridge/NOTICE
 apps/bridge/README.md

@@ -991,6 +991,7 @@ button.log-row:hover { background: var(--bg-hover); }
 .page-error .mono { word-break: break-word; }
 
 /* Bridge page: the from-source instructions, folded away under the npx one-liner. */
+.bridge-app { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .bridge-from-repo { font-size: 13px; }
 .bridge-from-repo summary { cursor: pointer; color: var(--t-base); font-weight: 600; }
 .bridge-from-repo summary:focus-visible { outline: 2px solid var(--primary-ring); outline-offset: 2px; border-radius: 4px; }

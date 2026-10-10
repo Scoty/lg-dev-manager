@@ -50,7 +50,8 @@ It has two parts (see `PLAN.md` §1 for why):
   from source (`engines` in both package.json files; Vite needs 22.12). Development uses Node 24 LTS (`.nvmrc`); CI
   builds and tests on both 22.12 and 24 — don't use Node 24-only APIs anywhere.
 - Web: Vite, React 19, React Router, TanStack Query, xterm.js, SCSS (Adminator tokens).
-- Bridge: `ws`, `ssh2`, zod. No native modules (must run on Windows, macOS and Linux, x64 and ARM).
+- Bridge: `ws`, `ssh2`, zod. No native modules (must run on Windows, macOS and Linux, x64 and ARM — and bundle into
+  the standalone app, which can't load add-ons). Use `import.meta.url` only with a fallback: the app has no file location.
 - Tests: Vitest, Playwright, `tools/mock-tv` (an ssh2 server that fakes webOS luna-send + filesystem).
 
 ## Commands
@@ -67,7 +68,9 @@ pnpm dev:rig        # same rig for trying the UI by hand: http://127.0.0.1:5299,
 pnpm bridge         # the built bridge as users run it from a clone (serves the local page from apps/web/dist)
 pnpm lint && pnpm typecheck
 pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
-# Release: see PLAN.md §11 (npm package bundles apps/web/dist as the local page; prepack copies it + LICENSE/NOTICE)
+pnpm app            # the standalone bridge app for this OS → apps/bridge/release (after pnpm build)
+# Release: see PLAN.md §11 (npm package bundles apps/web/dist as the local page; prepack copies it + LICENSE/NOTICE;
+# a bridge-v* tag publishes npm and the GitHub release with the apps)
 ```
 
 (These are the target scripts — keep them working as the repo grows.)
@@ -118,7 +121,7 @@ pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 |---|---|---|
 | Browser↔TV transport | Local bridge over authenticated WebSocket | Decided (technical necessity) |
 | Where the bridge runs | On the user's own computer only, bound to `127.0.0.1`. No NAS / Docker / LAN mode (owner decision, Oct 2026) | Decided |
-| Bridge distribution | A terminal command only: `npx lg-dev-manager-bridge` (Node 22+), or `pnpm bridge` from a clone. The package also serves the web app at http://localhost:5199 (the "local page"). No desktop/tray app, installers, single binaries, or running the bridge on the TV (owner decision, Oct 2026) | Decided |
+| Bridge distribution | Three ways: `npx lg-dev-manager-bridge` (Node 22.12+), `pnpm bridge` from a clone, or the **standalone app** — a Node.js single executable per OS from the GitHub release (no Node.js needed; `release-app.yml`, PLAN.md §11). All serve the web app at http://localhost:5199 (the "local page"). Still a terminal program: no tray app, installers or running the bridge on the TV (owner decisions, Oct 2026; the standalone app added for 1.0.2) | Decided |
 | Recommended connection | **Rooted (Homebrew Channel SSH)** is listed first and preselected in the wizard; Developer Mode is for TVs that aren't rooted (owner decision, Oct 2026) | Decided |
 | UI framework | React 19 + Vite + TypeScript | Decided |
 | v1 scope | **Full parity** with the desktop app (all of PLAN.md §3, incl. Debug tools) before the public release | Decided |

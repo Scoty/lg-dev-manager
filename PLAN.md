@@ -339,4 +339,18 @@ it). The site shows a notice when the connected bridge is older than the one rel
 4. The package contains `dist/cli.js` (protocol bundled), `web/` (the built site without source maps and `.woff` fonts,
    served as the local page), `LICENSE`, `NOTICE` and the root README with absolute links — all made by
    `apps/bridge/scripts/prepack.mjs` (`apps/bridge/README.md` is generated, not in git).
-5. Create GitHub releases for both tags with the notes from `CHANGELOG.md`.
+5. `bridge-v*` also runs **Release the bridge app** (`.github/workflows/release-app.yml`): the standalone app, no
+   Node.js needed, built on one runner per target — Windows x64 (`.exe`), macOS arm64 and x64 (`.dmg`), Linux x64 and
+   arm64 (`.tar.gz`) — each tested against the mock TVs (`src/app.smoke.test.ts`), then published as the GitHub
+   release `LG Dev Manager X.Y.Z` with that version's `CHANGELOG.md` section (so write it before tagging), the
+   downloads table and `SHA256SUMS.txt`. Nothing to set up (the workflow's own token). Re-run it for an existing tag
+   from Actions → Release the bridge app → Run workflow.
+6. **The app** (`apps/bridge/scripts/build-app.mjs`, `pnpm app` for the current OS) is a Node.js single executable
+   application: the bridge bundled with esbuild into one CommonJS file (ssh2's and ws's optional native add-ons left
+   out — both fall back to JS, as with npm), injected with postject into a copy of the node binary from `.nvmrc`,
+   together with the local page, LICENSE, NOTICE and THIRD-PARTY-LICENSES.txt (Node.js + every bundled package) as
+   assets (`--license` prints them). macOS builds are ad-hoc signed only and Windows builds unsigned, so the first
+   start needs "Open Anyway" / "Run anyway" (the release notes and the dmg's "Read me" say how). Proper signing would
+   need an Apple Developer ID (notarization) and a Windows code-signing certificate. The app opens
+   https://lg.scoty.uk on start (`--no-open` to skip) and reports `distribution: 'app'` in `system.hello`, so the
+   update notice points to the releases page. About 120 MB unpacked (it is mostly Node.js), 40 MB to download.
