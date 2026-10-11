@@ -6,6 +6,7 @@
   updating and removing apps work as before, but Launch is disabled with a note saying why — the TV would accept the
   launch and show nothing. The apps pages notice within a few seconds when you turn the TV on. If only the picture is
   turned off (screen off), launching an app turns it back on.
+- 🔑 "Make a new key" says why it's greyed out when the bridge isn't connected (the bridge makes the key).
 - 🔔 The "Bridge vX is available" notice only names a bridge that is actually published — it appeared too early
   when the site was updated before the release was tagged.
 

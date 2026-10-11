@@ -303,10 +303,17 @@ function GeneratedKey({
           TV once.
         </span>
         <div>
-          <button type="button" className="btn btn--soft-primary" onClick={make} disabled={!ready || busy}>
+          <button type="button" className="btn btn--soft-primary" onClick={make} disabled={!ready || busy} aria-describedby={ready ? undefined : 'genkey-offline'}>
             <Icon name="key" /> {busy ? 'Making key…' : 'Make a new key'}
           </button>
         </div>
+        {/* The key is made by the bridge, so the button waits for it — say so instead of just greying it out. */}
+        {!ready && (
+          <span className="field-help" id="genkey-offline">
+            The bridge isn’t connected, and it’s what makes the key. Start it (and pair it on the Bridge page if this is the
+            first time); the button turns on as soon as it connects.
+          </span>
+        )}
         {problem && <span className="field-error">{problem}</span>}
       </div>
     );
