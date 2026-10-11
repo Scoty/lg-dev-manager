@@ -1,4 +1,4 @@
-import { addDevModeTv, addRootedTv, addRootedTvWithWizard, expect, ipkFile, ROOTED_PORT, test } from './fixtures';
+import { addDevModeTv, addRootedTv, addRootedTvWithWizard, expect, ipkFile, ROOTED_PORT, STANDBY_PORT, test } from './fixtures';
 
 test.describe('Dev Mode TV', () => {
   test('wizard: port check, wrong passphrase, then success', async ({ paired: page, errors }) => {
@@ -156,5 +156,27 @@ test('a TV saved without its model gets it in the background', async ({ paired: 
   });
   await expect(page.getByRole('row', { name: /Old save/ })).toContainText('LG C3 · OLED55C36LC', { timeout: 30_000 });
   await expect(page.getByRole('button', { name: /Active TV: Old save/ })).toContainText('LG C3 · rooted');
+  expect(errors).toEqual([]);
+});
+
+test('a TV in standby: apps still install, Launch waits until it is on', async ({ paired: page, errors }) => {
+  await addRootedTv(page, 'Bedroom', STANDBY_PORT);
+  await page.goto('/#/apps/installed');
+  await expect(page.getByText('Bedroom is off (standby)')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Launch Hello World' })).toBeDisabled();
+
+  // Installing works while it's off — and the finished dialog doesn't offer a launch that would do nothing.
+  const ipk = ipkFile('org.example.e2estandby', '1.0.0', 'E2E Standby App');
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Install IPK' }).click();
+  await (await chooser).setFiles(ipk);
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('E2E Standby App v1.0.0 is installed')).toBeVisible({ timeout: 30_000 });
+  await expect(dialog.getByRole('button', { name: 'Launch' })).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect(page.getByText('org.example.e2estandby')).toBeVisible();
+
+  await page.goto('/#/apps/homebrew');
+  await expect(page.getByText('Bedroom is off (standby)')).toBeVisible();
   expect(errors).toEqual([]);
 });

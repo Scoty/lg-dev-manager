@@ -42,6 +42,11 @@ export interface MockState {
   legacyCapture: boolean;
   /** Logs, PmLog contexts (debug tools). */
   debug: DebugState;
+  /**
+   * What `tvpower/power/getPowerState` answers: `Active`, `Screen Off`, `Active Standby` (looks off; SSH and installs
+   * still work), … `processing` is set while the TV turns off ("Request Power Off").
+   */
+  power: { state: string; processing?: string };
 }
 
 export const DEV_APPS_DIR = '/media/developer/apps/usr/palm/applications';
@@ -182,6 +187,7 @@ export function createState(opts: {
     devmodeExtends: 0,
     legacyCapture: opts.legacyCapture ?? false,
     debug: createDebugState(opts.username === 'root'),
+    power: { state: 'Active' },
   };
   for (const app of opts.apps ?? MOCK_APPS) addApp(state, app);
   if (!state.hbchannel) state.apps = state.apps.filter((a) => a.id !== 'org.webosbrew.hbchannel');

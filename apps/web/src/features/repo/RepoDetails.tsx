@@ -8,6 +8,7 @@ import { fmtSize, INCOMPATIBLE_TEXT, type IncompatibleReason } from './logic';
 import { useRepoDescription, useRepoImage } from './queries';
 import { RepoIcon, RepoScreenshot } from './RepoIcon';
 import { SafeHtml } from './SafeHtml';
+import { TV_OFF_HINT } from '../apps/operations';
 import type { RepoAppView } from './useRepoApps';
 
 export interface RepoActions {
@@ -15,6 +16,8 @@ export interface RepoActions {
   remove: (app: AppInfo) => void;
   launch: (app: AppInfo) => void;
   busy: boolean;
+  /** The TV is in standby: Launch is disabled. */
+  tvOff?: boolean;
 }
 
 /** One repository app: description, screenshots, install / update / launch (DetailsComponent in the original). */
@@ -65,7 +68,13 @@ export function RepoDetails({
           </div>
           <div className="repo-details-actions">
             {state === 'installed' ? (
-              <button type="button" className="btn btn--primary" disabled={disabled} onClick={() => actions.launch(installed ?? { id: pkg.id, title: pkg.title })}>
+              <button
+                type="button"
+                className="btn btn--primary"
+                disabled={disabled || actions.tvOff}
+                title={actions.tvOff ? TV_OFF_HINT : undefined}
+                onClick={() => actions.launch(installed ?? { id: pkg.id, title: pkg.title })}
+              >
                 <Icon name="play" /> Launch
               </button>
             ) : (
@@ -108,7 +117,13 @@ export function RepoDetails({
             </a>
           )}
           {state === 'update' && (
-            <button type="button" className="btn btn--sm btn--ghost" disabled={disabled} onClick={() => actions.launch(installed ?? { id: pkg.id, title: pkg.title })}>
+            <button
+              type="button"
+              className="btn btn--sm btn--ghost"
+              disabled={disabled || actions.tvOff}
+              title={actions.tvOff ? TV_OFF_HINT : undefined}
+              onClick={() => actions.launch(installed ?? { id: pkg.id, title: pkg.title })}
+            >
               <Icon name="play" /> Launch installed version
             </button>
           )}

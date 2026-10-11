@@ -30,6 +30,9 @@ export const DEFAULT_BRIDGE_PORT = 5199;
  * Add new RPCs here first, then implement them in apps/bridge and call them from apps/web.
  * Naming: `<area>.<verb>` — see AGENTS.md.
  */
+export const TvPowerState = z.enum(['on', 'screenOff', 'standby', 'unknown']);
+export type TvPowerState = z.infer<typeof TvPowerState>;
+
 export const Methods = {
   /** First message on every connection. Authenticates with the pairing token. */
   'system.hello': {
@@ -99,6 +102,15 @@ export const Methods = {
       otaId: z.string().optional(),
       socName: z.string().optional(),
     }),
+  },
+  /**
+   * Is the TV on? `com.webos.service.tvpower/power/getPowerState`: `on` (also with the screen saver), `screenOff` (on,
+   * picture turned off), `standby` (looks off — the system still runs, so installs work, but nothing can be shown),
+   * `unknown` (the TV didn't say; treat as on). `raw` is the TV's own state text.
+   */
+  'device.power': {
+    params: z.object({ device: DeviceTarget }),
+    result: z.object({ state: TvPowerState, raw: z.string().optional() }),
   },
   /** `df` of a folder (KiB; default the developer partition). Null if the TV gave no usable answer. */
   'device.storage': {

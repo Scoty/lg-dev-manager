@@ -61,4 +61,6 @@ export const AppsErrorCodes = {
   TransferFailed: 'transfer_failed',
   /** Another app with this id is installed outside the developer partition (e.g. from the LG Content Store). */
   Conflict: 'app_conflict',
+  /** The TV is in standby: apps can be installed, updated and removed, but a launch would show nothing. */
+  TvOff: 'tv_off',
 } as const;

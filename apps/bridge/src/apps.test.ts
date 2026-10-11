@@ -4,6 +4,7 @@ import { fakeIpk, startMockTv, type MockTv } from '@lgdm/mock-tv';
 import type { DeviceTarget, OpProgress } from '@lgdm/protocol';
 import { appIcon, installIpk, launchApp, listApps, removeApp } from './apps/apps.js';
 import { deviceInfo, generateKey, storageInfo } from './devices/info.js';
+import { powerStateOf, tvPower } from './devices/power.js';
 import { RpcError } from './rpc/errors.js';
 import { readIpkControl } from './apps/ipk.js';
 import { SshPool } from './ssh/pool.js';
@@ -87,6 +88,42 @@ describe('apps', () => {
     await launchApp(pool, devmode(devTv), 'com.example.hello');
     expect(devTv.state.launched).toContain('com.example.hello');
     expect(await code(launchApp(pool, devmode(devTv), 'com.missing'))).toBe('luna_error');
+  });
+
+  it('reads the power state, and launches only when the TV can show the app', async () => {
+    const tv = devTv;
+    try {
+      expect(await tvPower(pool, devmode(tv))).toEqual({ state: 'on', raw: 'Active' });
+
+      // Standby (Quick Start+): installs work, a launch would show nothing — refused with a clear reason.
+      tv.state.power = { state: 'Active Standby' };
+      expect(await tvPower(pool, devmode(tv))).toEqual({ state: 'standby', raw: 'Active Standby' });
+      tv.state.launched.length = 0;
+      expect(await code(launchApp(pool, devmode(tv), 'com.example.hello'))).toBe('tv_off');
+      expect(tv.state.launched).toEqual([]);
+
+      // Screen turned off while on: launch, then the picture comes back.
+      tv.state.power = { state: 'Screen Off' };
+      await launchApp(pool, devmode(tv), 'com.example.hello');
+      expect(tv.state.launched).toEqual(['com.example.hello']);
+      expect(tv.state.power).toEqual({ state: 'Active' });
+
+      // Turning off right now.
+      tv.state.power = { state: 'Active', processing: 'Request Power Off' };
+      expect((await tvPower(pool, devmode(tv))).state).toBe('standby');
+    } finally {
+      tv.state.power = { state: 'Active' };
+    }
+  });
+
+  it('reads the power state like Home Assistant does, and never blocks on an answer it doesn’t know', () => {
+    expect(powerStateOf({ state: 'Active' })).toBe('on');
+    expect(powerStateOf({ state: 'Screen Saver' })).toBe('on');
+    expect(powerStateOf({ state: 'Screen Off' })).toBe('screenOff');
+    for (const state of ['Active Standby', 'Suspend', 'Power Off']) expect(powerStateOf({ state })).toBe('standby');
+    expect(powerStateOf({ state: 'Active', processing: 'Prepare Suspend' })).toBe('standby');
+    expect(powerStateOf({ returnValue: true })).toBe('unknown');
+    expect(powerStateOf({ state: 'Something New' })).toBe('unknown');
   });
 
   it('reads icons over SFTP and over cat', async () => {

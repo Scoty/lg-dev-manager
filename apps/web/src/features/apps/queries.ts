@@ -18,6 +18,22 @@ export function useInstalledApps(device: SavedDevice | null) {
   });
 }
 
+/**
+ * The TV's power state, kept fresh while an apps page is open: in standby, apps install and update but can't be
+ * launched. An error counts as unknown (no data), which never blocks anything.
+ */
+export function useTvPower(device: SavedDevice | null) {
+  const { ready, call } = useRpc();
+  return useQuery({
+    queryKey: device ? ['power', device.id, device.updatedAt] : ['power', 'none'],
+    queryFn: () => call('device.power', { device: toTarget(device!) }, 20_000),
+    enabled: ready && !!device,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+    retry: false,
+  });
+}
+
 export function useStorage(device: SavedDevice | null) {
   const { ready, call } = useRpc();
   return useQuery({

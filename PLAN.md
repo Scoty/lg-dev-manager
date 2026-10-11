@@ -98,6 +98,10 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [x] Bridge: `cmd.exec` and one-shot `luna.call` (luna-send-pub / luna-send, typed luna errors)
 - [x] Installed apps list (`applicationManager/dev/listApps`, fallback `listApps`) with icons from the TV, search, system-app filter
 - [x] Launch, remove (`appInstallService/dev/remove`, confirm; Homebrew Channel asks twice)
+- [x] TV in standby (1.0.4, not in the original): `device.power` reads `tvpower/power/getPowerState` (polled every 15 s
+  on the apps pages, a background read). In standby installs/updates/removals still work, but Launch is disabled with a
+  notice and `apps.launch` refuses with `tv_off` (the TV would accept the launch and show nothing). With only the screen
+  off, the app launches and `turnOnScreen` brings the picture back. Unknown answers never block.
 - [x] App details (with the Homebrew repo info): “Homebrew repo details” in an installed app's menu
 - [x] Install IPK from a local file (file picker or drag & drop → bridge memory → `/media/developer/temp` over SFTP or `cat` → `appInstallService/dev/install`, sha256 check, progress)
 - [x] **Homebrew repository** browser (`repo.webosbrew.org/api`, all pages, fetched and cached by the bridge — `repo.list`), search, All / Installed / Updates filters

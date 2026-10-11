@@ -11,7 +11,8 @@ import { Icon } from '../../shell/icons';
 import { useDevices } from '../../devices/useDevices';
 import type { SavedDevice } from '../../devices/store';
 import { AppIcon } from './AppIcon';
-import { useAppOperations } from './operations';
+import { TvOffNotice } from './TvOffNotice';
+import { TV_OFF_HINT, useAppOperations } from './operations';
 import { useInstalledApps, useStorage } from './queries';
 import { useRepoApps, type RepoAppView } from '../repo/useRepoApps';
 import { RepoDetails } from '../repo/RepoDetails';
@@ -118,6 +119,7 @@ export function InstalledAppsPage() {
           )
         }
       />
+      <TvOffNotice device={active} off={ops.tvOff} />
       <div className="grid">
         <NeedsDevice device={active}>
           <section className="card col-12">
@@ -185,6 +187,7 @@ export function InstalledAppsPage() {
                         device={active}
                         repo={repoApps.view.get(app.id)}
                         onLaunch={launch}
+                        tvOff={ops.tvOff}
                         onRemove={remove}
                         onUpdate={(v) => ops.installFromRepo(v.pkg, { update: true, incompatible: v.incompatible })}
                         onDetails={(v) => setDetailsId(v.pkg.id)}
@@ -232,6 +235,7 @@ function AppRow({
   onUpdate,
   onDetails,
   busy,
+  tvOff,
 }: {
   app: AppInfo;
   device: SavedDevice | null;
@@ -242,6 +246,8 @@ function AppRow({
   onUpdate: (v: RepoAppView) => void;
   onDetails: (v: RepoAppView) => void;
   busy: boolean;
+  /** The TV is in standby: launching would show nothing. */
+  tvOff: boolean;
 }) {
   const update = repo?.state === 'update' ? repo : undefined;
   const { toast } = useFeedback();
@@ -284,7 +290,14 @@ function AppRow({
               <Icon name="download" /> <span className="hide-sm">Update</span>
             </button>
           )}
-          <button type="button" className="btn btn--sm btn--soft-primary" onClick={() => onLaunch(app)} aria-label={`Launch ${title}`}>
+          <button
+            type="button"
+            className="btn btn--sm btn--soft-primary"
+            onClick={() => onLaunch(app)}
+            disabled={tvOff}
+            title={tvOff ? TV_OFF_HINT : undefined}
+            aria-label={`Launch ${title}`}
+          >
             <Icon name="play" /> <span className="hide-sm">Launch</span>
           </button>
           <Dropdown

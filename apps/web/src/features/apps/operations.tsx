@@ -8,10 +8,14 @@ import { Alert } from '../../components/Alert';
 import { useFeedback } from '../../components/Feedback';
 import { Icon } from '../../shell/icons';
 import { toTarget, type SavedDevice } from '../../devices/store';
-import { useRefreshDeviceData } from './queries';
+import { useRefreshDeviceData, useTvPower } from './queries';
+import { useQueryClient } from '@tanstack/react-query';
 import { INCOMPATIBLE_TEXT, type IncompatibleReason } from '../repo/logic';
 
 type Phase = 'send' | 'copy' | 'install';
+
+/** Tooltip of a Launch button while the TV is in standby. */
+export const TV_OFF_HINT = 'The TV is off (standby). Turn it on to launch apps.';
 
 interface OpState {
   kind: 'install' | 'repo' | 'remove';
@@ -64,6 +68,10 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
   const [op, setOp] = useState<OpState | null>(null);
   const abort = useRef<AbortController | null>(null);
   const running = !!op && !op.done && op.error === undefined;
+  // In standby the TV installs and updates apps but can't show one: Launch is disabled (the bridge refuses it too).
+  const power = useTvPower(device);
+  const tvOff = power.data?.state === 'standby';
+  const qc = useQueryClient();
 
   const launch = async (app: AppInfo) => {
     if (!device) return;
@@ -71,7 +79,13 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
       await call('apps.launch', { device: toTarget(device), id: app.id }, 30_000);
       toast({ kind: 'success', title: `Launched ${app.title ?? app.id}`, text: `On ${device.name}.` });
     } catch (e) {
-      toast({ kind: 'danger', title: `Couldn’t launch ${app.title ?? app.id}`, text: describeError(e).message });
+      const { code, message } = describeError(e);
+      if (code === AppsErrorCodes.TvOff) {
+        toast({ kind: 'warning', title: `${device.name} is off`, text: message });
+        qc.invalidateQueries({ queryKey: ['power', device.id] });
+      } else {
+        toast({ kind: 'danger', title: `Couldn’t launch ${app.title ?? app.id}`, text: message });
+      }
     }
   };
 
@@ -244,6 +258,8 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
               <button
                 type="button"
                 className="btn btn--ghost"
+                disabled={tvOff}
+                title={tvOff ? TV_OFF_HINT : undefined}
                 onClick={() => {
                   setOp(null);
                   launch(installedApp);
@@ -315,5 +331,5 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
     </Modal>
   );
 
-  return { install, installFromRepo, installLitefin, remove, launch, busy: running, dialog };
+  return { install, installFromRepo, installLitefin, remove, launch, tvOff, busy: running, dialog };
 }

@@ -4,6 +4,7 @@
  *    second-screen port :3000 (so the network scan finds it),
  *  - a rooted mock TV with Homebrew Channel on 127.0.0.1:2222 (user root, password "alpine"),
  *  - a rooted mock TV that refuses PTYs on 127.0.0.1:2223 (root / alpine), for the simple-shell terminal,
+ *  - a rooted mock TV in standby on 127.0.0.1:2224 (root / alpine): installs work, launching is refused,
  *  - a fake Homebrew repository on 127.0.0.1:5298 (tools/mock-tv/src/repo.ts) the bridge uses instead of
  *    repo.webosbrew.org,
  *  - a fake LG Developer Mode session service (developer.lge.com) knowing the Dev Mode TV's token,
@@ -24,6 +25,7 @@ export const E2E = {
   passphrase: 'A1B2C3',
   rootedPort: 2222,
   noPtyPort: 2223,
+  standbyPort: 2224,
   repoPort: Number(process.env.E2E_REPO_PORT ?? 5298),
   githubPort: Number(process.env.E2E_GITHUB_PORT ?? 5297),
 };
@@ -36,6 +38,8 @@ process.env.LGDM_SCAN_EXTRA_HOSTS ??= '127.0.0.1';
 const devTv = await startMockTv({ sshPort: 9922, keyServerPort: 9991, passphrase: E2E.passphrase, ssapPort: 3000 });
 const rootTv = await startMockTv({ username: 'root', password: 'alpine', hbchannel: true, sshPort: E2E.rootedPort });
 const noPtyTv = await startMockTv({ username: 'root', password: 'alpine', pty: false, sshPort: E2E.noPtyPort });
+const standbyTv = await startMockTv({ username: 'root', password: 'alpine', sshPort: E2E.standbyPort });
+standbyTv.state.power = { state: 'Active Standby' };
 // Followed logs tick faster than on a real TV, so tests waiting for new lines finish sooner.
 for (const tv of [devTv, rootTv, noPtyTv]) tv.state.debug.every = 150;
 const repo = await startMockRepo({ port: E2E.repoPort });
@@ -60,5 +64,6 @@ console.log(`e2e rig ready: UI ${origins[0]}  token ${E2E.token}`);
 console.log(`  Dev Mode TV 127.0.0.1:${devTv.sshPort} (key server ${devTv.keyServerPort}, passphrase ${E2E.passphrase})`);
 console.log(`  Rooted TV   127.0.0.1:${rootTv.sshPort} (root / alpine, Homebrew Channel)`);
 console.log(`  No-PTY TV   127.0.0.1:${noPtyTv.sshPort} (root / alpine, refuses PTYs)`);
+console.log(`  Standby TV  127.0.0.1:${standbyTv.sshPort} (root / alpine, in standby: launching is refused)`);
 console.log(`  Repository  ${repo.url} (fake Homebrew repo, ${repo.apps.length} apps)`);
 console.log(`  Litefin     ${github.url} (fake GitHub releases)`);

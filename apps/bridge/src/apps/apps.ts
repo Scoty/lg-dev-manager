@@ -16,6 +16,7 @@ import type { SshRunner } from '../ssh/pool.js';
 import { serveToDevice } from '../ssh/serve.js';
 import { mkdirp, putFile, readFile, rmFile, sha256sum } from '../ssh/transfer.js';
 import { readIpkControl } from './ipk.js';
+import { turnOnScreen, tvPower } from '../devices/power.js';
 import type { HttpTrace, RepoClient } from '../repo/repo.js';
 
 /**
@@ -49,8 +50,22 @@ export async function listApps(pool: SshRunner, device: DeviceTarget): Promise<A
   });
 }
 
+/**
+ * Launch an app (DeviceManagerService.launch in the original). Unlike the original it checks the power state first: in
+ * standby the TV accepts the launch but has no screen to show it on, so the user would see nothing happen. With the
+ * screen merely turned off, the app is launched and the picture turned back on.
+ */
 export async function launchApp(pool: SshRunner, device: DeviceTarget, id: string, params?: Record<string, unknown>) {
+  const power = await tvPower(pool, device);
+  if (power.state === 'standby') {
+    throw new RpcError(
+      AppsErrorCodes.TvOff,
+      'The TV is off (in standby). Turn it on with the remote, then launch the app. Installing, updating and removing apps work while it’s off.',
+      power.raw ? `getPowerState: ${power.raw}` : undefined,
+    );
+  }
   await lunaCall(pool, device, 'luna://com.webos.applicationManager/launch', { id, subscribe: false, params }, true);
+  if (power.state === 'screenOff') await turnOnScreen(pool, device);
 }
 
 export async function appIcon(pool: SshRunner, device: DeviceTarget, path: string) {

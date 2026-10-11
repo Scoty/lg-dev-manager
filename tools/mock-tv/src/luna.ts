@@ -78,6 +78,14 @@ export const LUNA: Record<string, LunaHandler> = {
     }
     return { returnValue: true, appId: p.id };
   },
+  // Power (tvpower). Real TVs answer like this on both buses; in Active Standby a launch still returns true but shows
+  // nothing, which is why the bridge asks first.
+  'luna://com.webos.service.tvpower/power/getPowerState': (_p, s) => ({ returnValue: true, ...s.power }),
+  'luna://com.webos.service.tvpower/power/turnOnScreen': (_p, s) => {
+    if (s.power.state !== 'Screen Off') return { returnValue: false, errorCode: -1, errorText: 'Invalid state' };
+    s.power = { state: 'Active' };
+    return { returnValue: true };
+  },
   // Screenshots (takeScreenshot in device-manager.service.ts): write a PNG where asked.
   'luna://com.webos.service.capture/executeOneShot': (p, s) => {
     if (s.legacyCapture) return notFound('com.webos.service.capture');

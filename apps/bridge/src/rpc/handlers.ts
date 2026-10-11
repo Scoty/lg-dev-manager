@@ -32,6 +32,7 @@ import { fetchKey } from '../devices/keyserver.js';
 import { checkConnection } from '../devices/ports.js';
 import { deviceInfo, generateKey, storageInfo, takeScreenshot } from '../devices/info.js';
 import { DEFAULT_LGE_URL, devModeStatus, renewDevMode } from '../devices/devmode.js';
+import { tvPower } from '../devices/power.js';
 import { appIcon, hbChannelConfig, installDownloadable, installFromRepo, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
 import type { HttpTrace, RepoClient } from '../repo/repo.js';
 import type { LitefinClient } from '../litefin/litefin.js';
@@ -159,6 +160,8 @@ export const handlers: HandlerMap = {
 
   'device.info': ({ device, quiet }, session, ctx) => deviceInfo(sshFor(session, ctx, quiet), device),
   'device.storage': ({ device, path }, session, ctx) => storageInfo(sshFor(session, ctx), device, path),
+  // Polled by the apps pages: a background read in the console.
+  'device.power': ({ device }, session, ctx) => tvPower(sshFor(session, ctx, true), device),
   'device.generateKey': ({ comment }) => generateKey(comment),
   // The token is read through the plain pool so it never appears in the console; the LG request is traced
   // with the token blanked out.

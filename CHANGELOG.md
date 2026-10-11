@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4 — 2026-10-11
+
+- 🌙 **TVs in standby.** When the TV is off but still reachable (LG's Quick Start+ / "Always Ready"), installing,
+  updating and removing apps work as before, but Launch is disabled with a note saying why — the TV would accept the
+  launch and show nothing. The apps pages notice within a few seconds when you turn the TV on. If only the picture is
+  turned off (screen off), launching an app turns it back on.
+
 ## 1.0.3 — 2026-10-10
 
 - 🩹 `npx lg-dev-manager-bridge` works again: 1.0.2's npm package stopped at start with

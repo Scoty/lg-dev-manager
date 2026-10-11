@@ -6,7 +6,8 @@ import { NeedsDevice } from '../../components/NeedsDevice';
 import { useFeedback } from '../../components/Feedback';
 import { Icon } from '../../shell/icons';
 import { useDevices } from '../../devices/useDevices';
-import { useAppOperations } from '../apps/operations';
+import { TV_OFF_HINT, useAppOperations } from '../apps/operations';
+import { TvOffNotice } from '../apps/TvOffNotice';
 import { useRefreshRepo } from './queries';
 import { RepoDetails } from './RepoDetails';
 import { RepoIcon } from './RepoIcon';
@@ -92,6 +93,7 @@ export function RepoPage() {
           </>
         }
       />
+      <TvOffNotice device={active} off={ops.tvOff} />
       <div className="grid">
         <NeedsDevice device={active}>
           <section className="card col-12">
@@ -170,6 +172,7 @@ export function RepoPage() {
                       v={v}
                       ready={ready}
                       busy={ops.busy}
+                      tvOff={ops.tvOff}
                       onOpen={() => setOpenId(v.pkg.id)}
                       onInstall={() => ops.installFromRepo(v.pkg, { update: v.state === 'update', incompatible: v.incompatible })}
                       onLaunch={() => ops.launch(v.installed ?? { id: v.pkg.id, title: v.pkg.title })}
@@ -191,6 +194,7 @@ function RepoCard({
   v,
   ready,
   busy,
+  tvOff,
   onOpen,
   onInstall,
   onLaunch,
@@ -198,6 +202,7 @@ function RepoCard({
   v: RepoAppView;
   ready: boolean;
   busy: boolean;
+  tvOff: boolean;
   onOpen: () => void;
   onInstall: () => void;
   onLaunch: () => void;
@@ -226,7 +231,14 @@ function RepoCard({
           )}
         </div>
         {state === 'installed' ? (
-          <button type="button" className="btn btn--sm btn--ghost" onClick={onLaunch} disabled={!ready || busy} aria-label={`Launch ${pkg.title}`}>
+          <button
+            type="button"
+            className="btn btn--sm btn--ghost"
+            onClick={onLaunch}
+            disabled={!ready || busy || tvOff}
+            title={tvOff ? TV_OFF_HINT : undefined}
+            aria-label={`Launch ${pkg.title}`}
+          >
             <Icon name="play" /> Launch
           </button>
         ) : (
