@@ -6,6 +6,9 @@
   updating and removing apps work as before, but Launch is disabled with a note saying why — the TV would accept the
   launch and show nothing. The apps pages notice within a few seconds when you turn the TV on. If only the picture is
   turned off (screen off), launching an app turns it back on.
+- 🫧 No more flashing while the bridge is down: the page stays on "The bridge isn't connected" while it retries in
+  the background (it used to show the page for a moment on every attempt), and only the dot in the top-bar pill
+  pulses. It switches to the connected page by itself once the bridge is back.
 - 🔑 "Make a new key" says why it's greyed out when the bridge isn't connected (the bridge makes the key).
 - ⚠️ On rooted TVs, "New key made for this TV" warns first that adding a key turns off the `alpine` password from
   the next restart (Homebrew Channel only sets it while `authorized_keys` doesn't exist) — for every tool — and to

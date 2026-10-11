@@ -25,6 +25,7 @@ function StatusAlert() {
           action={<button type="button" className="btn btn--sm btn--ghost" onClick={reconnect}>Retry</button>}
         >
           {status.message}
+          {status.retrying && ' Reconnecting automatically as soon as the bridge is running.'}
         </Alert>
       );
     default:

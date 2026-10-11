@@ -21,6 +21,9 @@
 .bridge-pill.is-connected .dot { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
 .bridge-pill.is-connecting .dot { background: var(--warning); animation: pulse-dot 1.2s ease-in-out infinite; }
 .bridge-pill.is-error .dot { background: var(--danger); }
+/* Retrying in the background: a slow, steady pulse — the same on every attempt, so nothing flickers. */
+.bridge-pill.is-retrying .dot { animation: pill-retry 2.4s ease-in-out infinite; }
+@keyframes pill-retry { 50% { opacity: 0.3; } }
 @keyframes pulse-dot { 50% { opacity: 0.35; } }
 
 /* Empty / placeholder state used by not-yet-built pages */
@@ -1015,3 +1018,10 @@ button.log-row:hover { background: var(--bg-hover); }
 .sidebar-scroll::-webkit-scrollbar { width: 4px; }
 .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 .sidebar-footer { margin-top: 0; flex-shrink: 0; }
+
+/* Placeholders that should only show when something takes a moment (NeedsDevice while the bridge connects). */
+.delayed-in { animation: delayed-in 0.2s ease-out 0.4s both; }
+@keyframes delayed-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .bridge-pill.is-retrying .dot { animation: none; }
+}

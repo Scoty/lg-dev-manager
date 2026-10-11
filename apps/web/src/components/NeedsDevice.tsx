@@ -21,8 +21,21 @@ export function NeedsDevice({ device, children }: { device: SavedDevice | null; 
             {unpaired
               ? 'The bridge is the small helper on this computer that talks to your TV. Start it in a terminal and pair this browser.'
               : `${status.message} Make sure the bridge is still running in its terminal.`}
+            {!unpaired && status.retrying && ' This page reconnects by itself as soon as it’s running again.'}
           </p>
           <Link to="/bridge" className="btn btn--primary"><Icon name="plug" /> Bridge setup</Link>
+        </div>
+      </section>
+    );
+  }
+  if (status.state === 'connecting') {
+    // First connection (page load, pairing, Retry). Not the page itself: without the bridge it would show empty
+    // results ("No apps installed yet"). Fades in only if connecting takes a moment, so a quick connect doesn't flash.
+    return (
+      <section className="card col-12 delayed-in">
+        <div className="empty-state">
+          <span className="spinner" />
+          <p>Connecting to the bridge…</p>
         </div>
       </section>
     );

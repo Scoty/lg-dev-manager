@@ -6,7 +6,8 @@ export type BridgeStatus =
   | { state: 'unpaired' }
   | { state: 'connecting' }
   | { state: 'connected'; bridgeVersion: string; platform: string; distribution?: 'app' | 'npm' | 'source' }
-  | { state: 'error'; code: string; message: string };
+  /** `retrying`: the provider keeps trying in the background and switches to `connected` by itself when it works. */
+  | { state: 'error'; code: string; message: string; retrying?: boolean };
 
 interface BridgeContextValue {
   status: BridgeStatus;
@@ -30,10 +31,15 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
   const retryTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const generation = useRef(0);
 
-  const connect = useCallback(async (s: BridgeSettings) => {
+  /**
+   * `background`: an automatic retry while the bridge is down. It doesn't go through `connecting` — that would swap
+   * every page's "bridge isn't connected" card for the page itself for a moment on each attempt (a flash every few
+   * seconds). The status changes only when the outcome does: connected, or a different error.
+   */
+  const connect = useCallback(async (s: BridgeSettings, background = false) => {
     const gen = ++generation.current;
     clearTimeout(retryTimer.current);
-    setStatus({ state: 'connecting' });
+    if (!background) setStatus({ state: 'connecting' });
     const c = new BridgeClient(s.url, s.token);
     try {
       const hello = await c.connect();
@@ -48,7 +54,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
           setStatus({ state: 'error', code: 'unauthorized', message: 'The bridge rejected the pairing token.' });
           return;
         }
-        setStatus({ state: 'error', code: 'disconnected', message: 'Lost connection to the bridge. Retrying…' });
+        setStatus({ state: 'error', code: 'disconnected', message: 'Lost connection to the bridge.', retrying: true });
         scheduleRetry(s, gen);
       };
     } catch (e) {
@@ -56,8 +62,13 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       if (gen !== generation.current) return;
       const err = e instanceof BridgeError ? e : new BridgeError('unknown', String(e));
       setClient(null);
-      setStatus({ state: 'error', code: err.code, message: err.message });
-      if (err.code !== 'unauthorized' && err.code !== 'protocol_mismatch') scheduleRetry(s, gen);
+      const retrying = err.code !== 'unauthorized' && err.code !== 'protocol_mismatch';
+      setStatus((prev) =>
+        prev.state === 'error' && prev.code === err.code && prev.message === err.message && !!prev.retrying === retrying
+          ? prev // same as before: no re-render, nothing on screen changes
+          : { state: 'error', code: err.code, message: err.message, retrying },
+      );
+      if (retrying) scheduleRetry(s, gen);
       throw err;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,7 +78,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
     (s: BridgeSettings, gen: number) => {
       const delay = RETRY_MS[Math.min(attempt.current++, RETRY_MS.length - 1)]!;
       retryTimer.current = setTimeout(() => {
-        if (gen === generation.current) connect(s).catch(() => {});
+        if (gen === generation.current) connect(s, true).catch(() => {});
       }, delay);
     },
     [connect],

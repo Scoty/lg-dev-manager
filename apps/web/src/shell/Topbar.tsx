@@ -14,8 +14,14 @@ function BridgePill() {
     error: { cls: ' is-error', text: 'Bridge offline' },
   } as const;
   const { cls, text } = map[status.state];
+  // While the provider retries in the background, the dot pulses; the text stays put (no flicker on each attempt).
+  const retrying = status.state === 'error' && status.retrying;
   return (
-    <Link to="/bridge" className={`bridge-pill${cls}`} title={status.state === 'error' ? status.message : text}>
+    <Link
+      to="/bridge"
+      className={`bridge-pill${cls}${retrying ? ' is-retrying' : ''}`}
+      title={status.state === 'error' ? `${status.message}${retrying ? ' Reconnecting automatically…' : ''}` : text}
+    >
       <span className="dot" aria-hidden="true" />
       <span>{text}</span>
     </Link>
