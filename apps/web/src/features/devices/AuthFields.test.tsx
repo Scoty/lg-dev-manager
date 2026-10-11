@@ -7,9 +7,16 @@ vi.mock('../../components/Feedback', () => ({ useFeedback: () => ({ toast: vi.fn
 
 const { AuthFields } = await import('./AuthFields');
 
-const show = () =>
+const show = (rooted = false, made = false) =>
   render(
-    <AuthFields value={{ kind: 'generated', privateKey: '', publicKey: '' } as never} onChange={() => {}} kinds={['generated']} username="root" showErrors={false} />,
+    <AuthFields
+      value={{ kind: 'generated', privateKey: made ? 'PRIVATE' : '', publicKey: made ? 'ssh-ed25519 AAAA lg-dev-manager' : '' } as never}
+      onChange={() => {}}
+      kinds={['generated']}
+      username="root"
+      showErrors={false}
+      rootedHint={rooted}
+    />,
   );
 
 describe('AuthFields: a new key made for this TV', () => {
@@ -29,5 +36,18 @@ describe('AuthFields: a new key made for this TV', () => {
     show();
     expect((screen.getByRole('button', { name: /Make a new key/ }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByText(/The bridge isn’t connected/)).toBeNull();
+  });
+
+  it('warns on rooted TVs that a key turns password login off — before and after making it', () => {
+    rpc.ready = true;
+    show(true);
+    expect(screen.getByText('Adding a key turns off password login')).toBeTruthy();
+    cleanup();
+    show(true, true);
+    expect(screen.getByText('Adding a key turns off password login')).toBeTruthy();
+    expect(screen.getByText('ssh-ed25519 AAAA lg-dev-manager')).toBeTruthy();
+    cleanup();
+    show(false); // Developer Mode: logs in with a key anyway
+    expect(screen.queryByText('Adding a key turns off password login')).toBeNull();
   });
 });

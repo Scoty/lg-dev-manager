@@ -4,6 +4,7 @@ import { useRpc } from '../../bridge/useRpc';
 import { BridgeError } from '../../bridge/client';
 import { Icon } from '../../shell/icons';
 import { useFeedback } from '../../components/Feedback';
+import { Alert } from '../../components/Alert';
 import { AUTH_LABELS, authProblems, emptyAuth, type AuthDraft, type AuthKind } from './auth';
 
 type KeyCheck =
@@ -154,7 +155,9 @@ export function AuthFields({
 
       {value.kind === 'key' && <PrivateKeyFields value={value} onChange={onChange} problem={problems.privateKey} onKeyCheck={onKeyCheck} />}
 
-      {value.kind === 'generated' && <GeneratedKey value={value} onChange={onChange} username={username} problem={problems.privateKey} />}
+      {value.kind === 'generated' && (
+        <GeneratedKey value={value} onChange={onChange} username={username} problem={problems.privateKey} rooted={!!rootedHint && username === 'root'} />
+      )}
     </div>
   );
 }
@@ -269,16 +272,36 @@ function KeyCheckLine({ check }: { check: KeyCheck }) {
   }
 }
 
+/**
+ * Homebrew Channel sets root's `alpine` password at every boot only while /home/root/.ssh/authorized_keys doesn't
+ * exist (services/startup.sh in webosbrew/webos-homebrew-channel). Adding a key file turns password login off from
+ * the next restart — for every tool, not just this one. Said before the key is made, so it's a choice.
+ */
+function PasswordOffWarning() {
+  return (
+    <Alert kind="warning" title="Adding a key turns off password login">
+      Once <span className="mono">/home/root/.ssh/authorized_keys</span> exists, Homebrew Channel stops setting the{' '}
+      <span className="mono">alpine</span> password: from the TV’s next restart, root can log in only with a key in that file —
+      in this app and in any other tool (the desktop Dev Manager, WinSCP, ssh). That’s safer, but keep the key: it’s saved
+      only in this browser, so use <strong>Export backup</strong> on the Devices page. Prefer the password? Choose{' '}
+      <strong>Password</strong> above instead.
+    </Alert>
+  );
+}
+
 function GeneratedKey({
   value,
   onChange,
   username,
   problem,
+  rooted,
 }: {
   value: Extract<AuthDraft, { kind: 'generated' }>;
   onChange: (v: AuthDraft) => void;
   username: string;
   problem?: string;
+  /** A rooted TV (Homebrew Channel): adding a key turns password login off. */
+  rooted: boolean;
 }) {
   const { ready, call } = useRpc();
   const { toast } = useFeedback();
@@ -302,6 +325,7 @@ function GeneratedKey({
           The bridge makes a new ed25519 key pair. The private key is saved only in this browser; you add the public key to the
           TV once.
         </span>
+        {rooted && <PasswordOffWarning />}
         <div>
           <button type="button" className="btn btn--soft-primary" onClick={make} disabled={!ready || busy} aria-describedby={ready ? undefined : 'genkey-offline'}>
             <Icon name="key" /> {busy ? 'Making key…' : 'Make a new key'}
@@ -320,6 +344,7 @@ function GeneratedKey({
   }
   return (
     <div className="field">
+      {rooted && <PasswordOffWarning />}
       <span className="field-label">Public key — add this line to the TV</span>
       <div className="codeblock codeblock--wrap">{value.publicKey}</div>
       <div className="row">
