@@ -12,6 +12,8 @@ describe('bridgeOutdated', () => {
   it('ignores versions it can’t read', () => {
     expect(bridgeOutdated('dev', '1.0.0')).toBe(false);
     expect(bridgeOutdated('1.0.0', 'x')).toBe(false);
+    // The deploy couldn't ask npm which bridge is published: say nothing rather than guess.
+    expect(bridgeOutdated('1.0.0', '')).toBe(false);
   });
   it('knows the versions this build was made with', () => {
     expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+/);

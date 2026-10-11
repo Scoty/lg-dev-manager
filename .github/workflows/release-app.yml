@@ -13,6 +13,7 @@ on:
       tag:
         description: Existing tag to (re)build the release for, e.g. bridge-v1.0.2
         required: true
+        type: string
 
 permissions:
   contents: read

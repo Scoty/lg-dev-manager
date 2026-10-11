@@ -325,7 +325,10 @@ warn when it changes. The remaining audit note (esbuild's dev server on Windows,
 
 Versions: the web app and the bridge are released together with the same number (`apps/web`, `apps/bridge`,
 `packages/protocol`, `tools/mock-tv` and the root `package.json`, plus `apps/bridge/src/version.ts` — a test checks
-it). The site shows a notice when the connected bridge is older than the one released with it.
+it). The site shows a notice when the connected bridge is older than the newest bridge **published on npm**: the Pages
+deploy asks npm (`LGDM_BRIDGE_RELEASE`), because the site deploys from main as soon as CI passes — before the version
+bump is tagged and published. It redeploys after each bridge release, so the notice appears once the release is out.
+Local builds use the code's own version.
 
 1. Bump the versions, update this plan, commit, push; wait for CI and the Pages deploy (the site is live then).
 2. Tag both: `git tag -a web-vX.Y.Z` and `git tag -a bridge-vX.Y.Z`, push the tags.

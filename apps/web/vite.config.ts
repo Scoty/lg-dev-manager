@@ -40,10 +40,12 @@ function cspPlugin(): Plugin {
 export default defineConfig({
   base: './',
   plugins: [react(), cspPlugin()],
-  // This site's version, and the bridge released with it (a bridge older than that gets an update notice).
+  // This site's version, and the newest bridge people can get (an older one connected gets an update notice).
+  // The deploy sets LGDM_BRIDGE_RELEASE to the version published on npm (pages.yml) — the code's own version may
+  // not be released yet. Empty means "don't know": no notice. Local builds and tests use the code's version.
   define: {
     __WEB_VERSION__: JSON.stringify(version('./package.json')),
-    __BRIDGE_RELEASE__: JSON.stringify(version('../bridge/package.json')),
+    __BRIDGE_RELEASE__: JSON.stringify(process.env.LGDM_BRIDGE_RELEASE ?? version('../bridge/package.json')),
   },
   server: { port: 5173, strictPort: true },
   build: { target: 'es2022', sourcemap: true },

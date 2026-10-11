@@ -1,11 +1,13 @@
 name: Deploy web UI
 
 # Publishes apps/web to GitHub Pages, served at https://lg.scoty.uk (see apps/web/public/CNAME).
-# Runs only after the CI workflow has passed for a push to main (or by hand), and builds exactly the commit CI tested.
+# Runs after CI has passed for a push to main, building exactly the commit CI tested, and again after a bridge
+# release (npm and the GitHub release with the apps), building main, so the site learns the new bridge version.
+# The site's "Bridge vX is available" notice uses the version published on npm, never the code's own version (the
+# code is bumped before the tag is pushed).
 on:
   workflow_run:
-    workflows: [CI]
-    branches: [main]
+    workflows: [CI, Publish bridge to npm, Release the bridge app]
     types: [completed]
   workflow_dispatch:
 
@@ -18,20 +20,23 @@ concurrency:
 
 jobs:
   build:
-    # workflow_run: only a successful CI run for a push to main in this repository (not a PR, not a fork's "main").
+    # workflow_run: a successful CI run for a push to main in this repository (not a PR, not a fork's "main"), or a
+    # successful release run for a bridge-v* tag pushed to this repository.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       ((github.event.workflow_run.name == 'CI' && github.event.workflow_run.head_branch == 'main') ||
+        (github.event.workflow_run.name != 'CI' && startsWith(github.event.workflow_run.head_branch, 'bridge-v'))))
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # After CI: the commit CI tested. After a release (or by hand): main as it is now.
+          ref: ${{ github.event.workflow_run.name == 'CI' && github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -40,7 +45,24 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The newest bridge people can actually install. After a release, wait (up to 5 minutes) for npm to show the
+      # tagged version — its registry can lag a little. If npm can't be asked, leave it empty: no update notice.
+      - name: Published bridge version
+        id: bridge
+        env:
+          TAG: ${{ github.event.workflow_run.name != 'CI' && github.event.workflow_run.head_branch || '' }}
+        run: |
+          want="${TAG#bridge-v}"
+          for i in $(seq 1 10); do
+            v=$(npm view lg-dev-manager-bridge version 2>/dev/null || true)
+            if [ -z "$want" ] || [ "$v" = "$want" ]; then break; fi
+            echo "npm still says ${v:-nothing}, waiting for $want…"; sleep 30
+          done
+          echo "Published bridge: ${v:-unknown}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
       - run: pnpm --filter @lgdm/web build
+        env:
+          LGDM_BRIDGE_RELEASE: ${{ steps.bridge.outputs.version }}
       - uses: actions/upload-pages-artifact@v5
         with:
           path: apps/web/dist
