@@ -1,13 +1,15 @@
 name: Deploy web UI
 
 # Publishes apps/web to GitHub Pages, served at https://lg.scoty.uk (see apps/web/public/CNAME).
-# Runs after CI has passed for a push to main, building exactly the commit CI tested, and again after a bridge
-# release (npm and the GitHub release with the apps), building main, so the site learns the new bridge version.
+# Runs after CI has passed for a push to main, building exactly the commit CI tested, and once after a bridge
+# release, building main, so the site learns the new bridge version. A bridge-v* tag starts two release workflows
+# (npm and the GitHub release with the apps); only the second, "Release the bridge app", triggers this — it finishes
+# last, and the build step below waits for npm to show the version anyway. (Triggering on both deployed twice.)
 # The site's "Bridge vX is available" notice uses the version published on npm, never the code's own version (the
 # code is bumped before the tag is pushed).
 on:
   workflow_run:
-    workflows: [CI, Publish bridge to npm, Release the bridge app]
+    workflows: [CI, Release the bridge app]
     types: [completed]
   workflow_dispatch:
 
