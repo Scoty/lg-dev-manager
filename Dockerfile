@@ -12,7 +12,7 @@ FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS build
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 CI=1
 RUN corepack enable
 WORKDIR /src
-COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm fetch
 COPY . .
 RUN pnpm install --offline --frozen-lockfile \
