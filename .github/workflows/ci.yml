@@ -78,7 +78,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @lgdm/web exec playwright install --with-deps chromium
+      # Playwright uses the runner's preinstalled Google Chrome in CI (apps/web/playwright.config.ts), so nothing to install.
       # The rig's fake TV is 127.0.0.1; the runner's own SSH server on port 22 would make it look like a rooted TV
       # with SSH on (the wizard test needs that port closed).
       - name: Stop the runner's SSH server

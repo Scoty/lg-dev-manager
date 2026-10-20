@@ -19,8 +19,13 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
   use: {
     baseURL: `http://127.0.0.1:${port}`,
-    trace: 'retain-on-failure',
+    // Recording a trace (screenshots + DOM snapshots) for every test about doubled the suite's time, even though passing
+    // tests' traces were thrown away. Now only a retried test (CI retries once) records one; locally use --trace on.
+    trace: 'on-first-retry',
     ...devices['Desktop Chrome'],
+    // CI: the Google Chrome GitHub's Ubuntu runners come with, instead of downloading Chromium and its libraries on
+    // every run (~20 s). Locally: Playwright's own Chromium (`playwright install chromium`).
+    ...(process.env.CI ? { channel: 'chrome' } : {}),
   },
   webServer: {
     command: 'tsx e2e/server.ts',
