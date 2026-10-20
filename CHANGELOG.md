@@ -12,6 +12,9 @@
 - 🐳 **Docker image** `ghcr.io/scoty/lg-dev-manager` (amd64, arm64) and a `compose.yaml`: the bridge and the web app
   on a home server, in LAN mode, as a non-root user on a read-only filesystem with a health check. `docker compose
   up -d`, open the pairing link from the logs, done. The update notice says to `docker compose pull`.
+- 📱 **Phones and tablets**, through a bridge on your network: every page fits a phone screen, the terminal has a bar
+  with the keys a phone keyboard lacks (Esc, Tab, Ctrl+C/D/Z/L/R, arrows, `| ~ / -`), bigger touch targets, no zooming
+  into text fields on iPhone, and TVs are listed as cards. Elsewhere the phone notice points to Docker.
 - Copy buttons, the terminal and screenshots also work on pages served over plain HTTP.
 - The bridge stops at once on SIGTERM (`docker stop`).
 

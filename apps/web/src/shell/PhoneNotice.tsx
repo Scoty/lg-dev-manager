@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert } from '../components/Alert';
+import { servedByLanBridge } from '../bridge/settings';
 
 /** A phone or tablet: the browser says so (userAgentData), the user agent does, or it's an iPad posing as a Mac. */
 export function isPhoneOrTablet(nav: Pick<Navigator, 'userAgent' | 'maxTouchPoints'> & { userAgentData?: { mobile?: boolean } } = navigator): boolean {
@@ -11,8 +12,9 @@ export function isPhoneOrTablet(nav: Pick<Navigator, 'userAgent' | 'maxTouchPoin
 const KEY = 'lgdm-phone-notice-dismissed';
 
 /**
- * Shown on phones and tablets: the app needs the bridge on the same computer, and the ways around that (a terminal app
- * on the phone, or a bridge opened up to the network) are risky. Can be hidden for this browser session.
+ * Shown on phones and tablets that open lg.scoty.uk or a local page: the app needs a bridge, and a phone can't run
+ * one. Not on a page a bridge on the network serves (the Docker image, 2.0) — that's how phones use the app. Can be
+ * hidden for this browser session.
  */
 export function PhoneNotice({ always = false }: { always?: boolean }) {
   const [hidden, setHidden] = useState(() => {
@@ -22,7 +24,7 @@ export function PhoneNotice({ always = false }: { always?: boolean }) {
       return false;
     }
   });
-  if (!isPhoneOrTablet() || (hidden && !always)) return null;
+  if (!isPhoneOrTablet() || servedByLanBridge() || (hidden && !always)) return null;
   const hide = () => {
     setHidden(true);
     try {
@@ -44,10 +46,10 @@ export function PhoneNotice({ always = false }: { always?: boolean }) {
           )
         }
       >
-        LG Dev Manager talks to your TV through the bridge, a small program that has to run on the same computer as this
-        browser. Phones and tablets can’t run it, and the workarounds — running it in a terminal app on the phone, or
-        opening a bridge to your Wi-Fi — are risky: the bridge holds your TV’s keys and passwords and can do anything on
-        the TV, including as root. Please open this page on a desktop or laptop instead.
+        LG Dev Manager talks to your TV through the bridge, a small program that runs on a computer. Phones and tablets
+        can’t run it, and workarounds such as a terminal app on the phone are risky: the bridge holds your TV’s keys and
+        passwords and can do anything on the TV, including as root. Open this page on a desktop or laptop — or run the
+        bridge on a home server with Docker and open the page it serves, which works on phones too.
       </Alert>
     </div>
   );

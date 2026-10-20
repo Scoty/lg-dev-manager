@@ -21,6 +21,10 @@ services:
       # LGDM_TOKEN: ...                    # your own token (16+ characters); unset = a random one, kept in /data
     volumes:
       - lgdm-data:/data # the pairing token only — your TVs stay in each browser
+      # Or a folder on the server instead of the lgdm-data volume (then delete the volumes: block at the end). The
+      # container runs as user 1000, which must be able to write it: `sudo chown 1000:1000 /path/to/lgdm`, or add
+      # `user: "<uid>:<gid>"` above with your own ids (`id` on the server).
+      # - /volume1/docker/lgdm:/data
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]

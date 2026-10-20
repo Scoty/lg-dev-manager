@@ -1040,3 +1040,43 @@ button.log-row:hover { background: var(--bg-hover); }
 .custom-repos-table .custom-repo-rename .input { flex: 1; min-width: 0; padding: 5px 10px; }
 .custom-repos-table td.actions { white-space: nowrap; text-align: right; width: 1%; }
 .custom-repos-table td.actions > * + * { margin-left: 6px; }
+
+/* ---------- Phones and tablets (2.0: a bridge on the network serves them the page) ---------- */
+
+/* The terminal's extra keys (TermKeys): what an on-screen keyboard lacks. */
+.term-keys {
+  display: flex; gap: 6px; overflow-x: auto; padding: 6px 8px; flex-shrink: 0;
+  border-top: 1px solid var(--border); background: var(--bg-muted); scrollbar-width: none;
+}
+.term-key {
+  flex: 0 0 auto; min-width: 40px; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-card); color: var(--t-base); font: 600 13px 'JetBrains Mono', monospace; cursor: pointer;
+  touch-action: manipulation;
+}
+.term-key:active { background: var(--primary-soft); }
+.term-key:focus-visible { outline: 2px solid var(--primary-ring); outline-offset: 1px; }
+
+@media (pointer: coarse) {
+  /* iOS zooms the whole page into a text field whose text is smaller than 16px. */
+  .input, .select, .textarea { font-size: 16px; }
+  /* Fingers need bigger targets than a mouse. */
+  .btn--sm { min-height: 36px; }
+  .btn--icon { min-width: 36px; min-height: 36px; }
+  .dd-menu-item { min-height: 40px; }
+}
+
+/* Devices on a phone: each TV as a block — name and details on top, status and actions underneath. */
+@media (max-width: 520px) {
+  .devices-table thead { display: none; }
+  .devices-table tbody tr {
+    display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 12px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .devices-table tbody td { display: block; padding: 0; border: 0; }
+  .devices-table tbody td:first-child { grid-column: 1 / -1; }
+  .devices-table tbody tr.is-selected { background: var(--primary-soft); border-radius: 8px; }
+  .devices-table tbody tr:hover td { background: none; }
+  .devices-table tbody td.hide-sm { display: none; }
+  .devices-table .cell-sub { white-space: normal; }
+  .devices-table .cell-sub.mono { white-space: nowrap; }
+}

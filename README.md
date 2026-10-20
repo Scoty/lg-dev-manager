@@ -75,8 +75,8 @@ stops it).
    other TVs use the Developer Mode app and its passphrase.
 
 On macOS, the first time the bridge looks for your TV, the system asks whether your terminal may find devices on the
-local network — choose **Allow**. Phones and tablets aren't supported: the bridge has to run on the same computer
-as the browser.
+local network — choose **Allow**. Phones and tablets can't run the bridge; to use the app on them, run the bridge on a
+home server ([Docker](#docker)) and open the page it serves.
 
 Which page to use is up to you. **lg.scoty.uk** always has the latest version and needs nothing installed besides the
 bridge. **http://localhost:5199** is served from your computer by the bridge itself, so it works offline and even when
@@ -96,7 +96,7 @@ docker compose up -d
 docker compose logs lg-dev-manager    # shows the pairing link
 ```
 
-Open the pairing link in each browser that should use it and click **Pair**. The page is served by the container
+Open the pairing link in each browser that should use it — phones and tablets included — and click **Pair**. The page is served by the container
 itself, at the address you set; your TVs, keys and passwords are still stored only in each browser. To update:
 `docker compose pull && docker compose up -d`.
 

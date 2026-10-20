@@ -226,7 +226,7 @@ lg-dev-manager/
 | M6 ✅ | Info + Dev Mode renew + screenshot | TV details, session countdown + renew, screenshots. |
 | M7 ✅ | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
 | M8 ✅ | Litefin repo | **Apps → Litefin repo**: the last 5 Litefin releases from GitHub, every webOS variant installable straight from the page (see §8). |
-| M9 ⏸ | Phones (research) | **Skipped for now** (owner, Oct 2026). Phones and tablets see a notice that the bridge must run on the same computer, that the phone workarounds are risky, and to use a desktop or laptop instead. The research notes stay in §9 for later. |
+| M9 ✅ | Phones | Done in 2.0 a different way: phones and tablets use a bridge on the network (LAN mode, the Docker image) and the page it serves — no bridge on the phone. Pages fit a phone, the terminal has an extra-keys bar, and the notice elsewhere points to Docker. (Was skipped in Oct 2026; the research notes stay in §9.) |
 | M10 ✅ | Ship | v1.0.0: bridge on npm (`npx lg-dev-manager-bridge`, also serves the local page), README with two demos, "preview" label removed, security review (§10), release process (§11). |
 
 Scope is **full parity before release** (v1.0 at M10). The site at **lg.scoty.uk** is already public as a *preview*:
