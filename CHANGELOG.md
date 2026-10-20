@@ -6,7 +6,7 @@
   addresses Homebrew Channel takes (`apps.json`, `repo.json`, a GitHub link to the file, a short link, a pastebin "raw"
   page, or just the site it's on), including repositories whose apps point to a separate manifest (`manifestUrl`, e.g.
   Aurora's). The bridge checks the address really is a repository before it's added; each then gets its own page under
-  **Apps** with search, details and install. Clear warnings that unofficial repositories can contain untested apps or
+  **Apps** with search, details and install, and can be renamed. Clear warnings that unofficial repositories can contain untested apps or
   malware, a box to tick before adding one, and a question before each install. For safety the bridge fetches
   everything they point to over https from the public internet only, downloads and checks their IPKs itself (an IPK
   that holds a different app is refused), and never installs Homebrew Channel from them. They're saved in your browser

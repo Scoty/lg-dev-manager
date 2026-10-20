@@ -1029,7 +1029,14 @@ button.log-row:hover { background: var(--bg-hover); }
 }
 
 /* Setup → Custom repositories */
+/* The repository cell takes the room the other columns leave (max-width: 0 lets a table cell shrink), and long names
+   and addresses are cut with … (in full on hover) so Open / Rename / Remove always stay in view. */
+.custom-repos-table td.custom-repo-cell { max-width: 0; width: 100%; }
+.custom-repos-table .custom-repo-name,
+.custom-repos-table .custom-repo-url { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .custom-repos-table .custom-repo-name { font-weight: 600; }
-.custom-repos-table .custom-repo-url { font-size: 12px; word-break: break-all; margin-top: 2px; }
+.custom-repos-table .custom-repo-url { font-size: 12px; margin-top: 2px; }
+.custom-repos-table .custom-repo-rename { display: flex; gap: 6px; align-items: center; }
+.custom-repos-table .custom-repo-rename .input { flex: 1; min-width: 0; padding: 5px 10px; }
 .custom-repos-table td.actions { white-space: nowrap; text-align: right; width: 1%; }
 .custom-repos-table td.actions > * + * { margin-left: 6px; }

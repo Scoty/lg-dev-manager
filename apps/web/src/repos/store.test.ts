@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { addCustomRepo, loadCustomRepos, MAX_CUSTOM_REPOS, mergeCustomRepos, removeCustomRepo, resetCustomReposCache } from './store';
+import { addCustomRepo, loadCustomRepos, MAX_CUSTOM_REPOS, mergeCustomRepos, removeCustomRepo, renameCustomRepo, resetCustomReposCache } from './store';
 
 const URL_A = 'https://repo.example.com/api/apps.json';
 const URL_B = 'https://other.example.org/apps.json';
@@ -8,6 +8,16 @@ describe('custom repositories saved in the browser', () => {
   beforeEach(() => {
     localStorage.clear();
     resetCustomReposCache();
+  });
+
+  it('renames a repository (1–60 characters), and the new name survives a reload', () => {
+    const a = addCustomRepo({ name: 'Friends', url: URL_A });
+    expect(renameCustomRepo(a.id, '  Club apps ').name).toBe('Club apps');
+    expect(() => renameCustomRepo(a.id, '   ')).toThrow(/up to 60/);
+    expect(() => renameCustomRepo(a.id, 'x'.repeat(61))).toThrow(/up to 60/);
+    expect(() => renameCustomRepo('nosuchid1', 'X')).toThrow(/isn’t saved/);
+    resetCustomReposCache();
+    expect(loadCustomRepos().map((r) => [r.name, r.url])).toEqual([['Club apps', URL_A]]);
   });
 
   it('adds, refuses duplicates, removes — and survives a reload', () => {

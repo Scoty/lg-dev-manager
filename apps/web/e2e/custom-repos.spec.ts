@@ -34,6 +34,23 @@ test('add a custom repository after checking it, browse and install from it, rem
   await expect(page.locator('.custom-repos-table')).toContainText(`${CUSTOM}/api/apps.json`);
   await expect(page.getByLabel(/I understand that apps from this repository/)).not.toBeChecked(); // asked again next time
 
+  // Renamed in place (Escape cancels, Enter saves); the sidebar follows.
+  await page.getByRole('button', { name: 'Rename Friends’ apps' }).click();
+  await page.getByLabel('New name for Friends’ apps').fill('Not this');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.custom-repos-table')).toContainText('Friends’ apps');
+  await page.getByRole('button', { name: 'Rename Friends’ apps' }).click();
+  await page.getByLabel('New name for Friends’ apps').fill('Club apps');
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Renamed to Club apps')).toBeVisible();
+  await page.getByRole('button', { name: 'Rename Club apps' }).click();
+  await page.getByLabel('New name for Club apps').fill('Friends’ apps');
+  await page.getByRole('button', { name: 'Save the name' }).click();
+  // A long address is cut to fit, in full on hover, and the buttons stay in view.
+  const address = page.locator('.custom-repo-url');
+  await expect(address).toHaveAttribute('title', `${CUSTOM}/api/apps.json`);
+  await expect(page.getByRole('button', { name: 'Remove Friends’ apps' })).toBeInViewport();
+
   // It's under Apps in the sidebar, with its own page and the warning.
   await page.locator('.d-sidebar').getByRole('button', { name: 'Apps' }).click();
   await page.locator('.d-sidebar').getByRole('link', { name: 'Friends’ apps' }).click();

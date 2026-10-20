@@ -9,7 +9,7 @@ import { useFeedback } from '../../components/Feedback';
 import { Icon } from '../../shell/icons';
 import { useRpc } from '../../bridge/useRpc';
 import { useBridgeFeature } from '../../bridge/BridgeProvider';
-import { addCustomRepo, MAX_CUSTOM_REPOS, removeCustomRepo, useCustomRepos, type CustomRepo } from '../../repos/store';
+import { addCustomRepo, MAX_CUSTOM_REPOS, removeCustomRepo, renameCustomRepo, useCustomRepos, type CustomRepo } from '../../repos/store';
 
 /** Whether the address the bridge found is on the site the user typed (no short link or redirect to elsewhere). */
 function sameSite(typed: string, found: string): boolean {
@@ -214,21 +214,7 @@ export function CustomReposPage() {
                 </thead>
                 <tbody>
                   {repos.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        <Link to={`/apps/repo/${r.id}`} className="custom-repo-name">{r.name}</Link>
-                        <div className="mono muted custom-repo-url">{r.url}</div>
-                      </td>
-                      <td className="hide-sm">{r.apps ?? '—'}</td>
-                      <td className="actions">
-                        <Link to={`/apps/repo/${r.id}`} className="btn btn--sm btn--soft-primary" aria-label={`Open ${r.name}`}>
-                          <Icon name="apps" /> <span className="hide-sm">Open</span>
-                        </Link>
-                        <button type="button" className="btn btn--sm btn--ghost" onClick={() => remove(r)} aria-label={`Remove ${r.name}`}>
-                          <Icon name="trash" />
-                        </button>
-                      </td>
-                    </tr>
+                    <RepoRow key={r.id} repo={r} onRemove={() => remove(r)} />
                   ))}
                 </tbody>
               </table>
@@ -237,5 +223,87 @@ export function CustomReposPage() {
         </Card>
       </div>
     </>
+  );
+}
+
+/** One saved repository: its name (renamed in place), address (cut short to fit, in full on hover), Open, Remove. */
+function RepoRow({ repo: r, onRemove }: { repo: CustomRepo; onRemove: () => void }) {
+  const { toast } = useFeedback();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(r.name);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const start = () => {
+    setDraft(r.name);
+    setProblem(null);
+    setEditing(true);
+  };
+  const save = () => {
+    if (draft.trim() === r.name) return setEditing(false);
+    try {
+      const updated = renameCustomRepo(r.id, draft);
+      setEditing(false);
+      toast({ kind: 'success', title: `Renamed to ${updated.name}` });
+    } catch (e) {
+      setProblem((e as Error).message);
+    }
+  };
+
+  return (
+    <tr>
+      <td className="custom-repo-cell">
+        {editing ? (
+          <form
+            className="custom-repo-rename"
+            onSubmit={(e) => {
+              e.preventDefault();
+              save();
+            }}
+          >
+            <input
+              className={`input${problem ? ' is-invalid' : ''}`}
+              value={draft}
+              maxLength={60}
+              autoFocus
+              aria-label={`New name for ${r.name}`}
+              aria-invalid={problem ? true : undefined}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setEditing(false);
+                }
+              }}
+            />
+            <button type="submit" className="btn btn--sm btn--soft-primary" aria-label="Save the name">
+              <Icon name="check" />
+            </button>
+            <button type="button" className="btn btn--sm btn--ghost" onClick={() => setEditing(false)} aria-label="Cancel renaming">
+              <Icon name="x" />
+            </button>
+          </form>
+        ) : (
+          <Link to={`/apps/repo/${r.id}`} className="custom-repo-name" title={r.name}>
+            {r.name}
+          </Link>
+        )}
+        {problem && editing && <div className="field-error">{problem}</div>}
+        <div className="mono muted custom-repo-url" title={r.url}>
+          {r.url}
+        </div>
+      </td>
+      <td className="hide-sm">{r.apps ?? '—'}</td>
+      <td className="actions">
+        <Link to={`/apps/repo/${r.id}`} className="btn btn--sm btn--soft-primary" aria-label={`Open ${r.name}`}>
+          <Icon name="apps" /> <span className="hide-sm">Open</span>
+        </Link>
+        <button type="button" className="btn btn--sm btn--ghost" onClick={start} aria-label={`Rename ${r.name}`} title="Rename" disabled={editing}>
+          <Icon name="edit" />
+        </button>
+        <button type="button" className="btn btn--sm btn--ghost" onClick={onRemove} aria-label={`Remove ${r.name}`} title="Remove">
+          <Icon name="trash" />
+        </button>
+      </td>
+    </tr>
   );
 }

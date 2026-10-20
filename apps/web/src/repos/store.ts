@@ -71,6 +71,18 @@ export function addCustomRepo(r: { name: string; url: string; apps?: number }): 
   return repo;
 }
 
+/** Give a saved repository another name (1–60 characters). Returns the updated entry. */
+export function renameCustomRepo(id: string, name: string): CustomRepo {
+  const list = loadCustomRepos();
+  const repo = list.find((r) => r.id === id);
+  if (!repo) throw new Error('That repository isn’t saved any more.');
+  const parsed = CustomRepo.shape.name.safeParse(name);
+  if (!parsed.success) throw new Error('Enter a name of up to 60 characters.');
+  const updated = { ...repo, name: parsed.data };
+  save(list.map((r) => (r.id === id ? updated : r)));
+  return updated;
+}
+
 export function removeCustomRepo(id: string) {
   save(loadCustomRepos().filter((r) => r.id !== id));
 }
