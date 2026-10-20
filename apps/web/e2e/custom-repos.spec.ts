@@ -41,6 +41,9 @@ test('add a custom repository after checking it, browse and install from it, rem
   await expect(page.getByText('Unofficial repository', { exact: true })).toBeVisible();
   await expect(card(page, 'Custom Player')).toBeVisible({ timeout: 30_000 });
   await expect(card(page, 'Repo Example')).toHaveCount(0); // the official repository's apps aren't mixed in
+  // An entry in the other repository style (manifestUrl, relative addresses, HTML in its short description).
+  await expect(card(page, 'Stream Client')).toContainText('v1.3.0');
+  await expect(card(page, 'Stream Client')).toContainText('Game streaming, 4K & HDR');
 
   await card(page, 'Custom Player').getByRole('button', { name: 'Install Custom Player' }).click();
   const progress = page.getByRole('dialog', { name: 'Installing Custom Player' });

@@ -32,6 +32,11 @@ export interface MockRepoApp {
   iconOnLocalhost?: boolean;
   /** Serve this instead of a PNG for the icon (e.g. HTML). */
   iconBody?: string;
+  /**
+   * Like many third-party repositories (e.g. Aurora's repo.json): no embedded manifest, only a relative `manifestUrl`
+   * whose `ipkUrl` is relative to the manifest itself; a relative icon; HTML in shortDescription.
+   */
+  manifestByUrl?: boolean;
 }
 
 /** The default catalogue: covers the states the UI has to show. Ids that the mock TV has installed are noted. */
@@ -83,6 +88,7 @@ export const MOCK_CUSTOM_REPO_APPS: MockRepoApp[] = [
     description: '<p>From an <strong>unofficial</strong> repository.</p>',
   },
   { id: 'org.example.custom.tool', title: 'Custom Tool', version: '0.9.2', short: 'A tool from a custom repository' },
+  { id: 'org.example.custom.stream', title: 'Stream Client', version: '1.3.0', short: 'Game streaming, <b>4K</b> &amp; HDR', manifestByUrl: true },
 ];
 
 export interface MockRepo {
@@ -137,6 +143,16 @@ export async function startMockRepo(opts: { port?: number; host?: string; apps?:
       : app.iconOnLocalhost
         ? `${root.replace('127.0.0.1', 'localhost')}/apps/icons/${app.id}.png`
         : `${root}/apps/icons/${app.id}.png`;
+    if (app.manifestByUrl) {
+      return {
+        id: app.id,
+        title: app.title,
+        // Relative to the index (/api/…json): /apps/icons/<id>.png and /api/apps/<id>/manifest.json.
+        iconUri: `../apps/icons/${app.id}.png`,
+        shortDescription: `<p>${app.short ?? app.title}</p>`,
+        manifestUrl: `apps/${app.id}/manifest.json`,
+      };
+    }
     return {
       id: app.id,
       title: app.title,
@@ -183,7 +199,14 @@ export async function startMockRepo(opts: { port?: number; host?: string; apps?:
     const json = (body: unknown) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(body));
     const notFound = () => res.writeHead(404, { 'content-type': 'text/plain' }).end('Not Found');
     let m: RegExpMatchArray | null;
-    if (path === '/api/apps.json') return json(page(1));
+    // Third-party repositories often name their index repo.json (Homebrew Channel takes any address).
+    if (path === '/api/apps.json' || path === '/api/repo.json') return json(page(1));
+    if ((m = path.match(/^\/api\/apps\/([\w.-]+)\/manifest\.json$/))) {
+      const app = apps.find((a) => a.id === m![1] && a.manifestByUrl);
+      if (!app) return notFound();
+      // The IPK address relative to this manifest, as in a GitHub release (…/download/<name>.ipk).
+      return json({ ...manifest(app, app.version, 'stable'), ipkUrl: `../../../apps/${app.id}/releases/stable-${app.version}.ipk` });
+    }
     if ((m = path.match(/^\/api\/apps\/(\d+)\.json$/))) {
       const n = Number(m[1]);
       return n >= 1 && n <= maxPage ? json(page(n)) : notFound();

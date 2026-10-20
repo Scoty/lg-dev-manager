@@ -3,7 +3,8 @@
 ## 1.0.5 — unreleased
 
 - 🧩 **Custom repositories.** Add other webOS Homebrew repositories under **Setup → Custom repos** — the same
-  `apps.json` addresses Homebrew Channel takes. The bridge checks the address really is a repository before it's
+  addresses Homebrew Channel takes (`apps.json`, `repo.json`, or a GitHub link to the file), including repositories
+  whose apps point to a separate manifest (`manifestUrl`, e.g. Aurora's). The bridge checks the address really is a repository before it's
   added; each then gets its own page under **Apps** with search, details and install. Clear warnings that unofficial
   repositories can contain untested apps or malware, and a box to tick before adding one. For safety the bridge only
   fetches them over https from the public internet. They're saved in your browser and included in **Export backup**.

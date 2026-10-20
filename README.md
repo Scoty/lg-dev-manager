@@ -130,8 +130,8 @@ new app from the [releases](https://github.com/Scoty/lg-dev-manager/releases/lat
 ## 🧩 Custom repositories
 
 Besides the official webOS Homebrew repository you can add others under **Setup → Custom repos** — the same addresses
-Homebrew Channel's "Add repository" takes, ending in `apps.json` (for example the official non-free one,
-`https://repo.webosbrew.org/api/non-free/apps.json`). The bridge checks that the address really is a repository before
+Homebrew Channel's "Add repository" takes: a `.json` file such as `apps.json` or `repo.json` (for example the official
+non-free one, `https://repo.webosbrew.org/api/non-free/apps.json`); a GitHub link to that file works too. The bridge checks that the address really is a repository before
 it's added; each one then gets its own page under **Apps**, with search, details and one-click install.
 
 > 🚨 **Unofficial repositories can contain untested apps or malware.** Nobody reviews them — not LG, not the webOS

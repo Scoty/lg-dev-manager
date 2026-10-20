@@ -36,6 +36,10 @@ const MAX_PAGES = 50;
 const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const IMAGE_CACHE_BYTES = 48 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
+/** Separate manifest files (`manifestUrl` entries): how many are fetched per index load, how many at once, how big. */
+const MAX_MANIFEST_FETCHES = 200;
+const MANIFEST_FETCHES_AT_ONCE = 6;
+const MANIFEST_MAX_BYTES = 256 * 1024;
 
 /** Image type from the bytes themselves (servers like raw.githubusercontent.com send text/plain). */
 export function sniffImage(data: Buffer): string | null {
@@ -235,6 +239,7 @@ export class RepoClient {
     const descriptions = new Map<string, string>();
     const images = new Set<string>();
     const seen = new Set<string>();
+    const manifestUrls = new Map<RepoPackage, string>();
     let maxPage = 1;
     for (let page = 1; page <= Math.min(maxPage, MAX_PAGES); page++) {
       const url = this.pageUrl(page);
@@ -253,12 +258,41 @@ export class RepoClient {
         if (!pkg || seen.has(pkg.package.id)) continue;
         seen.add(pkg.package.id);
         packages.push(pkg.package);
+        if (pkg.manifestUrl) manifestUrls.set(pkg.package, pkg.manifestUrl);
         for (const u of [pkg.package.iconUri, pkg.package.detailIconUri, ...(pkg.package.screenshots ?? []).map((s) => s.url)]) if (u) images.add(u);
         if (pkg.descriptionUrl && new URL(pkg.descriptionUrl).origin === this.origin) descriptions.set(pkg.package.id, pkg.descriptionUrl);
         else pkg.package.hasDescription = false;
       }
     }
+    await this.fillManifests(manifestUrls, trace);
     return { at: Date.now(), packages, descriptions, images };
+  }
+
+  /**
+   * Entries that give a `manifestUrl` instead of an embedded manifest (e.g. one in the app's GitHub releases): fetch
+   * those manifests, a few at a time, so the page knows the version and can install. A manifest that can't be fetched
+   * or doesn't match its entry leaves that app without one (shown, not installable). Same public-address rules as
+   * icons and IPKs for anything outside the trusted repository.
+   */
+  private async fillManifests(todo: Map<RepoPackage, string>, trace: HttpTrace) {
+    const queue = [...todo].slice(0, MAX_MANIFEST_FETCHES);
+    const worker = async () => {
+      for (let next = queue.shift(); next; next = queue.shift()) {
+        const [pkg, manifestUrl] = next;
+        try {
+          const res = await trace(new URL(manifestUrl).host, `GET ${manifestUrl}`, () => safeGet(manifestUrl, 30_000, this.trusted));
+          if (!res.ok) {
+            await res.body?.cancel().catch(() => {});
+            continue;
+          }
+          const manifest = parseManifest(JSON.parse((await readBody(res, MANIFEST_MAX_BYTES)).toString('utf8')), pkg.id, manifestUrl);
+          if (manifest && manifest.id === pkg.id) pkg.manifest = manifest;
+        } catch {
+          /* unreachable, not JSON, too big: no manifest for this app */
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(MANIFEST_FETCHES_AT_ONCE, queue.length) }, worker));
   }
 
   private async request(url: string, timeoutMs: number): Promise<Response> {
@@ -451,39 +485,70 @@ const sha256Of = (v: unknown) => {
   return typeof sum === 'string' && /^[0-9a-f]{64}$/i.test(sum) ? { sha256: sum.toLowerCase() } : undefined;
 };
 const str = (v: unknown, max = 4096) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
-const url = (v: unknown) => {
-  const r = WebUrl.safeParse(v);
+/** An http(s) URL, relative ones resolved against `base` (Homebrew Channel's resolveURL, frontend/baseurl.js). */
+const url = (v: unknown, base?: string) => {
+  if (typeof v !== 'string' || !v.trim()) return undefined;
+  let abs: string;
+  try {
+    abs = base ? new URL(v.trim(), base).toString() : v.trim();
+  } catch {
+    return undefined;
+  }
+  const r = WebUrl.safeParse(abs);
   return r.success ? r.data : undefined;
 };
+
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
+/** Some repositories put HTML in shortDescription (Homebrew Channel renders it); the cards show it as plain text. */
+export function plainText(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&(#?\w+);/g, (m, e: string) => ENTITIES[e.toLowerCase()] ?? m)
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * A package manifest (embedded in the index, or fetched from `manifestUrl`) → the clean shape. A relative `ipkUrl` is
+ * resolved against `base` — the manifest's own address, or the index page — as Homebrew Channel does.
+ */
+export function parseManifest(m: unknown, id: string, base: string): RepoManifest | undefined {
+  if (!m || typeof m !== 'object') return undefined;
+  const o = m as Record<string, unknown>;
+  const parsed = RepoManifest.safeParse({
+    id: str(o.id, 255) ?? id,
+    version: str(o.version, 64),
+    type: str(o.type, 32),
+    title: str(o.title, 200),
+    appDescription: str(o.appDescription, 1000),
+    sourceUrl: url(o.sourceUrl),
+    rootRequired: o.rootRequired === true || o.rootRequired === false || o.rootRequired === 'optional' ? o.rootRequired : undefined,
+    ipkUrl: url(o.ipkUrl, base),
+    ipkHash: sha256Of(o.ipkHash),
+    ipkSize: typeof o.ipkSize === 'number' ? o.ipkSize : undefined,
+  });
+  return parsed.success ? stripUndefined(parsed.data) : undefined;
+}
 
 /**
  * One repository entry → the clean shape the UI gets. Invalid optional parts are dropped rather than failing the
  * whole entry; entries without an id or title are skipped.
  */
-export function normalizePackage(raw: unknown, pageUrl: string): { package: RepoPackage; descriptionUrl?: string } | null {
+export function normalizePackage(
+  raw: unknown,
+  pageUrl: string,
+): { package: RepoPackage; descriptionUrl?: string; manifestUrl?: string } | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const id = str(r.id, 255);
   const title = str(r.title, 200);
   if (!id || !/^[\w.-]+$/.test(id) || !title) return null;
 
-  const manifest = (m: unknown) => {
-    if (!m || typeof m !== 'object') return undefined;
-    const o = m as Record<string, unknown>;
-    const parsed = RepoManifest.safeParse({
-      id: str(o.id, 255) ?? id,
-      version: str(o.version, 64),
-      type: str(o.type, 32),
-      title: str(o.title, 200),
-      appDescription: str(o.appDescription, 1000),
-      sourceUrl: url(o.sourceUrl),
-      rootRequired: o.rootRequired === true || o.rootRequired === false || o.rootRequired === 'optional' ? o.rootRequired : undefined,
-      ipkUrl: o.ipkUrl,
-      ipkHash: sha256Of(o.ipkHash),
-      ipkSize: typeof o.ipkSize === 'number' ? o.ipkSize : undefined,
-    });
-    return parsed.success ? stripUndefined(parsed.data) : undefined;
-  };
+  // Where the manifest lives when it isn't embedded (Homebrew Channel fetches it: DetailsPanel.refresh). Relative
+  // IPK addresses in an embedded manifest resolve against it too, else against the index page.
+  const manifestUrl = url(r.manifestUrl, pageUrl);
+  const manifest = (m: unknown) => parseManifest(m, id, manifestUrl ?? pageUrl);
+  const short = str(r.shortDescription, 2000);
 
   const reqs = r.requirements && typeof r.requirements === 'object' ? (r.requirements as Record<string, unknown>) : undefined;
   const requirements = reqs
@@ -494,7 +559,8 @@ export function normalizePackage(raw: unknown, pageUrl: string): { package: Repo
     : undefined;
   const screenshots = Array.isArray(r.screenshots)
     ? r.screenshots.flatMap((s) => {
-        const p = RepoScreenshot.safeParse(s);
+        const shot = s && typeof s === 'object' ? { ...(s as Record<string, unknown>), url: url((s as Record<string, unknown>).url, pageUrl) } : s;
+        const p = RepoScreenshot.safeParse(shot);
         return p.success ? [stripUndefined(p.data)] : [];
       }).slice(0, 12)
     : undefined;
@@ -513,9 +579,9 @@ export function normalizePackage(raw: unknown, pageUrl: string): { package: Repo
     stripUndefined({
       id,
       title,
-      iconUri: url(r.iconUri),
-      detailIconUri: url(r.detailIconUri),
-      shortDescription: str(r.shortDescription, 500),
+      iconUri: url(r.iconUri, pageUrl),
+      detailIconUri: url(r.detailIconUri, pageUrl),
+      shortDescription: short ? plainText(short).slice(0, 500) || undefined : undefined,
       featured: r.featured === true ? true : undefined,
       manifest: manifest(r.manifest),
       manifestBeta: manifest(r.manifestBeta),
@@ -524,7 +590,9 @@ export function normalizePackage(raw: unknown, pageUrl: string): { package: Repo
       hasDescription: !!descriptionUrl,
     }),
   );
-  return pkg.success ? { package: pkg.data, descriptionUrl } : null;
+  if (!pkg.success) return null;
+  // Only when it isn't embedded: the index then fetches it (fillManifests).
+  return { package: pkg.data, descriptionUrl, ...(pkg.data.manifest ? {} : manifestUrl ? { manifestUrl } : {}) };
 }
 
 function stripUndefined<T extends Record<string, unknown>>(o: T): T {

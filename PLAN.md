@@ -107,8 +107,13 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [x] **Homebrew repository** browser (`repo.webosbrew.org/api`, all pages, fetched and cached by the bridge — `repo.list`), search, All / Installed / Updates filters
 - [x] Repo app details: description (allow-listed HTML), screenshots and icons through the bridge (`repo.image`, `repo.description`), project page, root badges
 - [x] **Custom repositories** (1.0.5, not in the original; Homebrew Channel has "Add repository"): Setup → Custom repos
-  with a malware warning and a must-tick acknowledgement; `repo.check` canonicalises what was typed to an `apps.json`
-  address (also tries `…/apps.json`, `…/api/apps.json`) and refuses anything that isn't a readable repository. Saved in
+  with a malware warning and a must-tick acknowledgement; `repo.check` canonicalises what was typed to the index address
+  (any `.json` name — `apps.json`, `repo.json`; a github.com `blob` link becomes its raw.githubusercontent.com address;
+  a folder or site tries `…/apps.json`, `…/api/apps.json`) and refuses anything that isn't a readable repository.
+  Homebrew Channel's whole format is read (frontend/views/DetailsPanel.js, baseurl.js): entries with only a
+  `manifestUrl` get their manifest fetched while the index loads (6 at a time, up to 200, 256 KB each), relative
+  `manifestUrl`/icon/screenshot addresses resolve against the index page and a relative `ipkUrl` against the manifest;
+  HTML in `shortDescription` becomes plain text. Saved in
   the browser (`lgdm-custom-repos`, in the backup); each gets an entry under Apps (`/apps/repo/:id`), the same repo page
   inside a `RepoSourceProvider`. The browser sends the `apps.json` address as `repo` on `repo.list/image/description` and
   `apps.installFromRepo`; the bridge (`RepoRegistry`) keeps a client per repository in memory (8, LRU) and, unlike the

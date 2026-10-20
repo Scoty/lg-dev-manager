@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { makeIconPng, startMockRepo, startMockTv, type MockRepo, type MockTv } from '@lgdm/mock-tv';
+import { makeIconPng, MOCK_CUSTOM_REPO_APPS, startMockRepo, startMockTv, type MockRepo, type MockTv } from '@lgdm/mock-tv';
 import type { DeviceTarget, OpProgress } from '@lgdm/protocol';
 import { findInstallLocation, hbChannelConfig, installFromRepo, listApps } from './apps/apps.js';
-import { isNonPublicAddress, normalizePackage, RepoClient, sniffImage } from './repo/repo.js';
-import { RepoRegistry } from './repo/registry.js';
+import { isNonPublicAddress, normalizePackage, plainText, RepoClient, sniffImage } from './repo/repo.js';
+import { githubRaw, RepoRegistry } from './repo/registry.js';
 import { RpcError } from './rpc/errors.js';
 import { UploadBudget } from './rpc/uploads.js';
 import { SshPool } from './ssh/pool.js';
@@ -352,5 +352,42 @@ describe('custom repositories', () => {
     const res = await installFromRepo(pool, reg.for(index), devmode(devTv), 'org.example.custom', 'stable');
     expect(res).toEqual({ appId: 'org.example.custom', version: '2.0.0', via: 'devmode' });
     expect(devTv.state.apps.find((a) => a.id === 'org.example.custom')?.version).toBe('2.0.0');
+  });
+
+  it('reads repositories in Homebrew Channel’s other style: any index name, manifestUrl, relative addresses', async () => {
+    // Like Aurora's repo.json: no embedded manifest — a relative manifestUrl whose ipkUrl is relative to the manifest
+    // itself, a relative icon, and HTML in shortDescription.
+    const third = await startMockRepo({ apps: MOCK_CUSTOM_REPO_APPS });
+    try {
+      const reg = local();
+      const index = `${third.url}/repo.json`;
+      expect(await reg.check(index)).toMatchObject({ url: index, apps: 3, installable: 3 });
+      const pkg = (await reg.for(index).list()).packages.find((p) => p.id === 'org.example.custom.stream')!;
+      expect(pkg.shortDescription).toBe('Game streaming, 4K & HDR');
+      expect(pkg.iconUri).toBe(`${third.url.replace(/\/api$/, '')}/apps/icons/org.example.custom.stream.png`);
+      expect(pkg.manifest).toMatchObject({
+        version: '1.3.0',
+        ipkUrl: `${third.url.replace(/\/api$/, '')}/apps/org.example.custom.stream/releases/stable-1.3.0.ipk`,
+      });
+      expect((await reg.for(index).image(pkg.iconUri!)).mime).toBe('image/png');
+      const res = await installFromRepo(pool, reg.for(index), devmode(devTv), 'org.example.custom.stream', 'stable');
+      expect(res).toEqual({ appId: 'org.example.custom.stream', version: '1.3.0', via: 'devmode' });
+    } finally {
+      await third.close();
+    }
+  });
+
+  it('turns a GitHub page of the file into its raw address, and HTML into text', () => {
+    expect(githubRaw(new URL('https://github.com/GuiDev1994/aurora-tv/blob/main/repo.json'))?.href).toBe(
+      'https://raw.githubusercontent.com/GuiDev1994/aurora-tv/main/repo.json',
+    );
+    expect(githubRaw(new URL('https://github.com/o/r/raw/v2/api/apps.json'))?.href).toBe('https://raw.githubusercontent.com/o/r/v2/api/apps.json');
+    expect(githubRaw(new URL('https://github.com/o/r'))).toBeNull();
+    expect(githubRaw(new URL('https://example.com/o/r/blob/main/repo.json'))).toBeNull();
+    expect(plainText('<p>GameStream client. Up to <b>4K</b> &amp; 120&nbsp;Hz</p>')).toBe('GameStream client. Up to 4K & 120 Hz');
+    // A manifestUrl entry without a manifest: kept (shown), and the manifest's address resolved against the page.
+    const n = normalizePackage({ id: 'a.b', title: 'A', manifestUrl: 'apps/a.b/m.json' }, 'https://x.example/api/repo.json');
+    expect(n?.manifestUrl).toBe('https://x.example/api/apps/a.b/m.json');
+    expect(n?.package.manifest).toBeUndefined();
   });
 });

@@ -17,8 +17,10 @@ function checkHint(e: unknown) {
   if (code === RepoErrorCodes.NotARepo) {
     return (
       <>
-        A repository’s address ends in <span className="mono">apps.json</span>, like{' '}
-        <span className="mono">https://repo.webosbrew.org/api/non-free/apps.json</span>. Its author usually publishes it.
+        A repository’s address is a <span className="mono">.json</span> file — often <span className="mono">apps.json</span>{' '}
+        or <span className="mono">repo.json</span>, like{' '}
+        <span className="mono">https://repo.webosbrew.org/api/non-free/apps.json</span>. Its author usually gives it as
+        the address to add in Homebrew Channel.
       </>
     );
   }
@@ -135,8 +137,9 @@ export function CustomReposPage() {
                 <span className="field-error">Enter the repository’s address.</span>
               ) : (
                 <span className="field-help" id="repo-url-help">
-                  Its <span className="mono">apps.json</span> address (or the folder or site it’s in). https only, on the
-                  public internet.
+                  The address you’d add in Homebrew Channel — its <span className="mono">apps.json</span> or{' '}
+                  <span className="mono">repo.json</span> (a GitHub link to that file works too). https only, on the public
+                  internet.
                 </span>
               )}
             </div>

@@ -62,6 +62,9 @@ export class RepoRegistry {
     if (!this.allowLocal) await assertPublicRepoHost(u);
     u.hash = '';
     u.search = '';
+    // A GitHub page about the file (github.com/<owner>/<repo>/blob/<branch>/repo.json) is HTML; the file itself is on
+    // raw.githubusercontent.com — what a repository's README usually gives for Homebrew Channel.
+    u = githubRaw(u) ?? u;
     const base = u.href.replace(/\/+$/, '');
     if (base === this.official.indexUrl || `${base}/apps.json` === this.official.indexUrl) {
       throw new RpcError(RepoErrorCodes.BadRepoUrl, 'That’s the official Homebrew repository — it’s already built in (Apps → Homebrew repo).');
@@ -97,6 +100,12 @@ export class RepoRegistry {
     if (u.protocol === 'https:' || (this.allowLocal && u.protocol === 'http:')) return;
     throw new RpcError(RepoErrorCodes.BadRepoUrl, 'Only https:// repositories can be added.', u.href);
   }
+}
+
+/** github.com/<owner>/<repo>/blob|raw/<branch>/<file>.json → its raw.githubusercontent.com address; else null. */
+export function githubRaw(u: URL): URL | null {
+  const gh = u.host === 'github.com' ? /^\/([^/]+)\/([^/]+)\/(?:blob|raw)\/(.+\.json)$/i.exec(u.pathname) : null;
+  return gh ? new URL(`https://raw.githubusercontent.com/${gh[1]}/${gh[2]}/${gh[3]}`) : null;
 }
 
 /** A custom repository must be on the public internet: never this computer or the local network. */
