@@ -21,7 +21,8 @@ process.stdout.write(`${section}
 ## ⬇️ The bridge app — no Node.js needed
 
 Download the one for your computer, open it, and paste the pairing token it shows on the **Bridge** page of
-https://lg.scoty.uk (it opens in your browser). Keep its window open while you use the app.
+https://lg.scoty.uk (it opens in your browser) or of the local page the bridge serves, http://localhost:5199. Keep its
+window open while you use the app.
 
 | Computer | Download |
 |---|---|

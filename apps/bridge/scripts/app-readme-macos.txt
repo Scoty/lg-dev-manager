@@ -2,8 +2,9 @@ LG Dev Manager bridge
 =====================
 
 Double-click "lg-dev-manager-bridge" to start it. A Terminal window opens with the pairing token, and
-https://lg.scoty.uk opens in your browser: paste the token on the Bridge page. Keep the Terminal window
-open while you use the app; close it to stop the bridge.
+https://lg.scoty.uk opens in your browser: paste the token on the Bridge page. The bridge also serves the
+same app on this Mac at http://localhost:5199 (works offline too). Keep the Terminal window open while you
+use the app; close it to stop the bridge.
 
 You can run it straight from this disk image, or drag it to any folder first (Applications, Desktop...).
 

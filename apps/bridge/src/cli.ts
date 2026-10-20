@@ -14,7 +14,7 @@ Usage: lg-dev-manager-bridge [options]
   --web-root <dir>      Serve the web UI from this folder instead of the bundled one (env LGDM_WEB_ROOT)
   --no-ui               Don't serve the local page; use https://lg.scoty.uk only
   --reset-token         Generate a new pairing token (un-pairs existing browsers)
-  --no-open             The app only: don't open ${PUBLIC_WEB_ORIGIN} in the browser on start
+  --no-open             The app only: don't open ${PUBLIC_WEB_ORIGIN} in the browser on start (the local page still works)
   --version             Print the version
   --license             Print the licenses of this program and what it includes
   --help                Show this help

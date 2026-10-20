@@ -1,18 +1,25 @@
 # Changelog
 
-## 1.0.5 — unreleased
+## 1.0.5 — 2026-10-20
 
-- 🧩 **Custom repositories.** Add other webOS Homebrew repositories under **Setup → Custom repos** — the same
-  addresses Homebrew Channel takes (`apps.json`, `repo.json`, a GitHub link to the file, a short link, a pastebin "raw"
-  page, or just the site it's on), including repositories whose apps point to a separate manifest (`manifestUrl`, e.g.
-  Aurora's). The bridge checks the address really is a repository before it's added; each then gets its own page under
-  **Apps** with search, details and install, and can be renamed. Clear warnings that unofficial repositories can contain untested apps or
-  malware, a box to tick before adding one, and a question before each install. For safety the bridge fetches
-  everything they point to over https from the public internet only, downloads and checks their IPKs itself (an IPK
-  that holds a different app is refused), and never installs Homebrew Channel from them. They're saved in your browser
-  and included in **Export backup** (importing asks before adding them). Needs bridge 1.0.5.
+- 🧩 **Custom repositories.** Add other webOS Homebrew repositories under **Setup → Custom repos**, using the same
+  addresses Homebrew Channel takes: an `apps.json` or `repo.json`, a GitHub link to the file, a short link, a pastebin
+  "raw" page, or just the site the repository is on. Repositories whose apps point to a separate manifest
+  (`manifestUrl`, e.g. Aurora's) work too. The bridge checks that the address really is a repository before it's
+  added (and asks first if a short link leads to another site); each one then gets its own page under **Apps** with
+  search, details and install, and can be renamed. They're saved in your browser and included in **Export backup**.
+  Needs bridge 1.0.5.
+- 🛡️ **Unofficial means untrusted.** Custom repositories come with clear warnings that they can contain untested apps
+  or malware, a box to tick before adding one, and a question before every install — which also says when the app
+  would replace one with the same id. The bridge fetches everything they point to over https from the public
+  internet only (never your computer or local network), downloads and checks their IPKs itself instead of letting the
+  TV fetch them, refuses an IPK that installs anything but the listed app, and never installs Homebrew Channel from
+  them. Importing a backup asks before adding the repositories in it.
+- 📝 Apps without a short description in their repository show the one from their manifest.
 - 🩹 Running the bridge from a clone (`pnpm bridge`) served an old copy of the local page if `pnpm pack` had ever run
   there; it now always serves the fresh build, and packing cleans up after itself.
+- 📖 The README, the release notes and the app's read-me point to the local page (http://localhost:5199) next to
+  lg.scoty.uk.
 
 ## 1.0.4 — 2026-10-11
 
