@@ -109,7 +109,7 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [x] **Custom repositories** (1.0.5, not in the original; Homebrew Channel has "Add repository"): Setup → Custom repos
   with a malware warning and a must-tick acknowledgement; `repo.check` canonicalises what was typed to the index address
   (any `.json` name — `apps.json`, `repo.json`; a github.com `blob` link becomes its raw.githubusercontent.com address;
-  a folder or site tries `…/apps.json`, `…/api/apps.json`) and refuses anything that isn't a readable repository.
+  a folder or site tries `apps.json`, `repo.json`, `api/apps.json`, `api/repo.json` — e.g. webosappclub.github.io) and refuses anything that isn't a readable repository.
   Homebrew Channel's whole format is read (frontend/views/DetailsPanel.js, baseurl.js): entries with only a
   `manifestUrl` get their manifest fetched while the index loads (6 at a time, up to 200, 256 KB each), relative
   `manifestUrl`/icon/screenshot addresses resolve against the index page and a relative `ipkUrl` against the manifest;

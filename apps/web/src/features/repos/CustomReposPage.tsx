@@ -138,8 +138,8 @@ export function CustomReposPage() {
               ) : (
                 <span className="field-help" id="repo-url-help">
                   The address you’d add in Homebrew Channel — its <span className="mono">apps.json</span> or{' '}
-                  <span className="mono">repo.json</span> (a GitHub link to that file works too). https only, on the public
-                  internet.
+                  <span className="mono">repo.json</span>, or just the site it’s on (a GitHub link to the file works too). https
+                  only, on the public internet.
                 </span>
               )}
             </div>

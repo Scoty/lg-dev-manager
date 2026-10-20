@@ -101,7 +101,16 @@ export interface MockRepo {
   close(): Promise<void>;
 }
 
-export async function startMockRepo(opts: { port?: number; host?: string; apps?: MockRepoApp[]; pageSize?: number } = {}): Promise<MockRepo> {
+export async function startMockRepo(
+  opts: {
+    port?: number;
+    host?: string;
+    apps?: MockRepoApp[];
+    pageSize?: number;
+    /** Serve the index only as repo.json (no apps.json), like webosappclub.github.io/repo.json. */
+    repoJsonOnly?: boolean;
+  } = {},
+): Promise<MockRepo> {
   const apps = opts.apps ?? MOCK_REPO_APPS;
   const pageSize = opts.pageSize ?? 9;
   const host = opts.host ?? '127.0.0.1';
@@ -200,7 +209,7 @@ export async function startMockRepo(opts: { port?: number; host?: string; apps?:
     const notFound = () => res.writeHead(404, { 'content-type': 'text/plain' }).end('Not Found');
     let m: RegExpMatchArray | null;
     // Third-party repositories often name their index repo.json (Homebrew Channel takes any address).
-    if (path === '/api/apps.json' || path === '/api/repo.json') return json(page(1));
+    if ((path === '/api/apps.json' && !opts.repoJsonOnly) || path === '/api/repo.json') return json(page(1));
     if ((m = path.match(/^\/api\/apps\/([\w.-]+)\/manifest\.json$/))) {
       const app = apps.find((a) => a.id === m![1] && a.manifestByUrl);
       if (!app) return notFound();

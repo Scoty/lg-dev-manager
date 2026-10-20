@@ -69,7 +69,11 @@ export class RepoRegistry {
     if (base === this.official.indexUrl || `${base}/apps.json` === this.official.indexUrl) {
       throw new RpcError(RepoErrorCodes.BadRepoUrl, 'That’s the official Homebrew repository — it’s already built in (Apps → Homebrew repo).');
     }
-    const candidates = /\.json$/i.test(u.pathname) ? [base] : [`${base}/apps.json`, `${base}/api/apps.json`];
+    // A site or folder: the names repositories use — apps.json (the official repo, repogen) and repo.json (many
+    // third-party ones, e.g. webosappclub.github.io/repo.json), at the top or under api/.
+    const candidates = /\.json$/i.test(u.pathname)
+      ? [base]
+      : [`${base}/apps.json`, `${base}/repo.json`, `${base}/api/apps.json`, `${base}/api/repo.json`];
     const problems: string[] = [];
     for (const candidate of candidates) {
       const client = this.for(candidate);

@@ -362,6 +362,8 @@ describe('custom repositories', () => {
       const reg = local();
       const index = `${third.url}/repo.json`;
       expect(await reg.check(index)).toMatchObject({ url: index, apps: 3, installable: 3 });
+      // Just the folder: apps.json comes first when both exist…
+      expect((await reg.check(third.url)).url).toBe(`${third.url}/apps.json`);
       const pkg = (await reg.for(index).list()).packages.find((p) => p.id === 'org.example.custom.stream')!;
       expect(pkg.shortDescription).toBe('Game streaming, 4K & HDR');
       expect(pkg.iconUri).toBe(`${third.url.replace(/\/api$/, '')}/apps/icons/org.example.custom.stream.png`);
@@ -374,6 +376,17 @@ describe('custom repositories', () => {
       expect(res).toEqual({ appId: 'org.example.custom.stream', version: '1.3.0', via: 'devmode' });
     } finally {
       await third.close();
+    }
+  });
+
+  it('finds repo.json when given just the site or folder (like webosappclub.github.io)', async () => {
+    const club = await startMockRepo({ apps: MOCK_CUSTOM_REPO_APPS, repoJsonOnly: true });
+    try {
+      const reg = local();
+      expect((await reg.check(club.url)).url).toBe(`${club.url}/repo.json`); // the folder
+      expect((await reg.check(club.url.replace(/\/api$/, ''))).url).toBe(`${club.url}/repo.json`); // the site: …/api/repo.json
+    } finally {
+      await club.close();
     }
   });
 
