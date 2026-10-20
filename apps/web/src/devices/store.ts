@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CustomRepo, loadCustomRepos, MAX_CUSTOM_REPOS, mergeCustomRepos } from '../repos/store';
 import { DeviceAuth, type DeviceTarget } from '@lgdm/protocol';
 import { hostProblem, isValidUsername } from './validate';
 
@@ -73,6 +74,8 @@ export const ExportFile = z.object({
   version: z.literal(1),
   exportedAt: z.number(),
   devices: z.array(ImportedDevice).max(500),
+  /** Custom repositories (Setup → Custom repositories), from 1.0.5. Older backups don't have them. */
+  customRepos: z.array(CustomRepo).max(MAX_CUSTOM_REPOS).optional(),
 });
 export type ExportFile = z.infer<typeof ExportFile>;
 
@@ -255,7 +258,8 @@ export function toTarget(d: Pick<SavedDevice, 'host' | 'port' | 'username' | 'au
 
 /** Backup file. Contains private keys and passwords — the UI warns before downloading. */
 export async function exportDevices(): Promise<ExportFile> {
-  return { format: 'lg-dev-manager/devices', version: 1, exportedAt: Date.now(), devices: await listDevices() };
+  const customRepos = loadCustomRepos();
+  return { format: 'lg-dev-manager/devices', version: 1, exportedAt: Date.now(), devices: await listDevices(), ...(customRepos.length ? { customRepos } : {}) };
 }
 
 /**
@@ -274,6 +278,7 @@ export async function importDevices(json: unknown): Promise<number> {
     t.onerror = () => reject(t.error);
   });
   if (!getActiveDeviceId() && file.devices[0]) setActiveDeviceId(file.devices[0].id);
+  if (file.customRepos) mergeCustomRepos(file.customRepos);
   notify();
   return file.devices.length;
 }

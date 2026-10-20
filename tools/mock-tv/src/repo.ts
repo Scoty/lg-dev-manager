@@ -73,6 +73,18 @@ export const MOCK_REPO_APPS: MockRepoApp[] = [
   { id: 'com.example.page2', title: 'Second Page App', version: '0.1.0', short: 'Listed on page 2' },
 ];
 
+/** A small catalogue for a second repository, added in tests as a custom (unofficial) one. */
+export const MOCK_CUSTOM_REPO_APPS: MockRepoApp[] = [
+  {
+    id: 'org.example.custom.player',
+    title: 'Custom Player',
+    version: '3.1.0',
+    short: 'A player from a custom repository',
+    description: '<p>From an <strong>unofficial</strong> repository.</p>',
+  },
+  { id: 'org.example.custom.tool', title: 'Custom Tool', version: '0.9.2', short: 'A tool from a custom repository' },
+];
+
 export interface MockRepo {
   /** The API base, like https://repo.webosbrew.org/api */
   url: string;

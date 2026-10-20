@@ -9,6 +9,7 @@ const PAGES: [path: string, heading: RegExp][] = [
   ['/bridge', /Connect the\s*bridge/],
   ['/devices', /^Devices/],
   ['/devices/new', /Add a\s*TV/],
+  ['/repos', /Custom\s*repositories/],
   ['/apps/installed', /Installed\s*apps/],
   ['/apps/homebrew', /Homebrew\s*repository/],
   ['/apps/litefin', /Litefin\s*repo/],

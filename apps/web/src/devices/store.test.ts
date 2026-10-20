@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { addCustomRepo, loadCustomRepos, resetCustomReposCache } from '../repos/store';
 import {
   BackupError,
   addDevice,
@@ -51,6 +52,22 @@ describe('browser device store', () => {
     await clearAllDevices();
     expect(await importDevices(JSON.parse(JSON.stringify(file)))).toBe(1);
     expect((await listDevices())[0]!.name).toBe('A');
+  });
+
+  it('carries custom repositories in the backup (and reads older backups without them)', async () => {
+    localStorage.clear();
+    resetCustomReposCache();
+    await addDevice(tv('A'));
+    addCustomRepo({ name: 'Friends', url: 'https://repo.example.com/api/apps.json' });
+    const file = JSON.parse(JSON.stringify(await exportDevices()));
+    expect(file.customRepos).toHaveLength(1);
+    localStorage.clear();
+    resetCustomReposCache();
+    await clearAllDevices();
+    expect(await importDevices(file)).toBe(1);
+    expect(loadCustomRepos().map((r) => r.name)).toEqual(['Friends']);
+    const { customRepos: _, ...older } = file;
+    expect(await importDevices(older)).toBe(1);
   });
 
   it('rejects files that are not a device export', async () => {

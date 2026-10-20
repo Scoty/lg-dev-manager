@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Fragment, useState } from 'react';
 import { Icon } from './icons';
 import { crumbsFor } from './nav';
+import { useNav } from './useNav';
 import { getTheme, toggleTheme, type Theme } from '../lib/theme';
 import { useBridge } from '../bridge/BridgeProvider';
 
@@ -30,7 +31,8 @@ function BridgePill() {
 
 export function Topbar({ onOpenDrawer, onOpenPalette }: { onOpenDrawer: () => void; onOpenPalette: () => void }) {
   const { pathname } = useLocation();
-  const crumbs = crumbsFor(pathname);
+  const nav = useNav();
+  const crumbs = crumbsFor(pathname, nav);
   const [theme, setThemeState] = useState<Theme>(getTheme);
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { RAIL_QUERY, useMedia } from '../lib/useMedia';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Icon } from './icons';
-import { NAV, type NavItem } from './nav';
+import { type NavItem } from './nav';
+import { useNav } from './useNav';
 import { APP_VERSION } from '../lib/version';
 import { DeviceSwitcher } from './DeviceSwitcher';
 
@@ -93,6 +94,7 @@ function NavEntry({ item, pathname }: { item: NavItem; pathname: string }) {
 
 export function Sidebar() {
   const { pathname } = useLocation();
+  const nav = useNav();
   return (
     <aside className="d-sidebar">
       <Link to="/" className="brand">
@@ -107,7 +109,7 @@ export function Sidebar() {
 
       {/* Only the menu scrolls; the brand stays on top and the TV switcher at the bottom, like the console bar. */}
       <div className="sidebar-scroll">
-        {NAV.map((section) => (
+        {nav.map((section) => (
           <nav className="nav-section" key={section.label}>
             <div className="nav-label">{section.label}</div>
             {section.items.map((item) => (

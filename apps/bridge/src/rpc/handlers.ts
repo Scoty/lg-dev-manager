@@ -20,6 +20,7 @@ import {
   type OpProgress,
   type ParamsOf,
   type ResultOf,
+  BridgeFeatures,
 } from '@lgdm/protocol';
 import { RpcError } from './errors.js';
 import { BRIDGE_VERSION } from '../version.js';
@@ -34,7 +35,8 @@ import { deviceInfo, generateKey, storageInfo, takeScreenshot } from '../devices
 import { DEFAULT_LGE_URL, devModeStatus, renewDevMode } from '../devices/devmode.js';
 import { tvPower } from '../devices/power.js';
 import { appIcon, hbChannelConfig, installDownloadable, installFromRepo, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
-import type { HttpTrace, RepoClient } from '../repo/repo.js';
+import type { HttpTrace } from '../repo/repo.js';
+import type { RepoRegistry } from '../repo/registry.js';
 import type { LitefinClient } from '../litefin/litefin.js';
 import type { ShellSessions } from '../shell/shells.js';
 import { homeDir, listDir, makeDir, readChunk, removePath, renameFile, statFile, writeFile } from '../files/files.js';
@@ -92,7 +94,8 @@ const progressFor = (session: Session, opId: string) => (p: Omit<OpProgress, 'op
 export interface Context {
   token: string;
   pool: SshPool;
-  repo: RepoClient;
+  /** The official Homebrew repository and the custom ones the browser names (`repo` params). */
+  repos: RepoRegistry;
   /** Litefin's GitHub releases (LGDM_LITEFIN_URL overrides, for tests). */
   litefin: LitefinClient;
   /** LG's Developer Mode session service (LGDM_LGE_URL overrides, for tests). */
@@ -134,7 +137,13 @@ export const handlers: HandlerMap = {
       );
     }
     session.authed = true;
-    return { protocolVersion: PROTOCOL_VERSION, bridgeVersion: BRIDGE_VERSION, platform: platform(), distribution: distribution() };
+    return {
+      protocolVersion: PROTOCOL_VERSION,
+      bridgeVersion: BRIDGE_VERSION,
+      platform: platform(),
+      distribution: distribution(),
+      features: [BridgeFeatures.CustomRepos],
+    };
   },
   'system.ping': () => ({ now: Date.now() }),
 
@@ -313,8 +322,8 @@ export const handlers: HandlerMap = {
     }
   },
 
-  'apps.installFromRepo': ({ device, id, channel, opId }, session, ctx) =>
-    installFromRepo(sshFor(session, ctx), ctx.repo, device, id, channel ?? 'stable', progressFor(session, opId), httpTraceFor(session)),
+  'apps.installFromRepo': ({ device, id, channel, opId, repo }, session, ctx) =>
+    installFromRepo(sshFor(session, ctx), ctx.repos.for(repo), device, id, channel ?? 'stable', progressFor(session, opId), httpTraceFor(session)),
 
   'litefin.list': (params, session, { litefin }) => litefin.list({ refresh: params?.refresh, trace: httpTraceFor(session) }),
   'litefin.install': async ({ device, tag, variant, opId }, session, ctx) => {
@@ -330,9 +339,11 @@ export const handlers: HandlerMap = {
     );
   },
 
-  'repo.list': ({ refresh }, session, { repo }) => repo.list({ refresh, trace: httpTraceFor(session, true) }),
-  'repo.image': ({ url }, session, { repo }) => repo.image(url, httpTraceFor(session, true)),
-  'repo.description': ({ id }, session, { repo }) => repo.description(id, httpTraceFor(session, true)),
+  'repo.list': ({ refresh, repo }, session, { repos }) => repos.for(repo).list({ refresh, trace: httpTraceFor(session, true) }),
+  'repo.image': ({ url, repo }, session, { repos }) => repos.for(repo).image(url, httpTraceFor(session, true)),
+  'repo.description': ({ id, repo }, session, { repos }) => repos.for(repo).description(id, httpTraceFor(session, true)),
+  // Not a background read: the user pressed "Check & add", so each request shows in the console.
+  'repo.check': ({ url }, session, { repos }) => repos.check(url, httpTraceFor(session)),
 
   'files.home': async ({ device }, session, ctx) => ({ path: await homeDir(sshFor(session, ctx), device) }),
   'files.list': ({ device, path }, session, ctx) => listDir(sshFor(session, ctx), device, path),

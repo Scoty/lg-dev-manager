@@ -106,6 +106,15 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 - [x] Install IPK from a local file (file picker or drag & drop → bridge memory → `/media/developer/temp` over SFTP or `cat` → `appInstallService/dev/install`, sha256 check, progress)
 - [x] **Homebrew repository** browser (`repo.webosbrew.org/api`, all pages, fetched and cached by the bridge — `repo.list`), search, All / Installed / Updates filters
 - [x] Repo app details: description (allow-listed HTML), screenshots and icons through the bridge (`repo.image`, `repo.description`), project page, root badges
+- [x] **Custom repositories** (1.0.5, not in the original; Homebrew Channel has "Add repository"): Setup → Custom repos
+  with a malware warning and a must-tick acknowledgement; `repo.check` canonicalises what was typed to an `apps.json`
+  address (also tries `…/apps.json`, `…/api/apps.json`) and refuses anything that isn't a readable repository. Saved in
+  the browser (`lgdm-custom-repos`, in the backup); each gets an entry under Apps (`/apps/repo/:id`), the same repo page
+  inside a `RepoSourceProvider`. The browser sends the `apps.json` address as `repo` on `repo.list/image/description` and
+  `apps.installFromRepo`; the bridge (`RepoRegistry`) keeps a client per repository in memory (8, LRU) and, unlike the
+  official repository, doesn't trust its server: https only and public addresses only for every request (index,
+  descriptions, icons, IPKs). Gated on `features: ['customRepos']` in `system.hello` — older bridges would ignore the
+  `repo` parameter. Test rig only: `LGDM_TEST_ALLOW_LOCAL_REPOS=1` lets the second mock repo (http on 127.0.0.1) in.
 - [x] Install / update / install beta from the repo (`apps.installFromRepo`): Homebrew Channel downloads the IPK on the TV; otherwise the bridge downloads it, checks the sha256 and dev-installs; refuses ids owned by LG Store / system apps (`findInstallLocation`)
 - [x] Compatibility check (webOS range, SoC list, root via `device.hbchannel`) with an “Install anyway” confirm; “update available” badges and Update buttons on the Installed page
 - [x] Homebrew Channel aware install path (`org.webosbrew.hbchannel.service/install`, IPK served over an SSH reverse tunnel), hbchannel removal flow

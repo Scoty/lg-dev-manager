@@ -11,6 +11,7 @@ import { toTarget, type SavedDevice } from '../../devices/store';
 import { useRefreshDeviceData, useTvPower } from './queries';
 import { useQueryClient } from '@tanstack/react-query';
 import { INCOMPATIBLE_TEXT, type IncompatibleReason } from '../repo/logic';
+import { repoParam, useRepoSource } from '../repo/source';
 
 type Phase = 'send' | 'copy' | 'install';
 
@@ -72,6 +73,8 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
   const power = useTvPower(device);
   const tvOff = power.data?.state === 'standby';
   const qc = useQueryClient();
+  // On a custom repository's page, installs come from that repository (the bridge looks the app up there).
+  const source = useRepoSource();
 
   const launch = async (app: AppInfo) => {
     if (!device) return;
@@ -157,7 +160,7 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
     }
     const verb = opts.update ? 'Updating' : channel === 'beta' ? 'Installing the beta of' : 'Installing';
     const target = toTarget(device);
-    return runWebInstall(verb, pkg.title, (opId) => client.call('apps.installFromRepo', { device: target, id: pkg.id, channel, opId }, 20 * 60_000));
+    return runWebInstall(verb, pkg.title, (opId) => client.call('apps.installFromRepo', { device: target, id: pkg.id, channel, opId, ...repoParam(source) }, 20 * 60_000));
   };
 
   /** Install one build of a Litefin release from GitHub (M8). */

@@ -53,6 +53,8 @@ const NON_PUBLIC = new BlockList();
 for (const [net, prefix] of [
   ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16],
   ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['224.0.0.0', 3],
+  // Documentation ranges (RFC 5737): never real servers.
+  ['192.0.2.0', 24], ['198.51.100.0', 24], ['203.0.113.0', 24],
 ] as const) NON_PUBLIC.addSubnet(net, prefix, 'ipv4');
 for (const [net, prefix] of [['::', 127], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8], ['64:ff9b::', 96]] as const) NON_PUBLIC.addSubnet(net, prefix, 'ipv6');
 
@@ -74,9 +76,24 @@ interface Index {
 
 export type Progress = (p: { stage: 'upload'; percent?: number; text: string }) => void;
 
+export interface RepoClientOptions {
+  /**
+   * A repository the user added (not repo.webosbrew.org): its own server isn't trusted either — every request, the
+   * index included, must go to a public address (no loopback, LAN, link-local), and messages name it by host.
+   */
+  custom?: boolean;
+  /** Test rig only (LGDM_TEST_ALLOW_LOCAL_REPOS): trust a custom repository's own origin like the official one. */
+  trustOwnOrigin?: boolean;
+}
+
 export class RepoClient {
-  readonly base: string;
+  /** The first page of the index (`…/apps.json`). */
+  readonly indexUrl: string;
   private readonly origin: string;
+  /** The repository's own origin, when it may be fetched without the public-address checks. */
+  private readonly trusted?: string;
+  /** "the Homebrew repository" or "the repository at host", for messages. */
+  readonly name: string;
   private index?: Index;
   private loading?: Promise<Index>;
   /** Recently fetched images, oldest first (a Map keeps insertion order). */
@@ -84,13 +101,31 @@ export class RepoClient {
   private imageCacheBytes = 0;
   private imageLoads = new Map<string, Promise<{ mime: string; base64: string }>>();
 
-  constructor(base = process.env.LGDM_REPO_URL ?? DEFAULT_REPO_URL, private readonly budget: UploadBudget = bridgeUploadBudget) {
-    this.base = base.replace(/\/+$/, '');
-    this.origin = new URL(this.base).origin;
+  /** `source`: an API base (…/api, pages at …/apps.json) or the address of an index file (…/apps.json). */
+  constructor(
+    source = process.env.LGDM_REPO_URL ?? DEFAULT_REPO_URL,
+    private readonly budget: UploadBudget = bridgeUploadBudget,
+    opts: RepoClientOptions = {},
+  ) {
+    const src = source.replace(/\/+$/, '');
+    this.indexUrl = /\.json$/i.test(new URL(src).pathname) ? src : `${src}/apps.json`;
+    this.origin = new URL(this.indexUrl).origin;
+    this.trusted = !opts.custom || opts.trustOwnOrigin ? this.origin : undefined;
+    this.name = opts.custom ? `the repository at ${this.host}` : 'the Homebrew repository';
   }
 
   get host() {
-    return new URL(this.base).host;
+    return new URL(this.indexUrl).host;
+  }
+
+  /** Page `n` of the index: `apps.json`, then `apps/2.json` … (only for indexes named apps.json). */
+  private pageUrl(n: number): string | null {
+    if (n === 1) return this.indexUrl;
+    return /\/apps\.json$/i.test(this.indexUrl) ? this.indexUrl.replace(/\/apps\.json$/i, `/apps/${n}.json`) : null;
+  }
+
+  private get Name() {
+    return this.name.charAt(0).toUpperCase() + this.name.slice(1);
   }
 
   /** All apps, from cache when fresh. */
@@ -107,14 +142,14 @@ export class RepoClient {
       idx = await this.load(true, trace);
       pkg = idx.packages.find((p) => p.id === id);
     }
-    if (!pkg) throw new RpcError(RepoErrorCodes.NotFound, `${id} isn't in the Homebrew repository.`);
+    if (!pkg) throw new RpcError(RepoErrorCodes.NotFound, `${id} isn't in ${this.name}.`);
     return pkg;
   }
 
   /** An icon or screenshot the index lists, as base64. Cached in memory. */
   async image(url: string, trace: HttpTrace = untraced): Promise<{ mime: string; base64: string }> {
     const idx = await this.load(false, trace);
-    if (!idx.images.has(url)) throw new RpcError(RepoErrorCodes.NotFound, 'That image isn’t part of the Homebrew repository.');
+    if (!idx.images.has(url)) throw new RpcError(RepoErrorCodes.NotFound, `That image isn’t part of ${this.name}.`);
     const hit = this.imageCache.get(url);
     if (hit) {
       this.imageCache.delete(url);
@@ -132,7 +167,7 @@ export class RepoClient {
   private async fetchImage(url: string): Promise<{ mime: string; base64: string }> {
     let res: Response;
     try {
-      res = await this.safeGet(url, 30_000);
+      res = await safeGet(url, 30_000, this.trusted);
     } catch (e) {
       if (e instanceof RpcError) throw e;
       throw new RpcError(RepoErrorCodes.Unreachable, 'Couldn’t load the image.', `${url}: ${(e as Error).message}`);
@@ -180,7 +215,7 @@ export class RepoClient {
    */
   download(manifest: RepoManifest, progress?: Progress, trace: HttpTrace = untraced): Promise<{ data: Buffer; sha256: string; done: () => void }> {
     return downloadIpk(
-      { url: manifest.ipkUrl, id: manifest.id, size: manifest.ipkSize, sha256: manifest.ipkHash?.sha256, budget: this.budget, trustedOrigin: this.origin, checksumFrom: 'the repository’s' },
+      { url: manifest.ipkUrl, id: manifest.id, size: manifest.ipkSize, sha256: manifest.ipkHash?.sha256, budget: this.budget, trustedOrigin: this.trusted, checksumFrom: 'the repository’s' },
       progress,
       trace,
     );
@@ -202,15 +237,16 @@ export class RepoClient {
     const seen = new Set<string>();
     let maxPage = 1;
     for (let page = 1; page <= Math.min(maxPage, MAX_PAGES); page++) {
-      const url = page > 1 ? `${this.base}/apps/${page}.json` : `${this.base}/apps.json`;
+      const url = this.pageUrl(page);
+      if (!url) break;
       const body = await trace(this.host, `GET ${url}`, () => this.fetchOk(url, JSON_MAX_BYTES));
       let json: { paging?: { maxPage?: unknown }; packages?: unknown };
       try {
         json = JSON.parse(body.toString('utf8'));
       } catch {
-        throw new RpcError(RepoErrorCodes.BadResponse, 'The Homebrew repository sent something that isn’t JSON.', url);
+        throw new RpcError(RepoErrorCodes.BadResponse, `${this.Name} sent something that isn’t JSON.`, url);
       }
-      if (!Array.isArray(json.packages)) throw new RpcError(RepoErrorCodes.BadResponse, 'The Homebrew repository’s app list looks wrong.', url);
+      if (!json || !Array.isArray(json.packages)) throw new RpcError(RepoErrorCodes.BadResponse, `${this.Name}’s app list looks wrong.`, url);
       if (page === 1 && typeof json.paging?.maxPage === 'number') maxPage = json.paging.maxPage;
       for (const raw of json.packages) {
         const pkg = normalizePackage(raw, url);
@@ -229,22 +265,26 @@ export class RepoClient {
     return fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(timeoutMs), headers: { accept: '*/*' } });
   }
 
-  private safeGet(href: string, timeoutMs: number): Promise<Response> {
-    return safeGet(href, timeoutMs, this.origin);
-  }
-
-  /** GET from the repository itself: refuses redirects to other sites. */
+  /**
+   * GET from the repository itself: refuses redirects to other sites. A custom repository's server goes through the
+   * public-address checks too (safeGet), so an added repository can't point the bridge at this computer or the LAN.
+   */
   private async fetchOk(url: string, maxBytes: number): Promise<Buffer> {
     let res: Response;
     try {
-      res = await this.request(url, 30_000);
+      res = this.trusted ? await this.request(url, 30_000) : await safeGet(url, 30_000, undefined, this.origin);
     } catch (e) {
-      throw new RpcError(RepoErrorCodes.Unreachable, 'Couldn’t reach the Homebrew repository. Is this computer online?', `${url}: ${(e as Error).message}`);
+      if (e instanceof RpcError) throw e;
+      throw new RpcError(RepoErrorCodes.Unreachable, `Couldn’t reach ${this.name}. Is this computer online?`, `${url}: ${(e as Error).message}`);
     }
     if (new URL(res.url || url).origin !== this.origin) {
-      throw new RpcError(RepoErrorCodes.BadResponse, 'The Homebrew repository redirected to another site.', res.url);
+      await res.body?.cancel().catch(() => {});
+      throw new RpcError(RepoErrorCodes.BadResponse, `${this.Name} redirected to another site.`, res.url);
     }
-    if (!res.ok) throw new RpcError(RepoErrorCodes.BadResponse, `The Homebrew repository answered HTTP ${res.status}.`, url);
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      throw new RpcError(RepoErrorCodes.BadResponse, `${this.Name} answered HTTP ${res.status}.`, url);
+    }
     return readBody(res, maxBytes);
   }
 }
@@ -254,10 +294,12 @@ export class RepoClient {
  * by hand, and every hop outside `trustedOrigin` (the configured source itself) must be a public address — no
  * loopback, LAN or link-local.
  */
-export async function safeGet(href: string, timeoutMs: number, trustedOrigin?: string): Promise<Response> {
+export async function safeGet(href: string, timeoutMs: number, trustedOrigin?: string, stayOn?: string): Promise<Response> {
   const signal = AbortSignal.timeout(timeoutMs);
   let url = new URL(href);
   for (let hop = 0; ; hop++) {
+    // `stayOn`: a repository's own files — a redirect to another site is refused, not followed.
+    if (stayOn && url.origin !== stayOn) throw new RpcError(RepoErrorCodes.BadResponse, 'The repository redirected to another site.', url.href);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new RpcError(RepoErrorCodes.BadResponse, 'Only http(s) links can be fetched.', url.href);
     const trusted = url.origin === trustedOrigin;
     if (!trusted) await assertPublicHost(url);

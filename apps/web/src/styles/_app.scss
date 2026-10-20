@@ -60,7 +60,9 @@
 .muted { color: var(--t-muted); }
 .col-4 { grid-column: span 4; }
 .col-8 { grid-column: span 8; }
-@media (max-width: 1100px) { .col-4, .col-8 { grid-column: span 12; } }
+.col-5 { grid-column: span 5; }
+.col-7 { grid-column: span 7; }
+@media (max-width: 1100px) { .col-4, .col-5, .col-7, .col-8 { grid-column: span 12; } }
 
 /* Device chooser in the sidebar footer (re-uses Adminator .workspace) */
 .workspace { width: 100%; text-align: left; }
@@ -1025,3 +1027,9 @@ button.log-row:hover { background: var(--bg-hover); }
 @media (prefers-reduced-motion: reduce) {
   .bridge-pill.is-retrying .dot { animation: none; }
 }
+
+/* Setup → Custom repositories */
+.custom-repos-table .custom-repo-name { font-weight: 600; }
+.custom-repos-table .custom-repo-url { font-size: 12px; word-break: break-all; margin-top: 2px; }
+.custom-repos-table td.actions { white-space: nowrap; text-align: right; width: 1%; }
+.custom-repos-table td.actions > * + * { margin-left: 6px; }

@@ -3,13 +3,18 @@ import { useMemo } from 'react';
 import type { RepoPackage } from '@lgdm/protocol';
 import { useRpc } from '../../bridge/useRpc';
 import { toTarget, type SavedDevice } from '../../devices/store';
+import { repoKey, repoParam, useRepoSource } from './source';
 
-/** The Homebrew repository's apps (fetched by the bridge, which also caches it for a few minutes). */
+/**
+ * The apps of the repository this page shows (useRepoSource): the official Homebrew repository, or a custom one.
+ * Fetched by the bridge, which also caches it for a few minutes.
+ */
 export function useRepo() {
   const { ready, call } = useRpc();
+  const source = useRepoSource();
   return useQuery({
-    queryKey: ['repo'],
-    queryFn: () => call('repo.list', {}, 60_000),
+    queryKey: ['repo', repoKey(source)],
+    queryFn: () => call('repo.list', { ...repoParam(source) }, 60_000),
     enabled: ready,
     staleTime: 5 * 60_000,
     retry: false,
@@ -20,8 +25,9 @@ export function useRepo() {
 export function useRefreshRepo() {
   const qc = useQueryClient();
   const { call } = useRpc();
+  const source = useRepoSource();
   return async () => {
-    qc.setQueryData(['repo'], await call('repo.list', { refresh: true }, 60_000));
+    qc.setQueryData(['repo', repoKey(source)], await call('repo.list', { refresh: true, ...repoParam(source) }, 60_000));
   };
 }
 
@@ -35,10 +41,11 @@ export function useRepoIndex() {
 /** An icon or screenshot from the repository, as a data: URL (through the bridge). */
 export function useRepoImage(url: string | undefined) {
   const { ready, call } = useRpc();
+  const source = useRepoSource();
   return useQuery({
-    queryKey: ['repo-image', url],
+    queryKey: ['repo-image', repoKey(source), url],
     queryFn: async () => {
-      const r = await call('repo.image', { url: url! }, 30_000);
+      const r = await call('repo.image', { url: url!, ...repoParam(source) }, 30_000);
       return `data:${r.mime};base64,${r.base64}`;
     },
     enabled: ready && !!url,
@@ -50,9 +57,10 @@ export function useRepoImage(url: string | undefined) {
 
 export function useRepoDescription(pkg: RepoPackage | null) {
   const { ready, call } = useRpc();
+  const source = useRepoSource();
   return useQuery({
-    queryKey: ['repo-description', pkg?.id],
-    queryFn: () => call('repo.description', { id: pkg!.id }, 30_000),
+    queryKey: ['repo-description', repoKey(source), pkg?.id],
+    queryFn: () => call('repo.description', { id: pkg!.id, ...repoParam(source) }, 30_000),
     enabled: ready && !!pkg?.hasDescription,
     staleTime: 10 * 60_000,
     retry: false,

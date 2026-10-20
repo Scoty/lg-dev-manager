@@ -9,6 +9,8 @@
  *    repo.webosbrew.org,
  *  - a fake LG Developer Mode session service (developer.lge.com) knowing the Dev Mode TV's token,
  *  - a fake GitHub serving Litefin's releases (tools/mock-tv/src/github.ts) on 127.0.0.1:5297,
+ *  - a second fake repository on 127.0.0.1:5296, for custom repositories (http on 127.0.0.1, so the bridge runs with
+ *    the test-only LGDM_TEST_ALLOW_LOCAL_REPOS — real bridges take https repositories on the internet only),
  *  - the bridge on 127.0.0.1:5299 serving the built web UI (apps/web/dist), pairing token "e2e-token".
  * Run with: pnpm --filter @lgdm/web e2e:server
  */
@@ -16,7 +18,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MOCK_DEVMODE_TOKEN, startMockGithub, startMockLge, startMockRepo, startMockTv } from '@lgdm/mock-tv';
+import { MOCK_CUSTOM_REPO_APPS, MOCK_DEVMODE_TOKEN, startMockGithub, startMockLge, startMockRepo, startMockTv } from '@lgdm/mock-tv';
 import { startServer } from '../../bridge/src/server.js';
 
 export const E2E = {
@@ -28,6 +30,8 @@ export const E2E = {
   standbyPort: 2224,
   repoPort: Number(process.env.E2E_REPO_PORT ?? 5298),
   githubPort: Number(process.env.E2E_GITHUB_PORT ?? 5297),
+  /** A second fake repository, added in the tests as a custom (unofficial) one. */
+  customRepoPort: Number(process.env.E2E_CUSTOM_REPO_PORT ?? 5296),
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -43,6 +47,8 @@ standbyTv.state.power = { state: 'Active Standby' };
 // Followed logs tick faster than on a real TV, so tests waiting for new lines finish sooner.
 for (const tv of [devTv, rootTv, noPtyTv]) tv.state.debug.every = 150;
 const repo = await startMockRepo({ port: E2E.repoPort });
+const customRepo = await startMockRepo({ port: E2E.customRepoPort, apps: MOCK_CUSTOM_REPO_APPS });
+process.env.LGDM_TEST_ALLOW_LOCAL_REPOS = '1';
 const github = await startMockGithub({ port: E2E.githubPort });
 const lge = await startMockLge({ tokens: { [MOCK_DEVMODE_TOKEN]: (742 * 3600 + 15 * 60) * 1000 } });
 // Launching the Developer Mode app with { extend: true } resets the session at LG, like on a real TV.
@@ -67,3 +73,4 @@ console.log(`  No-PTY TV   127.0.0.1:${noPtyTv.sshPort} (root / alpine, refuses 
 console.log(`  Standby TV  127.0.0.1:${standbyTv.sshPort} (root / alpine, in standby: launching is refused)`);
 console.log(`  Repository  ${repo.url} (fake Homebrew repo, ${repo.apps.length} apps)`);
 console.log(`  Litefin     ${github.url} (fake GitHub releases)`);
+console.log(`  Custom repo ${customRepo.url}/apps.json (add it under Setup → Custom repos)`);

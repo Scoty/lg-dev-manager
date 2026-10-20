@@ -56,6 +56,7 @@ export const NAV: NavSection[] = [
     label: 'Setup',
     items: [
       { key: 'devices', text: 'Devices', icon: 'tv', to: '/devices' },
+      { key: 'repos', text: 'Custom repos', icon: 'box', to: '/repos' },
       { key: 'bridge', text: 'Bridge', icon: 'plug', to: '/bridge' },
     ],
   },
@@ -68,10 +69,32 @@ export const NAV: NavSection[] = [
   },
 ];
 
+/** NAV with the user's custom repositories under Apps, after the built-in repos (one entry each). */
+export function navWith(customRepos: { id: string; name: string }[]): NavSection[] {
+  if (!customRepos.length) return NAV;
+  return NAV.map((section) => ({
+    ...section,
+    items: section.items.map((item) =>
+      item.key === 'apps'
+        ? { ...item, children: [...(item.children ?? []), ...customRepos.map((r) => ({ key: `apps-repo-${r.id}`, text: r.name, to: `/apps/repo/${r.id}` }))] }
+        : item,
+    ),
+  }));
+}
+
 /** Resolves breadcrumbs ("Device › Apps › Installed") for a route path. */
-export function crumbsFor(pathname: string): string[] {
+export function crumbsFor(pathname: string, nav: NavSection[] = NAV): string[] {
   if (pathname.startsWith('/devices/new')) return ['Setup', 'Devices', 'Add a TV'];
-  for (const section of NAV) {
+  if (pathname.startsWith('/apps/repo/')) {
+    // A custom repository that isn't in the list (removed, or another browser's link).
+    const known = crumbsFromNav(pathname, nav);
+    return known[0] === 'LG Dev Manager' ? ['Device', 'Apps', 'Custom repo'] : known;
+  }
+  return crumbsFromNav(pathname, nav);
+}
+
+function crumbsFromNav(pathname: string, nav: NavSection[]): string[] {
+  for (const section of nav) {
     for (const item of section.items) {
       if (item.to && pathname.startsWith(item.to)) return [section.label, item.text];
       for (const child of item.children ?? []) {

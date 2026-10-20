@@ -67,6 +67,7 @@ describe('bridge server', () => {
     const ws = await open();
     const hello = await call(ws, 1, 'system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
     expect(hello.result.protocolVersion).toBe(PROTOCOL_VERSION);
+    expect(hello.result.features).toContain('customRepos'); // the site offers custom repositories only then
     const ping = await call(ws, 2, 'system.ping');
     expect(typeof ping.result.now).toBe('number');
     ws.close();

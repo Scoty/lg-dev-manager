@@ -94,6 +94,8 @@ pnpm app            # the standalone bridge app for this OS → apps/bridge/rele
   `apps/web/e2e/smoke.spec.ts` (one test per theme walks every page in one tab).
 - Keep e2e fast: set up TVs with `addDevModeTv` / `addRootedTv` (saved straight into the browser's store); only tests about
   the add-device wizard use `addDevModeTvWithWizard` / `addRootedTvWithWizard`. No fixed waits (`waitForTimeout`).
+  Traces are recorded only for retried tests (tracing every test doubled the run); debug a failure locally with
+  `pnpm --filter @lgdm/web exec playwright test <file> --trace on`. CI runs Playwright on the runner's Google Chrome.
 - User flows that touch the TV get a Playwright test against the mock TVs (`apps/web/e2e/devices-apps.spec.ts`,
   `repo.spec.ts`, `files-terminal.spec.ts`, `info.spec.ts`, `debug.spec.ts`, `litefin.spec.ts`). The rig's TVs are shared by parallel tests, so each test uses app ids no other test touches.
 - Debug tools on the mock TV (followed logs, `PmLogCtl`, `ls-monitor -j`, crash reports) live in `tools/mock-tv/src/debug.ts`;
@@ -101,7 +103,8 @@ pnpm app            # the standalone bridge app for this OS → apps/bridge/rele
 - Litefin's GitHub releases are faked by `tools/mock-tv/src/github.ts` (`startMockGithub`, bridge env `LGDM_LITEFIN_URL`).
 - LG's Developer Mode session service is faked by `tools/mock-tv/src/lge.ts` (`startMockLge`, bridge env `LGDM_LGE_URL`).
 - The Homebrew repository is faked by `tools/mock-tv/src/repo.ts` (`startMockRepo`); point a bridge at it with
-  `LGDM_REPO_URL`. Add catalogue entries there for new repo states.
+  `LGDM_REPO_URL`. Add catalogue entries there for new repo states. The rig runs a second one (`MOCK_CUSTOM_REPO_APPS`,
+  port 5296) for custom repositories (`custom-repos.spec.ts`), with the test-only `LGDM_TEST_ALLOW_LOCAL_REPOS=1`.
 - The rig also runs a TV that refuses PTYs (port 2223) for the simple-shell path. Mock file metadata (owners, modes,
   symlinks) lives in `tools/mock-tv/src/fs.ts`; the interactive shell in `interactive.ts`.
 - The mock TV (`tools/mock-tv`) should behave like the real one: when a feature needs a new command or luna call,
@@ -134,3 +137,4 @@ pnpm app            # the standalone bridge app for this OS → apps/bridge/rele
 | Phones and tablets | Not supported. A notice (`shell/PhoneNotice.tsx`) explains that phone workarounds are risky and asks for a desktop or laptop (owner, Oct 2026) | Decided |
 | Litefin repo (M8) | The **bridge** reads Litefin's GitHub releases and installs a build chosen by tag + variant; the browser never sends a URL | Decided (M8) |
 | Homebrew repo access | The **bridge** fetches repo.webosbrew.org (index, descriptions, icons, IPKs) so the site's CSP needs no new hosts; descriptions are rendered from an allow-list, never as raw HTML | Decided (M4) |
+| Custom repositories | Users can add other Homebrew-format repositories (Setup → Custom repos, owner request Oct 2026). The list lives in the browser; the browser sends a repository's `apps.json` address (the one exception to "the browser never sends a URL"), which the bridge only fetches over **https from public addresses** — never loopback/LAN — for every request. Always shown with an "unofficial, may contain malware" warning. `LGDM_TEST_ALLOW_LOCAL_REPOS` is for the test rig only | Decided (1.0.5) |

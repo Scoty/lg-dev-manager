@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ICONS, type IconName } from './icons';
-import { NAV } from './nav';
+import { useNav } from './useNav';
 import { toggleTheme } from '../lib/theme';
 import { useDevices } from '../devices/useDevices';
 import { setActiveDeviceId } from '../devices/store';
@@ -30,10 +30,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const { devices, activeId } = useDevices();
+  const nav = useNav();
 
   const items = useMemo<PaletteItem[]>(() => {
     const list: PaletteItem[] = [];
-    for (const section of NAV) {
+    for (const section of nav) {
       for (const item of section.items) {
         if (item.children) {
           for (const c of item.children) {
@@ -54,7 +55,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       list.push({ label: `Switch to ${d.name}`, section: 'TV', icon: 'tv', run: () => setActiveDeviceId(d.id) });
     }
     return list;
-  }, [navigate, devices, activeId]);
+  }, [navigate, devices, activeId, nav]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

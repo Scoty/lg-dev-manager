@@ -5,7 +5,7 @@ import { bridgeUrlProblem, loadSettings, saveSettings, type BridgeSettings } fro
 export type BridgeStatus =
   | { state: 'unpaired' }
   | { state: 'connecting' }
-  | { state: 'connected'; bridgeVersion: string; platform: string; distribution?: 'app' | 'npm' | 'source' }
+  | { state: 'connected'; bridgeVersion: string; platform: string; distribution?: 'app' | 'npm' | 'source'; features?: string[] }
   /** `retrying`: the provider keeps trying in the background and switches to `connected` by itself when it works. */
   | { state: 'error'; code: string; message: string; retrying?: boolean };
 
@@ -46,7 +46,13 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       if (gen !== generation.current) return c.close();
       attempt.current = 0;
       setClient(c);
-      setStatus({ state: 'connected', bridgeVersion: hello.bridgeVersion, platform: hello.platform, distribution: hello.distribution });
+      setStatus({
+        state: 'connected',
+        bridgeVersion: hello.bridgeVersion,
+        platform: hello.platform,
+        distribution: hello.distribution,
+        features: hello.features,
+      });
       c.onClose = (reason) => {
         if (gen !== generation.current) return;
         setClient(null);
@@ -126,6 +132,15 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
   );
 
   return <BridgeContext.Provider value={value}>{children}</BridgeContext.Provider>;
+}
+
+/**
+ * Does the connected bridge have this optional feature (BridgeFeatures)? `undefined` while not connected. Older
+ * bridges ignore parameters they don't know, so a feature must be checked before relying on it.
+ */
+export function useBridgeFeature(feature: string): boolean | undefined {
+  const { status } = useBridge();
+  return status.state === 'connected' ? !!status.features?.includes(feature) : undefined;
 }
 
 export function useBridge(): BridgeContextValue {

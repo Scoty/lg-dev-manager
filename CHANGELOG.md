@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.5 — unreleased
+
+- 🧩 **Custom repositories.** Add other webOS Homebrew repositories under **Setup → Custom repos** — the same
+  `apps.json` addresses Homebrew Channel takes. The bridge checks the address really is a repository before it's
+  added; each then gets its own page under **Apps** with search, details and install. Clear warnings that unofficial
+  repositories can contain untested apps or malware, and a box to tick before adding one. For safety the bridge only
+  fetches them over https from the public internet. They're saved in your browser and included in **Export backup**.
+  Needs bridge 1.0.5.
+
 ## 1.0.4 — 2026-10-11
 
 - 🌙 **TVs in standby.** When the TV is off but still reachable (LG's Quick Start+ / "Always Ready"), installing,

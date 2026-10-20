@@ -7,6 +7,24 @@ import { z } from 'zod';
  */
 export const DEFAULT_REPO_URL = 'https://repo.webosbrew.org/api';
 
+/**
+ * A custom (unofficial) repository: the address of its `apps.json`, as Homebrew Channel's "Add repository" takes it
+ * (e.g. https://repo.webosbrew.org/api/non-free/apps.json). Saved in the browser; `repo.check` turns what the user
+ * typed into this form. https only — the bridge also refuses hosts on the local network.
+ */
+export const CustomRepoUrl = z
+  .string()
+  .max(2048)
+  .refine((u) => {
+    try {
+      const p = new URL(u);
+      // http is let through here only for the test rig (LGDM_TEST_ALLOW_LOCAL_REPOS); the bridge refuses it otherwise.
+      return (p.protocol === 'https:' || p.protocol === 'http:') && !p.username && !p.password && !p.hash && /\.json$/i.test(p.pathname);
+    } catch {
+      return false;
+    }
+  }, 'Not an https address of a repository’s .json file');
+
 /** An absolute http(s) URL — never `javascript:` or `data:`, since the UI uses these as links and images. */
 export const WebUrl = z
   .string()
@@ -70,4 +88,11 @@ export const RepoErrorCodes = {
   NotFound: 'repo_not_found',
   NoManifest: 'repo_no_manifest',
   DownloadFailed: 'download_failed',
+  /** `repo.check`: the address answers, but not with a webOS Homebrew repository. */
+  NotARepo: 'repo_not_a_repo',
+  /** A custom repository address that isn't allowed (not https, or on the local network). */
+  BadRepoUrl: 'repo_bad_url',
 } as const;
+
+/** Features a bridge supports beyond the protocol version, reported in `system.hello`. */
+export const BridgeFeatures = { CustomRepos: 'customRepos' } as const;

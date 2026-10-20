@@ -115,7 +115,7 @@ new app from the [releases](https://github.com/Scoty/lg-dev-manager/releases/lat
   made for it), edit, test, export / import.
 - 📦 **Apps** — installed apps with update badges; install IPK files (drag and drop); the webOS **Homebrew repository**
   with search, details, install and update; the **Litefin repo** with every webOS build of the latest releases
-  (see [below](#litefin-in-one-click)).
+  (see [below](#litefin-in-one-click)); and **custom repositories** you add yourself (see [below](#custom-repositories)).
 - 📁 **Files** — browse, upload, download, preview, rename, delete over SFTP.
 - 💻 **Terminal** — full shell in tabs, plus a simple mode for TVs without a terminal.
 - ℹ️ **Device info** — model, webOS and firmware, Homebrew Channel status and update, screenshots, Dev Mode session
@@ -124,6 +124,21 @@ new app from the [releases](https://github.com/Scoty/lg-dev-manager/releases/lat
 - 🧾 **Console** — every command the bridge runs on the TV, live, with the option to type your own.
 
 🌗 Light and dark themes, a command palette (⌘K / Ctrl K), and no analytics or tracking.
+
+<a id="custom-repositories"></a>
+
+## 🧩 Custom repositories
+
+Besides the official webOS Homebrew repository you can add others under **Setup → Custom repos** — the same addresses
+Homebrew Channel's "Add repository" takes, ending in `apps.json` (for example the official non-free one,
+`https://repo.webosbrew.org/api/non-free/apps.json`). The bridge checks that the address really is a repository before
+it's added; each one then gets its own page under **Apps**, with search, details and one-click install.
+
+> 🚨 **Unofficial repositories can contain untested apps or malware.** Nobody reviews them — not LG, not the webOS
+> Homebrew team — and on a rooted TV an app can do anything. Only add repositories from people you trust.
+
+Custom repositories are saved in your browser (and in **Export backup**), like your TVs. For safety the bridge only
+fetches them over **https** from the public internet — never from your computer or local network.
 
 <a id="litefin-in-one-click"></a>
 

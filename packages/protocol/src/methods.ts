@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { DeviceTarget, HostName } from './device';
 import { AppId, AppInfo, MAX_CHUNK_BYTES, MAX_UPLOAD_BYTES } from './apps';
 import { ScanResult } from './console';
-import { RepoPackage, WebUrl } from './repo';
+import { CustomRepoUrl, RepoPackage, WebUrl } from './repo';
 import { FileItem, FileName, MAX_READ_CHUNK, RemotePath } from './files';
 import { CrashReportFile, LogSource, PmLogContext, PmLogLevel } from './debug';
 import { LitefinRelease, LitefinVariant } from './litefin';
@@ -17,6 +17,8 @@ import { LitefinRelease, LitefinVariant } from './litefin';
  *  v6 — M6: devmode.status, devmode.renew, device.screenshot
  *  v7 — M7: logs.*, pmlog.*, crashes.*
  *  v8 — M8: litefin.list, litefin.install
+ * Optional additions that keep the version (older bridges ignore them, the site checks `features`): 1.0.4
+ * device.power; 1.0.5 custom repositories (`repo` on the repo methods, repo.check).
  */
 export const PROTOCOL_VERSION = 8;
 
@@ -47,6 +49,8 @@ export const Methods = {
       platform: z.string(),
       /** How the bridge was installed, so the site can say how to update it (bridges before 1.0.2 don't say). */
       distribution: z.enum(['app', 'npm', 'source']).optional(),
+      /** Optional features (BridgeFeatures), e.g. custom repositories from 1.0.5. Older bridges don't say. */
+      features: z.array(z.string()).optional(),
     }),
   },
   'system.ping': {
@@ -339,10 +343,11 @@ export const Methods = {
 
   /**
    * The Homebrew repository's apps (all pages of `apps.json`). The bridge fetches it — only from the
-   * configured repository — and keeps it in memory for a few minutes; `refresh` fetches it again.
+   * configured repository — and keeps it in memory for a few minutes; `refresh` fetches it again. With `repo`, a
+   * custom repository the user added instead (the same applies to repo.image, repo.description, installFromRepo).
    */
   'repo.list': {
-    params: z.object({ refresh: z.boolean().optional() }),
+    params: z.object({ refresh: z.boolean().optional(), repo: CustomRepoUrl.optional() }),
     result: z.object({ packages: z.array(RepoPackage), fetchedAt: z.number() }),
   },
   /**
@@ -350,7 +355,7 @@ export const Methods = {
    * hosts). Only URLs the repository index lists are fetched. Images up to 4 MiB.
    */
   'repo.image': {
-    params: z.object({ url: WebUrl }),
+    params: z.object({ url: WebUrl, repo: CustomRepoUrl.optional() }),
     result: z.object({ mime: z.string(), base64: z.string() }),
   },
   /**
@@ -358,7 +363,7 @@ export const Methods = {
    * images resolve against. Images in it can be loaded with `repo.image`. Null if it has none.
    */
   'repo.description': {
-    params: z.object({ id: AppId }),
+    params: z.object({ id: AppId, repo: CustomRepoUrl.optional() }),
     result: z.object({ html: z.string().nullable(), baseUrl: z.string().optional() }),
   },
   /**
@@ -373,8 +378,18 @@ export const Methods = {
       id: AppId,
       channel: z.enum(['stable', 'beta']).default('stable'),
       opId: z.string().max(64),
+      repo: CustomRepoUrl.optional(),
     }),
     result: z.object({ appId: z.string(), version: z.string(), via: z.enum(['devmode', 'hbchannel']) }),
+  },
+  /**
+   * Is this a webOS Homebrew repository? Takes what the user typed (an `apps.json` address, or the folder or site it
+   * is in), fetches it — https and public addresses only — and answers with its canonical `apps.json` address and how
+   * many apps it lists. Not part of the original Dev Manager (Homebrew Channel's "Add repository" checks nothing).
+   */
+  'repo.check': {
+    params: z.object({ url: z.string().min(1).max(2048) }),
+    result: z.object({ url: CustomRepoUrl, apps: z.number().int(), installable: z.number().int(), sample: z.array(z.string()) }),
   },
   /** Homebrew Channel's configuration (`hbchannel.service/getConfiguration`): is it installed, and is the TV rooted. */
   'device.hbchannel': {

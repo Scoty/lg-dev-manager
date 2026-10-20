@@ -7,6 +7,8 @@ import { BridgePage } from './features/bridge/BridgePage';
 import { DevicesPage } from './features/devices/DevicesPage';
 import { AddDevicePage } from './features/devices/AddDevicePage';
 import { InstalledAppsPage } from './features/apps/InstalledAppsPage';
+import { CustomRepoPage } from './features/repos/CustomRepoPage';
+import { CustomReposPage } from './features/repos/CustomReposPage';
 import { RepoPage } from './features/repo/RepoPage';
 import { FilesPage } from './features/files/FilesPage';
 import { TerminalPage } from './features/terminal/TerminalPage';
@@ -48,6 +50,8 @@ export function App() {
                 <Route path="apps/installed" element={<InstalledAppsPage />} />
                 <Route path="apps/homebrew" element={<RepoPage />} />
                 <Route path="apps/litefin" element={<LitefinPage />} />
+                <Route path="apps/repo/:id" element={<CustomRepoPage />} />
+                <Route path="repos" element={<CustomReposPage />} />
                 <Route path="files" element={<FilesPage />} />
                 <Route path="terminal" element={<TerminalPage />} />
                 <Route path="info" element={<InfoPage />} />

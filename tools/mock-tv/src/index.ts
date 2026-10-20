@@ -15,7 +15,7 @@ const { Server: SshServer, utils } = ssh2;
 export { runCommand, unquote } from './shell.js';
 export { LUNA, SUBSCRIPTIONS } from './luna.js';
 export { MOCK_APPS, MOCK_DEVMODE_TOKEN, MOCK_STORE_APPS, devApp, storeApp, fakeIpk, makeIconPng, type MockApp, type MockState } from './state.js';
-export { MOCK_REPO_APPS, startMockRepo, type MockRepo, type MockRepoApp } from './repo.js';
+export { MOCK_CUSTOM_REPO_APPS, MOCK_REPO_APPS, startMockRepo, type MockRepo, type MockRepoApp } from './repo.js';
 export { startMockLge, type MockLge } from './lge.js';
 export { CRASH_DIR, SYSLOG, type DebugState } from './debug.js';
 export { LITEFIN_MOCK_APP_ID, MOCK_LITEFIN_RELEASES, startMockGithub, type MockGithub, type MockLitefinRelease } from './github.js';

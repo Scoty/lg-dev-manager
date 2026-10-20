@@ -9,6 +9,7 @@ import { BRIDGE_VERSION } from './version.js';
 import { SshPool } from './ssh/pool.js';
 import { UploadStore } from './rpc/uploads.js';
 import { RepoClient } from './repo/repo.js';
+import { RepoRegistry } from './repo/registry.js';
 import { LitefinClient } from './litefin/litefin.js';
 import { ShellSessions } from './shell/shells.js';
 
@@ -30,6 +31,7 @@ export function startServer(
   repo = new RepoClient(config.repoUrl),
   litefin = new LitefinClient(config.litefinUrl),
 ): Promise<Server> {
+  const repos = new RepoRegistry(repo);
   const http = createServer((req, res) => {
     if (!hostAllowed(req.headers.host, listeningPort())) {
       res.writeHead(421, { 'content-type': 'text/plain' }).end('Wrong host.');
@@ -117,7 +119,7 @@ export function startServer(
 
     ws.on('message', async (data, isBinary) => {
       if (isBinary) return;
-      const res = await dispatch(data.toString(), session, { token: config.token, pool, repo, litefin, lgeUrl: config.lgeUrl, dev: config.dev });
+      const res = await dispatch(data.toString(), session, { token: config.token, pool, repos, litefin, lgeUrl: config.lgeUrl, dev: config.dev });
       if (res && ws.readyState === ws.OPEN) ws.send(JSON.stringify(res));
       if (res && 'error' in res && res.error.code === 'unauthorized' && !session.authed) {
         ws.close(4401, 'unauthorized');

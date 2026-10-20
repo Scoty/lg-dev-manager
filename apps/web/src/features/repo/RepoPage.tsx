@@ -12,14 +12,19 @@ import { useRefreshRepo } from './queries';
 import { RepoDetails } from './RepoDetails';
 import { RepoIcon } from './RepoIcon';
 import { useRepoApps, type RepoAppView } from './useRepoApps';
+import { useRepoSource } from './source';
+import { Link } from 'react-router-dom';
+import { Alert } from '../../components/Alert';
 
 type Filter = 'all' | 'installed' | 'updates';
 
 /**
  * The webOS Homebrew repository (ChannelComponent in the original): every app with search and filters,
- * install / update / launch, and a details dialog.
+ * install / update / launch, and a details dialog. Inside a RepoSourceProvider for a custom repository, the same page
+ * shows that repository (CustomRepoPage).
  */
 export function RepoPage() {
+  const { custom } = useRepoSource();
   const { active } = useDevices();
   const { repo, installed, view, ready } = useRepoApps(active);
   const ops = useAppOperations(active, installed.data);
@@ -73,26 +78,53 @@ export function RepoPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Apps"
-        title="Homebrew"
-        accent="repository"
-        sub={
-          <>
-            Apps from{' '}
-            <a href="https://repo.webosbrew.org/" target="_blank" rel="noopener noreferrer">
-              repo.webosbrew.org
-            </a>
-            {active && (
+      {custom ? (
+        <>
+          <PageHeader
+            eyebrow="Apps · custom repository"
+            title={custom.name}
+            sub={
               <>
-                {' '}
-                for <TvName device={active} />
+                Apps from <span className="mono">{new URL(custom.url).host}</span>
+                {active && (
+                  <>
+                    {' '}
+                    for <TvName device={active} />
+                  </>
+                )}
+                . You added this repository in <Link to="/repos">Custom repos</Link>.
               </>
-            )}
-            . Homebrew apps aren’t reviewed by LG — install what you trust.
-          </>
-        }
-      />
+            }
+          />
+          <div className="page-notice">
+            <Alert kind="warning" title="Unofficial repository">
+              Nobody reviews these apps — not LG, not the webOS Homebrew team. They can be untested, broken or malicious.
+              Install only what you trust.
+            </Alert>
+          </div>
+        </>
+      ) : (
+        <PageHeader
+          eyebrow="Apps"
+          title="Homebrew"
+          accent="repository"
+          sub={
+            <>
+              Apps from{' '}
+              <a href="https://repo.webosbrew.org/" target="_blank" rel="noopener noreferrer">
+                repo.webosbrew.org
+              </a>
+              {active && (
+                <>
+                  {' '}
+                  for <TvName device={active} />
+                </>
+              )}
+              . Homebrew apps aren’t reviewed by LG — install what you trust.
+            </>
+          }
+        />
+      )}
       <TvOffNotice device={active} off={ops.tvOff} />
       <div className="grid">
         <NeedsDevice device={active}>
@@ -143,7 +175,7 @@ export function RepoPage() {
             {repo.error ? (
               <ErrorAlert
                 error={repo.error}
-                title="Couldn’t load the Homebrew repository"
+                title={custom ? `Couldn’t load ${custom.name}` : 'Couldn’t load the Homebrew repository'}
                 action={<button type="button" className="btn btn--sm btn--ghost" onClick={() => repo.refetch()}>Retry</button>}
               />
             ) : !repo.data ? (

@@ -5,6 +5,7 @@ import { makeIconPng, startMockRepo, startMockTv, type MockRepo, type MockTv } f
 import type { DeviceTarget, OpProgress } from '@lgdm/protocol';
 import { findInstallLocation, hbChannelConfig, installFromRepo, listApps } from './apps/apps.js';
 import { isNonPublicAddress, normalizePackage, RepoClient, sniffImage } from './repo/repo.js';
+import { RepoRegistry } from './repo/registry.js';
 import { RpcError } from './rpc/errors.js';
 import { UploadBudget } from './rpc/uploads.js';
 import { SshPool } from './ssh/pool.js';
@@ -291,5 +292,65 @@ describe('pinned connections', () => {
     const { publicLookup } = await import('./repo/repo.js');
     const err = await new Promise<NodeJS.ErrnoException | null>((r) => publicLookup('localhost', {}, (e) => r(e)));
     expect(err?.code).toBe('EPRIVATE');
+  });
+});
+
+describe('custom repositories', () => {
+  const CUSTOM_APPS = [
+    { id: 'org.example.custom', title: 'Custom App', version: '2.0.0', short: 'From a custom repository' },
+    { id: 'org.example.custom2', title: 'Second Custom', version: '0.1.0' },
+  ];
+  let custom: MockRepo;
+  let empty: MockRepo;
+  beforeAll(async () => {
+    [custom, empty] = await Promise.all([startMockRepo({ apps: CUSTOM_APPS }), startMockRepo({ apps: [] })]);
+  });
+  afterAll(() => Promise.all([custom.close(), empty.close()]));
+
+  // The rig's repositories run on 127.0.0.1 over http, which only the test switch allows.
+  const local = () => new RepoRegistry(new RepoClient(repo.url, new UploadBudget()), true, new UploadBudget());
+
+  it('checks an address the way it was typed: the apps.json, its folder, or the site', async () => {
+    const reg = local();
+    const index = `${custom.url}/apps.json`;
+    expect(await reg.check(index)).toEqual({ url: index, apps: 2, installable: 2, sample: ['Custom App', 'Second Custom'] });
+    expect((await reg.check(custom.url)).url).toBe(index); // …/api
+    expect((await reg.check(custom.url.replace(/\/api$/, '/'))).url).toBe(index); // the site: tries /api/apps.json
+  });
+
+  it('says what is wrong with an address that isn’t a repository', async () => {
+    const reg = local();
+    expect(await code(reg.check(`${custom.url}/nothing.json`))).toBe('repo_not_a_repo');
+    expect(await code(reg.check(`${empty.url}/apps.json`))).toBe('repo_not_a_repo');
+    expect(await code(reg.check('not a url at all :/'))).toBe('repo_bad_url');
+    expect(await code(reg.check('https://user:pw@example.com/apps.json'))).toBe('repo_bad_url');
+    // The official repository is built in.
+    expect(await code(reg.check(`${repo.url}/apps.json`))).toBe('repo_bad_url');
+  });
+
+  it('outside the test rig: https only, and never this computer or the local network', async () => {
+    const reg = new RepoRegistry(new RepoClient(repo.url, new UploadBudget()), false);
+    expect(await code(reg.check(`${custom.url}/apps.json`))).toBe('repo_bad_url'); // http
+    expect(await code(reg.check('https://127.0.0.1:1/api/apps.json'))).toBe('repo_bad_url');
+    expect(await code(reg.check('https://192.0.2.10/api/apps.json'))).toBe('repo_bad_url');
+    expect(await code(reg.check('https://[::1]/apps.json'))).toBe('repo_bad_url');
+    expect(() => reg.for(`${custom.url}/apps.json`)).toThrow(/Only https/);
+    // A custom repository whose own server is local is refused even when the name resolves later (pinned check).
+    const c = new RepoClient(`${custom.url}/apps.json`, new UploadBudget(), { custom: true });
+    expect(await code(c.list())).toBe('repo_bad_response');
+  });
+
+  it('lists, describes and installs from a custom repository, separate from the official one', async () => {
+    const reg = local();
+    const index = `${custom.url}/apps.json`;
+    const { packages } = await reg.for(index).list();
+    expect(packages.map((p) => p.id)).toEqual(['org.example.custom', 'org.example.custom2']);
+    expect((await reg.for().list()).packages.some((p) => p.id === 'org.example.custom')).toBe(false);
+    expect(reg.for(index)).toBe(reg.for(index)); // one client per repository, kept in memory
+    expect(await code(reg.for(index).get('com.example.repoapp'))).toBe('repo_not_found');
+
+    const res = await installFromRepo(pool, reg.for(index), devmode(devTv), 'org.example.custom', 'stable');
+    expect(res).toEqual({ appId: 'org.example.custom', version: '2.0.0', via: 'devmode' });
+    expect(devTv.state.apps.find((a) => a.id === 'org.example.custom')?.version).toBe('2.0.0');
   });
 });
