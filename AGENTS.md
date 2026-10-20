@@ -71,6 +71,8 @@ pnpm bridge         # the built bridge as users run it from a clone (serves the 
 pnpm lint && pnpm typecheck
 pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
 pnpm app            # the standalone bridge app for this OS → apps/bridge/release (after pnpm build)
+docker build -t lg-dev-manager:dev .   # the Docker image (Dockerfile; compose.yaml runs it in LAN mode)
+node apps/bridge/scripts/docker-smoke.mjs lg-dev-manager:dev http://<this machine's IP>:5199   # with the mock TV running
 # Release: see PLAN.md §11 (npm package bundles apps/web/dist as the local page; prepack copies it + LICENSE/NOTICE;
 # a bridge-v* tag publishes npm and the GitHub release with the apps)
 ```

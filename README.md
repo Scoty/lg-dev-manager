@@ -83,6 +83,33 @@ bridge. **http://localhost:5199** is served from your computer by the bridge its
 the website can't be reached, and it always matches your bridge's version. Each keeps its own list of TVs (browsers store them per site); use **Export backup** / **Import backup** on
 the Devices page to move them.
 
+<a id="docker"></a>
+
+## Run it on a home server (Docker)
+
+Prefer to run it once on a NAS or home server and use it from any computer on your network? Use the Docker image
+(Linux, amd64 or arm64). Save [`compose.yaml`](compose.yaml) on the server, set `LGDM_PUBLIC_URL` in it to the address
+you'll open (e.g. `http://nas.local:5199` or the server's IP), then:
+
+```bash
+docker compose up -d
+docker compose logs lg-dev-manager    # shows the pairing link
+```
+
+Open the pairing link in each browser that should use it and click **Pair**. The page is served by the container
+itself, at the address you set; your TVs, keys and passwords are still stored only in each browser. To update:
+`docker compose pull && docker compose up -d`.
+
+> ⚠️ **Keep it on your local network.** It controls your TVs: never forward its port on your router or put a Cloudflare
+> Tunnel (or any tunnel or relay) in front of it. It only answers devices on your local network, and it uses plain
+> HTTP — for encryption, put it behind your own HTTPS reverse proxy and use the proxy's `https://` address as
+> `LGDM_PUBLIC_URL`.
+
+It uses host networking (`network_mode: host`), so the TV scan sees your network and the bridge sees who connects.
+Devices on a network that isn't a private range (e.g. global IPv6 from another subnet) can be let in with
+`LGDM_ALLOWED_NETWORKS`. The same works without Docker: `npx lg-dev-manager-bridge@latest --listen 0.0.0.0
+--public-url http://nas.local:5199`.
+
 <a id="how-it-works"></a>
 
 ## How it works
@@ -195,6 +222,8 @@ Bridge options (`--help`; with the app, run it from a terminal: `lg-dev-manager-
 | Option | |
 |---|---|
 | `--port <n>` | Port to listen on (default 5199) |
+| `--listen <address>` | Share it on your network, e.g. `0.0.0.0` (needs `--public-url`; [see Docker](#docker)) |
+| `--public-url <url>` | The address you open a shared bridge at, e.g. `http://nas.local:5199` |
 | `--no-ui` | Don't serve the local page |
 | `--allow-origin <url>` | Also accept another origin, e.g. a self-hosted copy of the web app |
 | `--reset-token` | Make a new pairing token (un-pairs every browser) |

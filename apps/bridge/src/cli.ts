@@ -44,7 +44,15 @@ async function main() {
     return;
   }
   const config = parseArgs(argv);
-  await startServer(config);
+  const server = await startServer(config);
+  // `docker stop` sends SIGTERM, and Node running as PID 1 in a container ignores it without a handler (the stop would
+  // then wait ten seconds and kill it). Close and exit at once; there's nothing to save.
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => {
+      server.close();
+      process.exit(0);
+    });
+  }
 
   const local = `http://localhost:${config.port}`;
   console.log(`\n  LG Dev Manager bridge ${BRIDGE_VERSION}`);

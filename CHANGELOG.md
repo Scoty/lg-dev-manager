@@ -9,7 +9,11 @@
   `--public-url` share the bridge with browsers on your network, which open the page it serves. Off unless asked for.
   Only devices on your local network get in, nothing forwarded from the internet (e.g. a Cloudflare Tunnel), pairing
   attempts are rate-limited per device, and the page warns that plain HTTP isn't encrypted.
+- 🐳 **Docker image** `ghcr.io/scoty/lg-dev-manager` (amd64, arm64) and a `compose.yaml`: the bridge and the web app
+  on a home server, in LAN mode, as a non-root user on a read-only filesystem with a health check. `docker compose
+  up -d`, open the pairing link from the logs, done. The update notice says to `docker compose pull`.
 - Copy buttons, the terminal and screenshots also work on pages served over plain HTTP.
+- The bridge stops at once on SIGTERM (`docker stop`).
 
 ## 1.0.5 — 2026-10-20
 

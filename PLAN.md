@@ -401,3 +401,11 @@ Local builds use the code's own version.
    need an Apple Developer ID (notarization) and a Windows code-signing certificate. The app opens
    https://lg.scoty.uk on start (`--no-open` to skip) and reports `distribution: 'app'` in `system.hello`, so the
    update notice points to the releases page. About 120 MB unpacked (it is mostly Node.js), 40 MB to download.
+7. `bridge-v*` also runs **Publish the Docker image** (`.github/workflows/release-docker.yml`, 2.0): builds the
+   `Dockerfile` (the packed npm package with its production dependencies on `node:<.nvmrc>-alpine`, built once on the
+   runner's platform and copied into the amd64 and arm64 images), tests the amd64 image with
+   `apps/bridge/scripts/docker-smoke.mjs` (as compose runs it: host networking, read-only, no capabilities), then pushes
+   `ghcr.io/scoty/lg-dev-manager:X.Y.Z`, `X.Y`, `X` and `latest` with provenance and an SBOM. CI's `docker` job runs the
+   same build and test on every PR. **One-time:** after the first push, make the package public (GitHub → Packages →
+   lg-dev-manager → Package settings → Change visibility). The image sets `LGDM_DISTRIBUTION=docker`,
+   `LGDM_STATE_DIR=/data` (the token, in a volume) and `LGDM_LISTEN=0.0.0.0`; compose adds `LGDM_PUBLIC_URL`.

@@ -1,0 +1,30 @@
+# LG Dev Manager on a home server or NAS: `docker compose up -d`, then open the pairing link from
+# `docker compose logs lg-dev-manager` in each browser that should use it.
+#
+# Change LGDM_PUBLIC_URL to the address you open it at (a name like http://nas.local:5199 or the server's IP). Only
+# requests for that address are answered, only from devices on your local network.
+#
+# ⚠️ Never make it reachable from the internet — no port forwarding, no Cloudflare Tunnel or other tunnel/relay on the
+# server. It controls your TVs. It uses plain HTTP: for encryption, put it behind your own HTTPS reverse proxy and set
+# LGDM_PUBLIC_URL to the proxy's https:// address.
+services:
+  lg-dev-manager:
+    image: ghcr.io/scoty/lg-dev-manager:2
+    container_name: lg-dev-manager
+    # Host networking: the TV scan needs the server's own network, and the bridge must see who connects (with port
+    # publishing Docker hides every client's real address). Linux only.
+    network_mode: host
+    environment:
+      LGDM_PUBLIC_URL: ${LGDM_PUBLIC_URL:-http://nas.local:5199}
+      # LGDM_PORT: 5199                    # another port
+      # LGDM_ALLOWED_NETWORKS: 2001:db8::/56   # devices on a network that isn't a private range
+      # LGDM_TOKEN: ...                    # your own token (16+ characters); unset = a random one, kept in /data
+    volumes:
+      - lgdm-data:/data # the pairing token only — your TVs stay in each browser
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  lgdm-data:

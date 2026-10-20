@@ -1,0 +1,92 @@
+name: Publish the Docker image
+
+# Pushing a tag bridge-vX.Y.Z (the same tag that publishes npm and the apps) builds the image for amd64 and arm64,
+# tests it, and pushes it to ghcr.io/scoty/lg-dev-manager as X.Y.Z, X.Y, X and latest — with provenance and an SBOM.
+#
+# One-time setup (PLAN.md §11): after the first push, make the package public on GitHub (Your profile → Packages →
+# lg-dev-manager → Package settings → Change visibility); new packages start private.
+on:
+  push:
+    tags: ['bridge-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing bridge-vX.Y.Z tag to (re)publish
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/scoty/lg-dev-manager
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io with the workflow's own token
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - name: Tag matches the package version
+        id: version
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          version=$(node -p "require('./apps/bridge/package.json').version")
+          test "$TAG" = "bridge-v$version" || { echo "Tag $TAG doesn't match apps/bridge/package.json version $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      # Tested before anything is pushed: the amd64 image, run as compose runs it (see ci.yml's docker job).
+      - name: Build for the test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: lg-dev-manager:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Test it
+        run: |
+          pnpm --filter @lgdm/mock-tv start > "$RUNNER_TEMP/mock-tv.log" 2>&1 &
+          for i in $(seq 60); do (echo > /dev/tcp/127.0.0.1/9922) 2>/dev/null && break; sleep 1; done
+          node apps/bridge/scripts/docker-smoke.mjs lg-dev-manager:test "http://$(hostname -I | awk '{print $1}'):5199"
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}},value=${{ steps.version.outputs.version }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=LG Dev Manager
+            org.opencontainers.image.description=Manage LG webOS TVs from your browser — the bridge and web app for a home server
+            org.opencontainers.image.url=https://lg.scoty.uk
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push (amd64, arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
