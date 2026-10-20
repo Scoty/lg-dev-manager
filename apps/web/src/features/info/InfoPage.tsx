@@ -293,8 +293,9 @@ function AutoRenewDialog({ open, onClose, device, token }: { open: boolean; onCl
             </>
           ) : (
             <Alert kind="info">
-              The script needs the TV’s SSH key in the usual PEM / OpenSSH form, and an address and user name the add-TV form accepts. This TV’s
-              saved settings don’t have that — edit the TV, or use the renew URL instead.
+              {device.auth
+                ? 'The script needs the TV’s SSH key in the usual PEM / OpenSSH form, and an address and user name the add-TV form accepts. This TV’s saved settings don’t have that — edit the TV, or use the renew URL instead.'
+                : 'This TV is stored on the bridge, which never sends its key back to a browser, so the script (which holds the key) can’t be made here. Use the renew URL instead.'}
             </Alert>
           ))}
         {tab === 'ifttt' && (

@@ -48,7 +48,7 @@ export function DevicesPage() {
       title: `Remove ${d.name}?`,
       message: (
         <>
-          This removes <b>{d.name}</b> and its saved {describeLogin(d.auth)} from this browser. Nothing on the TV changes, and you can
+          This removes <b>{d.name}</b> and its saved {describeLogin(d.auth ?? d.login)} from {d.auth ? 'this browser' : 'the bridge'}. Nothing on the TV changes, and you can
           add it again later.
         </>
       ),
@@ -129,7 +129,7 @@ export function DevicesPage() {
                         <td className="hide-sm">
                           <span className={`badge ${d.mode === 'rooted' ? 'purple' : 'info'}`}>{d.mode === 'rooted' ? 'Rooted' : 'Dev Mode'}</span>
                         </td>
-                        <td className="data-cell-mono hide-sm">{d.username} · {describeLogin(d.auth)}</td>
+                        <td className="data-cell-mono hide-sm">{d.username} · {describeLogin(d.auth ?? d.login)}</td>
                         <td>
                           {active ? (
                             <span className="badge success dot">Active</span>

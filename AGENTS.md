@@ -27,11 +27,15 @@ It has two parts (see `PLAN.md` §1 for why):
    clients on the local network, nothing forwarded from the internet, and wrong tokens are rate-limited. The Vite dev origins are accepted only with `--dev` (`pnpm dev:bridge`).
    Don't add flags that disable these without an explicit, documented reason. Anything a web page can send the
    bridge (frames, URLs, uploads) must fail that request, never the process — see PLAN.md §10.
-3. **User settings live only in the browser.** Saved TVs (names, addresses, keys, passwords) are kept in
-   IndexedDB (`apps/web/src/devices/store.ts`) and the bridge pairing in `localStorage`. Nothing is ever sent to
-   the website or any third party. Device details go **only to the paired bridge**, inside the RPC that needs them.
-   The bridge must **never persist** device details (no device files, no caches on disk) and must **never log or
-   echo** keys/passwords — not in logs, error messages or `detail`. Only its own pairing token is stored on disk.
+3. **User settings live in the browser — or, opt-in, on the bridge.** By default saved TVs (names, addresses, keys,
+   passwords) are kept in IndexedDB (`apps/web/src/devices/store.ts`) and the bridge pairing in `localStorage`, and the
+   bridge must **never persist** device details — only its own pairing token is on disk. The one exception is
+   **bridge storage** (2.0, `--store` / `LGDM_STORE=1`, on in the Docker image; `apps/bridge/src/store/store.ts`): the
+   bridge keeps the TVs with their logins, the custom repositories and the screenshots in its data folder (files 0600,
+   folder 0700) for every paired browser — and **never sends a stored login back** to any browser (they get
+   `StoredDevice` with a `login` summary and name TVs by `{ stored: id }`). Either way nothing is ever sent to the
+   website or any third party, device details go **only to the paired bridge**, and the bridge must **never log or
+   echo** keys/passwords — not in logs, error messages or `detail`.
    Keep the production Content-Security-Policy strict (no third-party/inline scripts, no new `connect-src` hosts
    without a reason), and never render TV-supplied text as HTML.
 4. **Behavioural parity with the original.** When implementing a feature, read the matching code in
@@ -132,7 +136,7 @@ node apps/bridge/scripts/docker-smoke.mjs lg-dev-manager:dev http://<this machin
 | Recommended connection | **Rooted (Homebrew Channel SSH)** is listed first and preselected in the wizard; Developer Mode is for TVs that aren't rooted (owner decision, Oct 2026) | Decided |
 | UI framework | React 19 + Vite + TypeScript | Decided |
 | v1 scope | **Full parity** with the desktop app (all of PLAN.md §3, incl. Debug tools) before the public release | Decided |
-| Device/key storage | **Browser only** (IndexedDB + export/import); bridge is stateless and never writes device details to disk | Decided (owner, Oct 2026) |
+| Device/key storage | **Browser** (IndexedDB + export/import) by default; the bridge is stateless (owner, Oct 2026). From 2.0, opt-in **bridge storage** (`--store`, on in Docker): TVs with logins, custom repositories and screenshots in the bridge's data folder, shared by every paired browser; logins never go back to browsers; plain files protected by permissions (no encryption); a browser's own TVs can be moved there (owner, 20 Oct 2026) | Decided |
 | Repo license | Apache-2.0 — free use, attribution via NOTICE (owner, Oct 2026) | Decided |
 | Hosting | GitHub Pages with custom domain **lg.scoty.uk** (Cloudflare DNS), public preview from now, v1.0 at M10 | Decided |
 | Repository | **github.com/Scoty/lg-dev-manager** | Decided |

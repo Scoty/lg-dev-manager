@@ -14,6 +14,8 @@ import { LitefinClient } from './litefin/litefin.js';
 import { ShellSessions } from './shell/shells.js';
 import { forwardedProblem, isLanClient, limiterKey, PairingLimiter } from './lan.js';
 import { takePairRedirect } from './pairing.js';
+import { BridgeStore } from './store/store.js';
+import { STORE_CHANGED_EVENT } from '@lgdm/protocol';
 import { ErrorCodes } from '@lgdm/protocol';
 
 export const RPC_PATH = '/rpc';
@@ -57,6 +59,10 @@ export function startServer(
 ): Promise<Server> {
   const repos = new RepoRegistry(repo);
   const lan = config.lan;
+  // Storage (--store): every paired browser hears about each change, so they all show the same TVs.
+  const store = config.storeDir ? new BridgeStore(config.storeDir) : undefined;
+  const sessions = new Set<Session>();
+  if (store) store.onChange = (change) => sessions.forEach((s) => s.authed && s.emit(STORE_CHANGED_EVENT, change));
   const publicHosts = (lan?.publicUrls ?? []).map((u) => new URL(u).host.toLowerCase());
   const limiter = new PairingLimiter();
   /**
@@ -180,6 +186,7 @@ export function startServer(
       shells: undefined as unknown as ShellSessions,
     };
     session.shells = new ShellSessions(pool, (event, data) => session.emit(event, data));
+    sessions.add(session);
     // Unpaired sockets get a short window to authenticate.
     const authTimer = setTimeout(() => {
       if (!session.authed) ws.close(4401, 'pairing timeout');
@@ -209,7 +216,7 @@ export function startServer(
         // other connections are counted too.
         if (limited) limiter.failed(key);
       }
-      const res = await dispatch(data.toString(), session, { token: config.token, pool, repos, litefin, lgeUrl: config.lgeUrl, dev: config.dev, lan: !!lan });
+      const res = await dispatch(data.toString(), session, { token: config.token, pool, repos, litefin, lgeUrl: config.lgeUrl, dev: config.dev, lan: !!lan, store });
       if (res && ws.readyState === ws.OPEN) ws.send(JSON.stringify(res));
       if (unauthed && session.authed) {
         if (limited) limiter.succeeded(key);
@@ -219,6 +226,7 @@ export function startServer(
       }
     });
     ws.on('close', () => {
+      sessions.delete(session);
       clearTimeout(authTimer);
       clearInterval(heartbeat);
       session.uploads.clear();

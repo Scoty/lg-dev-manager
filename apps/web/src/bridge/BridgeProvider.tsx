@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BridgeClient, BridgeError } from './client';
 import { bridgeUrlProblem, loadSettings, saveSettings, type BridgeSettings } from './settings';
+import { BridgeFeatures } from '@lgdm/protocol';
+import { resetStorage, setStorageBridge } from '../storage/backend';
 
 export type BridgeStatus =
   | { state: 'unpaired' }
@@ -54,6 +56,8 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       if (gen !== generation.current) return c.close();
       attempt.current = 0;
       setClient(c);
+      // Where the TVs live: on this bridge if it stores them (2.0, --store), else in this browser.
+      setStorageBridge(c, !!hello.features?.includes(BridgeFeatures.ServerStore));
       setStatus({
         state: 'connected',
         bridgeVersion: hello.bridgeVersion,
@@ -65,6 +69,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       c.onClose = (reason) => {
         if (gen !== generation.current) return;
         setClient(null);
+        setStorageBridge(null);
         if (reason === 'unauthorized') {
           setStatus({ state: 'error', code: 'unauthorized', message: 'The bridge rejected the pairing token.' });
           return;
@@ -134,6 +139,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
         saveSettings(null);
         setSettings(null);
         setClient(null);
+        resetStorage();
         setStatus({ state: 'unpaired' });
       },
     }),

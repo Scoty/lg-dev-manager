@@ -1,9 +1,11 @@
 import { useSyncExternalStore } from 'react';
 import { z } from 'zod';
 import { CustomRepoUrl } from '@lgdm/protocol';
+import { storageClient, storageListeners, storageMode } from '../storage/backend';
 
 /**
- * Custom (unofficial) app repositories the user added, kept only in this browser like the rest of the settings.
+ * Custom (unofficial) app repositories the user added, kept in this browser like the rest of the settings — or on the
+ * paired bridge when it stores them (2.0, storage/backend.ts), shared by every browser paired with it.
  * The address goes to the paired bridge inside the repo calls that need it, nowhere else.
  */
 export const CustomRepo = z.object({
@@ -24,7 +26,52 @@ export const MAX_CUSTOM_REPOS = 20;
 const listeners = new Set<() => void>();
 let cache: CustomRepo[] | null = null;
 
+/** On the bridge: its list once loaded (null: not yet), kept up to date from its change events. */
+let bridgeList: CustomRepo[] | null = null;
+let loading = false;
+
+function loadFromBridge() {
+  if (loading) return;
+  loading = true;
+  void (async () => {
+    try {
+      const { repos } = await storageClient().call('store.repos.get');
+      bridgeList = repos.flatMap((r) => {
+        const p = CustomRepo.safeParse(r);
+        return p.success ? [p.data] : [];
+      });
+      cache = null;
+      listeners.forEach((l) => l());
+    } catch {
+      /* away: tried again when it's back (storageListeners) */
+    } finally {
+      loading = false;
+    }
+  })();
+}
+
+storageListeners.add((change) => {
+  if (change.what !== 'repos' && change.what !== 'mode') return;
+  bridgeList = null;
+  cache = null;
+  if (storageMode() === 'bridge') loadFromBridge();
+  listeners.forEach((l) => l());
+});
+
+/** This browser's own list (localStorage) — whatever the mode (moving it to the bridge reads this). */
+export function loadBrowserRepos(): CustomRepo[] {
+  return readBrowser();
+}
+
 function read(): CustomRepo[] {
+  if (storageMode() === 'bridge') {
+    if (!bridgeList) loadFromBridge();
+    return bridgeList ?? [];
+  }
+  return readBrowser();
+}
+
+function readBrowser(): CustomRepo[] {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? '[]') as unknown;
     const list = z.array(z.unknown()).parse(raw);
@@ -45,12 +92,40 @@ export function loadCustomRepos(): CustomRepo[] {
 
 function save(list: CustomRepo[]) {
   cache = list;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(list));
-  } catch {
-    /* storage unavailable: kept for this visit only */
+  if (storageMode() === 'bridge') {
+    // Shown at once; the bridge then tells every paired browser (this one too, which reloads its list).
+    bridgeList = list;
+    storageClient()
+      .call('store.repos.set', { repos: list })
+      .catch(() => {
+        bridgeList = null;
+        cache = null;
+        loadFromBridge();
+      });
+  } else {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(list));
+    } catch {
+      /* storage unavailable: kept for this visit only */
+    }
   }
   listeners.forEach((l) => l());
+}
+
+/** Move this browser's own list to the bridge (adding to what it has), then clear it here. */
+export async function moveBrowserReposToBridge(): Promise<number> {
+  const mine = readBrowser();
+  if (!mine.length) return 0;
+  const { repos } = await storageClient().call('store.repos.get');
+  const known = new Set(repos.map((r) => r.url));
+  const merged = [...repos, ...mine.filter((r) => !known.has(r.url))].slice(0, MAX_CUSTOM_REPOS);
+  await storageClient().call('store.repos.set', { repos: merged });
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    /* storage unavailable */
+  }
+  return mine.length;
 }
 
 const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => (b % 36).toString(36)).join('') + Date.now().toString(36).slice(-4);
@@ -107,7 +182,7 @@ function subscribe(l: () => void) {
   listeners.add(l);
   // Another tab added or removed one.
   const onStorage = (e: StorageEvent) => {
-    if (e.key !== KEY) return;
+    if (e.key !== KEY || storageMode() === 'bridge') return;
     cache = null;
     l();
   };

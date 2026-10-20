@@ -11,7 +11,9 @@
  *  - a fake GitHub serving Litefin's releases (tools/mock-tv/src/github.ts) on 127.0.0.1:5297,
  *  - a second fake repository on 127.0.0.1:5296, for custom repositories (http on 127.0.0.1, so the bridge runs with
  *    the test-only LGDM_TEST_ALLOW_LOCAL_REPOS — real bridges take https repositories on the internet only),
- *  - the bridge on 127.0.0.1:5299 serving the built web UI (apps/web/dist), pairing token "e2e-token".
+ *  - the bridge on 127.0.0.1:5299 serving the built web UI (apps/web/dist), pairing token "e2e-token",
+ *  - a second bridge on 127.0.0.1:5295 that stores the TVs, repositories and screenshots itself (--store, 2.0;
+ *    store.spec.ts), same token.
  * Run with: pnpm --filter @lgdm/web e2e:server
  */
 import { mkdtempSync } from 'node:fs';
@@ -32,6 +34,8 @@ export const E2E = {
   githubPort: Number(process.env.E2E_GITHUB_PORT ?? 5297),
   /** A second fake repository, added in the tests as a custom (unofficial) one. */
   customRepoPort: Number(process.env.E2E_CUSTOM_REPO_PORT ?? 5296),
+  /** A bridge that stores the TVs itself (--store). */
+  storeBridgePort: Number(process.env.E2E_STORE_BRIDGE_PORT ?? 5295),
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -66,7 +70,22 @@ await startServer({
   dev: true,
 });
 
+const storeOrigins = [`http://127.0.0.1:${E2E.storeBridgePort}`, `http://localhost:${E2E.storeBridgePort}`];
+await startServer({
+  host: '127.0.0.1',
+  port: E2E.storeBridgePort,
+  allowedOrigins: storeOrigins,
+  token: E2E.token,
+  webRoot: join(here, '..', 'dist'),
+  repoUrl: repo.url,
+  lgeUrl: lge.url,
+  litefinUrl: github.url,
+  dev: true,
+  storeDir: mkdtempSync(join(tmpdir(), 'lgdm-e2e-store-')),
+});
+
 console.log(`e2e rig ready: UI ${origins[0]}  token ${E2E.token}`);
+console.log(`  Storing bridge ${storeOrigins[0]} (keeps TVs, repositories and screenshots itself)`);
 console.log(`  Dev Mode TV 127.0.0.1:${devTv.sshPort} (key server ${devTv.keyServerPort}, passphrase ${E2E.passphrase})`);
 console.log(`  Rooted TV   127.0.0.1:${rootTv.sshPort} (root / alpine, Homebrew Channel)`);
 console.log(`  No-PTY TV   127.0.0.1:${noPtyTv.sshPort} (root / alpine, refuses PTYs)`);

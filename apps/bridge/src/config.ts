@@ -30,6 +30,11 @@ export interface BridgeConfig {
    * network. Undefined: this computer only (127.0.0.1), as always.
    */
   lan?: LanConfig;
+  /**
+   * Bridge-side storage (2.0, opt-in: --store / LGDM_STORE=1; on in the Docker image): the folder that keeps the TVs
+   * (with their logins), the custom repositories and the screenshots — the same folder as the pairing token.
+   */
+  storeDir?: string;
 }
 
 /** Hosts that mean "this computer" for `--listen`. */
@@ -165,6 +170,7 @@ export function parseArgs(argv: string[]): BridgeConfig {
     lgeUrl: process.env.LGDM_LGE_URL,
     litefinUrl: process.env.LGDM_LITEFIN_URL,
     dev,
+    storeDir: argv.includes('--store') || /^(1|true|yes|on)$/i.test(process.env.LGDM_STORE ?? '') ? stateDir() : undefined,
     lan: lanMode ? { publicUrls: [...new Set(publicUrls)], extraNetworks: parseNetworks(process.env.LGDM_ALLOWED_NETWORKS) } : undefined,
   };
 }

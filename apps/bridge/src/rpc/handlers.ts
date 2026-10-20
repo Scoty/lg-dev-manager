@@ -21,6 +21,7 @@ import {
   type ParamsOf,
   type ResultOf,
   BridgeFeatures,
+  StoreErrorCodes,
 } from '@lgdm/protocol';
 import { RpcError } from './errors.js';
 import { BRIDGE_VERSION } from '../version.js';
@@ -41,6 +42,7 @@ import type { LitefinClient } from '../litefin/litefin.js';
 import type { ShellSessions } from '../shell/shells.js';
 import { homeDir, listDir, makeDir, readChunk, removePath, renameFile, statFile, writeFile } from '../files/files.js';
 import type { UploadStore } from './uploads.js';
+import type { BridgeStore } from '../store/store.js';
 import { LineBatcher, clearLog, deleteCrashReport, enableDevLogs, listCrashReports, logCommand, pmLogSet, pmLogShow, readCrashReport, requireRoot } from '../debug/debug.js';
 
 export interface Session {
@@ -104,7 +106,15 @@ export interface Context {
   dev?: boolean;
   /** LAN mode: shared on the local network (reported in system.hello). */
   lan?: boolean;
+  /** Bridge-side storage (--store): the TVs, custom repositories and screenshots. */
+  store?: BridgeStore;
 }
+
+/** The bridge's storage, or a clear error when it was started without --store. */
+const storeOf = (ctx: Context): BridgeStore => {
+  if (!ctx.store) throw new RpcError(StoreErrorCodes.Off, 'This bridge doesn’t store TVs (start it with --store).');
+  return ctx.store;
+};
 
 /** Console commands and followed logs one tab may run at once. */
 const MAX_STREAMS = 16;
@@ -144,7 +154,7 @@ export const handlers: HandlerMap = {
       bridgeVersion: BRIDGE_VERSION,
       platform: platform(),
       distribution: distribution(),
-      features: [BridgeFeatures.CustomRepos],
+      features: [BridgeFeatures.CustomRepos, ...(ctx.store ? [BridgeFeatures.ServerStore] : [])],
       ...(ctx.lan ? { lan: true } : {}),
     };
   },
@@ -299,6 +309,18 @@ export const handlers: HandlerMap = {
   'crashes.list': ({ device }, session, ctx) => listCrashReports(sshFor(session, ctx), device),
   'crashes.read': ({ device, path }, session, ctx) => readCrashReport(sshFor(session, ctx), device, path),
   'crashes.delete': async ({ device, path }, session, ctx) => (await deleteCrashReport(sshFor(session, ctx), device, path), {}),
+
+  'store.devices.list': (_p, _s, ctx) => ({ devices: storeOf(ctx).listDevices() }),
+  'store.devices.save': async ({ device }, _s, ctx) => ({ device: await storeOf(ctx).saveDevice(device) }),
+  'store.devices.setInfo': async ({ id, info }, _s, ctx) => (await storeOf(ctx).setDeviceInfo(id, info), {}),
+  'store.devices.remove': async ({ id }, _s, ctx) => (await storeOf(ctx).removeDevice(id), {}),
+  'store.devices.import': async ({ devices }, _s, ctx) => ({ imported: await storeOf(ctx).importDevices(devices) }),
+  'store.repos.get': (_p, _s, ctx) => ({ repos: storeOf(ctx).getRepos() }),
+  'store.repos.set': async ({ repos }, _s, ctx) => (await storeOf(ctx).setRepos(repos), {}),
+  'store.shots.list': ({ deviceId }, _s, ctx) => ({ shots: storeOf(ctx).listShots(deviceId) }),
+  'store.shots.get': ({ id }, _s, ctx) => storeOf(ctx).getShot(id),
+  'store.shots.add': async ({ deviceId, method, at, base64 }, _s, ctx) => ({ shot: await storeOf(ctx).addShot(deviceId, method, base64, at) }),
+  'store.shots.remove': async ({ ids }, _s, ctx) => (await storeOf(ctx).removeShots(ids), {}),
   'cmd.cancel': ({ opId }, session) => {
     const run = session.streams.get(opId);
     if (!run) return { cancelled: false };

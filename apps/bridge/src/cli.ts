@@ -18,6 +18,9 @@ Usage: lg-dev-manager-bridge [options]
                         the bridge (env LGDM_LISTEN; needs --public-url). Default: this computer only
   --public-url <url>    LAN mode: the address you open the bridge at, e.g. http://nas.local:5199 (repeatable,
                         env LGDM_PUBLIC_URL, comma-separated). Requests for other addresses are refused
+  --store               Keep the TVs (with their logins), custom repositories and screenshots in the bridge's
+                        data folder, shared by every paired browser (env LGDM_STORE=1; on in the Docker image).
+                        Browsers never get the logins back
   --reset-token         Generate a new pairing token (un-pairs existing browsers)
   --no-open             The app only: don't open ${PUBLIC_WEB_ORIGIN} in the browser on start (the local page still works)
   --version             Print the version
@@ -56,6 +59,7 @@ async function main() {
 
   const local = `http://localhost:${config.port}`;
   console.log(`\n  LG Dev Manager bridge ${BRIDGE_VERSION}`);
+  if (config.storeDir) console.log(`  Storage        TVs, logins, repositories and screenshots in ${config.storeDir} (readable by this user only)`);
   if (config.lan) {
     console.log(`  Listening on   ${config.host}:${config.port} — shared on your local network (LAN mode)`);
     console.log(`  Open           ${config.lan.publicUrls.join('  or  ')}`);

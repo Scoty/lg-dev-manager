@@ -12,6 +12,10 @@
 - 🐳 **Docker image** `ghcr.io/scoty/lg-dev-manager` (amd64, arm64) and a `compose.yaml`: the bridge and the web app
   on a home server, in LAN mode, as a non-root user on a read-only filesystem with a health check. `docker compose
   up -d`, open the pairing link from the logs, done. The update notice says to `docker compose pull`.
+- 🗄️ **TVs stored on the bridge** (`--store`, on in the Docker image): the TVs with their logins, the custom
+  repositories and the screenshots live in the bridge's data folder, so every browser and phone paired with it sees
+  the same ones, and changes show up everywhere at once. A TV's password or key goes to the bridge once and is never
+  sent back to a browser. TVs saved in a browser before can be moved there in one click (Devices page).
 - 📱 **Phones and tablets**, through a bridge on your network: every page fits a phone screen, the terminal has a bar
   with the keys a phone keyboard lacks (Esc, Tab, Ctrl+C/D/Z/L/R, arrows, `| ~ / -`), bigger touch targets, no zooming
   into text fields on iPhone, and TVs are listed as cards. Elsewhere the phone notice points to Docker.

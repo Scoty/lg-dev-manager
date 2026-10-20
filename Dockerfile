@@ -34,11 +34,13 @@ ENV NODE_ENV=production \
     LGDM_DISTRIBUTION=docker \
     LGDM_STATE_DIR=/data \
     LGDM_LISTEN=0.0.0.0 \
+    LGDM_STORE=1 \
     LGDM_PORT=5199
 WORKDIR /app
 COPY --from=build /app /app
 COPY --from=build --chown=node:node /data /data
-# Not root. The pairing token in /data is the only thing the bridge writes; the rest can be read-only.
+# Not root. /data (the pairing token, and the TVs, repositories and screenshots it stores: LGDM_STORE) is the only
+# place the bridge writes; the rest can be read-only.
 USER node
 VOLUME /data
 EXPOSE 5199

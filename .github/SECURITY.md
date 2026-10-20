@@ -22,7 +22,8 @@ put users at risk right now are fixed and disclosed sooner.
   listener, reaching hosts other than your TVs, reading files on your computer, or crashing it remotely. In LAN mode
   (the bridge shared on your network, e.g. in Docker): getting in from outside your local network, or around the
   host, origin and rate-limit checks. Someone on your own network reading plain-HTTP traffic is a known limit (use an
-  HTTPS reverse proxy).
+  HTTPS reverse proxy). With bridge storage (`--store`, on in Docker): getting a stored TV login back out of the bridge,
+  or reading its data folder without access to the server.
 - The web app (https://lg.scoty.uk and the local page): script injection, leaking your saved TVs, keys or passwords to
   anyone but your own bridge, or tricking you into actions on a TV.
 - The release and publishing workflows.

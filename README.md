@@ -97,7 +97,10 @@ docker compose logs lg-dev-manager    # shows the pairing link
 ```
 
 Open the pairing link in each browser that should use it — phones and tablets included — and click **Pair**. The page is served by the container
-itself, at the address you set; your TVs, keys and passwords are still stored only in each browser. To update:
+itself, at the address you set. The container stores your TVs — and their logins, custom repositories and
+screenshots — in `/data`, so every browser and phone you pair sees the same ones; a TV's password or key goes to the
+bridge once and is never sent back to any browser. TVs you saved in a browser before can be moved there from the
+Devices page. To update:
 `docker compose pull && docker compose up -d`.
 
 > ⚠️ **Keep it on your local network.** It controls your TVs: never forward its port on your router or put a Cloudflare
@@ -125,8 +128,10 @@ Browsers can't open SSH connections, so the app comes in two parts:
                                                                                           └──────────────┘
 ```
 
-- **The web app** is a static site, served at lg.scoty.uk and by the bridge as the local page. Saved TVs — names, addresses, keys and passwords — live only in your browser's
-  storage. They are never sent to the website; each request sends them to your own bridge, and only to it.
+- **The web app** is a static site, served at lg.scoty.uk and by the bridge as the local page. Saved TVs — names,
+  addresses, keys and passwords — live in your browser's storage. They are never sent to the website; each request
+  sends them to your own bridge, and only to it. (A bridge started with `--store`, like the Docker image, keeps them
+  instead, for every browser paired with it, and never sends the logins back.)
 - **The bridge** is a small Node.js program that does the SSH, SFTP and HTTP work the browser can't. It listens on
   `127.0.0.1` only (nothing else on your network can reach it), accepts only the app's own pages, needs the pairing
   token, and keeps nothing on disk except that token. It offers fixed operations — list apps, install, read a log —
@@ -224,6 +229,7 @@ Bridge options (`--help`; with the app, run it from a terminal: `lg-dev-manager-
 | `--port <n>` | Port to listen on (default 5199) |
 | `--listen <address>` | Share it on your network, e.g. `0.0.0.0` (needs `--public-url`; [see Docker](#docker)) |
 | `--public-url <url>` | The address you open a shared bridge at, e.g. `http://nas.local:5199` |
+| `--store` | Keep the TVs (with their logins), custom repositories and screenshots on the bridge, shared by every paired browser (on in Docker) |
 | `--no-ui` | Don't serve the local page |
 | `--allow-origin <url>` | Also accept another origin, e.g. a self-hosted copy of the web app |
 | `--reset-token` | Make a new pairing token (un-pairs every browser) |

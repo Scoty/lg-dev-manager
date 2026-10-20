@@ -1,4 +1,4 @@
-import { DEVMODE_SSH_PORT, DEVMODE_USER, ROOT_SSH_PORT, ROOT_USER, type DeviceAuth } from '@lgdm/protocol';
+import { DEVMODE_SSH_PORT, DEVMODE_USER, ROOT_SSH_PORT, ROOT_USER, type DeviceAuth, type LoginSummary } from '@lgdm/protocol';
 
 /** How the user is setting up a TV (mode-select.component.ts). */
 export type SetupMode = 'devmode' | 'rooted' | 'manual';
@@ -76,6 +76,10 @@ export function toDeviceAuth(a: AuthDraft): DeviceAuth | null {
 /** Shared with backup import and the renew script (devices/validate.ts). */
 export { hostProblem } from '../../devices/validate';
 
-export function describeLogin(auth: DeviceAuth): string {
-  return auth.kind === 'password' ? 'password' : auth.passphrase ? 'key + passphrase' : 'private key';
+/** How a TV logs in, in a few words — from its login, or (stored on the bridge) the bridge's summary of it. */
+export function describeLogin(auth: DeviceAuth | LoginSummary | undefined): string {
+  if (!auth) return 'login';
+  if (auth.kind === 'password') return 'password';
+  const passphrase = 'hasPassphrase' in auth ? auth.hasPassphrase : !!auth.passphrase;
+  return passphrase ? 'key + passphrase' : 'private key';
 }

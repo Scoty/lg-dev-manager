@@ -1,14 +1,125 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Alert } from '../../components/Alert';
 import { Icon } from '../../shell/icons';
-import { BackupError, clearAllDevices, exportDevices, importDevices, newCustomReposIn } from '../../devices/store';
+import { BackupError, clearAllDevices, exportDevices, importDevices, listBrowserDevices, moveBrowserDataToBridge, newCustomReposIn, subscribe } from '../../devices/store';
+import { loadBrowserRepos, moveBrowserReposToBridge } from '../../repos/store';
+import { moveBrowserShotsToBridge } from '../info/shots';
+import { useStorageMode } from '../../storage/backend';
+import { useBridge } from '../../bridge/BridgeProvider';
 import { saveBlob } from '../files/transfer';
 import { useDevices } from '../../devices/useDevices';
 import { useFeedback } from '../../components/Feedback';
 
 /** Shows where device settings live and lets the user back them up, move them, or wipe them. */
 export function DataPrivacyCard() {
+  const mode = useStorageMode();
+  return mode === 'bridge' ? <StoredOnBridgeCard /> : <InThisBrowserCard />;
+}
+
+/**
+ * The bridge stores the TVs (2.0, --store; the Docker image): say where they are and what browsers never get back, and
+ * offer to move this browser's own TVs (from before) there.
+ */
+function StoredOnBridgeCard() {
+  const { status } = useBridge();
+  const { confirm } = useFeedback();
+  const [own, setOwn] = useState<{ tvs: number; repos: number }>({ tvs: 0, repos: 0 });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'success' | 'danger'; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const connected = status.state === 'connected';
+
+  useEffect(() => {
+    let alive = true;
+    const check = () =>
+      listBrowserDevices()
+        .then((d) => alive && setOwn({ tvs: d.filter((x) => x.auth).length, repos: loadBrowserRepos().length }))
+        .catch(() => {});
+    check();
+    const off = subscribe(check);
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
+
+  const move = async () => {
+    const ok = await confirm({
+      title: 'Move this browser’s TVs to the bridge?',
+      message: `${own.tvs} TV${own.tvs === 1 ? '' : 's'} (with their logins and screenshots)${own.repos ? ` and ${own.repos} custom repositor${own.repos === 1 ? 'y' : 'ies'}` : ''} will be copied to the bridge, then removed from this browser. Every browser paired with the bridge will see them. The bridge keeps the logins and never sends them back.`,
+      confirmText: 'Move them',
+    });
+    if (!ok) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const n = await moveBrowserDataToBridge(moveBrowserShotsToBridge, async () => void (await moveBrowserReposToBridge()));
+      setMsg({ kind: 'success', text: `Moved ${n} TV${n === 1 ? '' : 's'} to the bridge.` });
+    } catch (e) {
+      setMsg({ kind: 'danger', text: `Nothing was removed from this browser: ${(e as Error).message}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doImport = async (file: File) => {
+    try {
+      const json: unknown = JSON.parse(await file.text());
+      const repos = newCustomReposIn(json);
+      const withRepos = repos.length > 0 && (await confirm({ title: 'Also add its custom repositories?', message: 'This backup also lists unofficial app repositories. They can contain untested apps or malware — add them only if you trust where the backup came from.', confirmText: 'Add them too', cancelText: 'Only the TVs' }));
+      const n = await importDevices(json, { customRepos: withRepos });
+      setMsg({ kind: 'success', text: `Imported ${n} TV${n === 1 ? '' : 's'} to the bridge.` });
+    } catch (e) {
+      setMsg({ kind: 'danger', text: e instanceof BackupError ? e.message : 'That file is not an LG Dev Manager device backup.' });
+    }
+  };
+
+  return (
+    <Card eyebrow="Privacy" title="Your TVs are stored on the bridge" className="col-12">
+      <div className="stack">
+        <p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
+          This bridge keeps the TVs — names, addresses, logins — and their screenshots and the custom repositories in its data
+          folder, readable only by the bridge, so every browser paired with it sees the same ones. A TV’s password or key goes
+          to the bridge when you add or change the TV and is never sent back to any browser. To back them up, back up the
+          bridge’s data folder (the <span className="mono">/data</span> volume in Docker).
+        </p>
+        {(own.tvs > 0 || own.repos > 0) && (
+          <Alert
+            kind="info"
+            title={`This browser also has ${[own.tvs ? `${own.tvs} TV${own.tvs === 1 ? '' : 's'}` : '', own.repos ? `${own.repos} custom repositor${own.repos === 1 ? 'y' : 'ies'}` : ''].filter(Boolean).join(' and ')} of its own`}
+            action={
+              <button type="button" className="btn btn--sm btn--primary" onClick={move} disabled={!connected || busy}>
+                {busy ? 'Moving…' : 'Move to the bridge'}
+              </button>
+            }
+          >
+            Saved here before this bridge stored them. They aren’t shown above until they’re moved.
+          </Alert>
+        )}
+        {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
+        <div className="row">
+          <button className="btn btn--ghost" onClick={() => fileRef.current?.click()} disabled={!connected}>
+            <Icon name="plus" /> Import a backup to the bridge
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) doImport(f);
+              e.target.value = '';
+            }}
+          />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function InThisBrowserCard() {
   const { devices } = useDevices();
   const { confirm } = useFeedback();
   const fileRef = useRef<HTMLInputElement>(null);

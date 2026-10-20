@@ -7,3 +7,4 @@ export * from './repo';
 export * from './files';
 export * from './debug';
 export * from './litefin';
+export * from './store';

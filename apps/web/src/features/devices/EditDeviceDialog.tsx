@@ -3,7 +3,7 @@ import { Modal } from '../../components/Modal';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { useFeedback } from '../../components/Feedback';
 import { useRpc } from '../../bridge/useRpc';
-import { updateDevice, type SavedDevice } from '../../devices/store';
+import { toTarget, updateDevice, type SavedDevice } from '../../devices/store';
 import { useDevices } from '../../devices/useDevices';
 import { AuthFields } from './AuthFields';
 import { authProblems, describeLogin, hostProblem, toDeviceAuth, type AuthDraft, type AuthKind } from './auth';
@@ -72,7 +72,7 @@ export function EditDeviceDialog({ device, onClose }: { device: SavedDevice | nu
       const connectionChanged =
         host.trim() !== device.host || port !== device.port || username !== device.username || auth.kind !== 'keep';
       if (ready && connectionChanged) {
-        call('device.disconnect', { device: { host: device.host, port: device.port, username: device.username, auth: device.auth } }).catch(() => {});
+        call('device.disconnect', { device: toTarget(device) }).catch(() => {});
       }
       await updateDevice(device.id, {
         name: name.trim(),
@@ -136,7 +136,7 @@ export function EditDeviceDialog({ device, onClose }: { device: SavedDevice | nu
           </div>
           <div className="span-2">
             <AuthFields value={auth} onChange={setAuth} kinds={kinds} username={username} showErrors={showErrors} onKeyCheck={onKeyCheck} rootedHint={device.mode === 'rooted'} />
-            {auth.kind === 'keep' && <p className="field-help" style={{ margin: '8px 0 0' }}>Currently: {describeLogin(device.auth)}.</p>}
+            {auth.kind === 'keep' && <p className="field-help" style={{ margin: '8px 0 0' }}>Currently: {describeLogin(device.auth ?? device.login)}{device.auth ? '' : ', kept on the bridge'}.</p>}
           </div>
         </div>
         {error !== null && <ErrorAlert error={error} title="Couldn’t save" />}

@@ -5,11 +5,24 @@ import {
   UNAUTHENTICATED_METHODS,
   type MethodName,
   type RpcResponse,
+  StoreErrorCodes,
 } from '@lgdm/protocol';
 import { RpcError } from './errors.js';
 import { handlers, type Context, type Session } from './handlers.js';
 
 const isMethod = (m: string): m is MethodName => Object.hasOwn(Methods, m);
+
+/**
+ * A call may name a TV the bridge stores ({ stored: id }, store.ts in the protocol) instead of carrying its login: put
+ * the full target in its place before the call is checked and run. Without storage (no --store) that's refused.
+ */
+function resolveStoredDevice(params: unknown, ctx: Context): unknown {
+  if (!params || typeof params !== 'object') return params;
+  const device = (params as { device?: unknown }).device;
+  if (!device || typeof device !== 'object' || !('stored' in device)) return params;
+  if (!ctx.store) throw new RpcError(StoreErrorCodes.Off, 'This bridge doesn’t store TVs (start it with --store).');
+  return { ...params, device: ctx.store.target(device) };
+}
 
 /** Parses one incoming frame and produces the response frame. Never throws. */
 export async function dispatch(raw: string, session: Session, ctx: Context): Promise<RpcResponse | null> {
@@ -28,7 +41,7 @@ export async function dispatch(raw: string, session: Session, ctx: Context): Pro
     if (!session.authed && !UNAUTHENTICATED_METHODS.includes(method)) {
       throw new RpcError(ErrorCodes.Unauthorized, 'Not paired. Send system.hello first.');
     }
-    const parsed = Methods[method].params.safeParse(req.data.params);
+    const parsed = Methods[method].params.safeParse(resolveStoredDevice(req.data.params, ctx));
     if (!parsed.success) {
       throw new RpcError(ErrorCodes.BadRequest, `Invalid parameters for ${method}`, parsed.error.message);
     }

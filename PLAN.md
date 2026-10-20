@@ -45,7 +45,14 @@ plus raw TCP to the Dev Mode **key server on port 9991**. A web page cannot open
 - **Saved TVs** (name, address, port, user, key/password): the browser's IndexedDB for the site's origin. Never uploaded
   to the website; sent only to the paired bridge for the call it is making. The bridge never writes them to disk or logs.
 - **Bridge pairing** (bridge address + token): browser `localStorage`.
-- **On the bridge**: only its own pairing token (`~/.lg-dev-manager/bridge.json`).
+- **On the bridge**: only its own pairing token (`~/.lg-dev-manager/bridge.json`) — unless it was started with
+  **`--store`** (2.0; `LGDM_STORE=1`, on in the Docker image). Then it also keeps the TVs with their logins
+  (`devices.json`), the custom repositories (`repos.json`) and the screenshots (`screenshots/`, `screenshots.json`) in
+  the same folder (0700, files 0600, atomic writes), shared by every paired browser and kept in step with a
+  `store.changed` event. Logins go in (add / edit / import / "Move to the bridge") and never come out: browsers get
+  `StoredDevice` (a `login` summary) and send `{ stored: id }` as `device`, which the bridge swaps for the full target
+  before the call is checked (`rpc/dispatch.ts`). Export backup is for browser storage only; with bridge storage, back
+  up the data folder. The page remembers per site which storage its bridge uses (`apps/web/src/storage/backend.ts`).
 - Storage is **per origin**: `lg.scoty.uk`, `localhost:5173` and the bridge-served copy (`localhost:5199`) each have their own list.
   The Devices page has **export / import** (a JSON backup — contains keys, so the UI warns) and **remove all**.
 - The public site ships a strict **Content-Security-Policy** (no third-party or inline scripts; connections only to

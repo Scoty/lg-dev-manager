@@ -91,6 +91,11 @@ try {
   const session = await rpc(token);
   const hello = session.hello.result;
   check(hello?.lan === true && hello?.distribution === 'docker', `it pairs and says it is the Docker bridge in LAN mode (${JSON.stringify(hello)})`);
+  check(hello?.features?.includes('serverStore'), 'it stores the TVs');
+  const saved = await session.call('store.devices.save', {
+    device: { id: 'smoke-tv', name: 'Smoke TV', mode: 'devmode', host: '127.0.0.1', port: 9922, username: 'prisoner', auth: { kind: 'password', password: 'smoke-secret' } },
+  });
+  check(saved.result?.device?.login?.kind === 'password' && !JSON.stringify(saved).includes('smoke-secret'), 'it keeps a TV and doesn’t send its login back');
   const tv = (await session.call('device.checkConnection', { host: '127.0.0.1' })).result;
   check(tv?.ssh9922 === true, `it reaches the mock TV on this machine (${JSON.stringify(tv)})`);
   session.close();
@@ -101,6 +106,10 @@ try {
   docker('start', name);
   check(await untilHealthy(), 'it starts again');
   check(/Pairing token\s+(\S+)/.exec(docker('logs', '--since', '1m', name).split('LG Dev Manager bridge').at(-1))?.[1] === token, 'with the same token (kept in /data)');
+  const again = await rpc(token);
+  const list = (await again.call('store.devices.list')).result?.devices ?? [];
+  check(list.some((d) => d.id === 'smoke-tv'), 'and the stored TV (kept in /data)');
+  again.close();
 } finally {
   if (failures) console.log(docker('logs', name));
   try {
