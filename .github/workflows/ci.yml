@@ -78,7 +78,14 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Playwright uses the runner's preinstalled Google Chrome in CI (apps/web/playwright.config.ts), so nothing to install.
+      # Playwright's headless Chromium, cached between runs. No --with-deps: the Ubuntu runners already have the system
+      # libraries (they ship Google Chrome), and installing them every run took ~20 s. (Running the tests on that
+      # preinstalled Chrome instead was ~10 s slower than this lightweight build.)
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm --filter @lgdm/web exec playwright install --only-shell chromium
       # The rig's fake TV is 127.0.0.1; the runner's own SSH server on port 22 would make it look like a rooted TV
       # with SSH on (the wizard test needs that port closed).
       - name: Stop the runner's SSH server

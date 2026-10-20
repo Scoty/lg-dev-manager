@@ -23,9 +23,6 @@ export default defineConfig({
     // tests' traces were thrown away. Now only a retried test (CI retries once) records one; locally use --trace on.
     trace: 'on-first-retry',
     ...devices['Desktop Chrome'],
-    // CI: the Google Chrome GitHub's Ubuntu runners come with, instead of downloading Chromium and its libraries on
-    // every run (~20 s). Locally: Playwright's own Chromium (`playwright install chromium`).
-    ...(process.env.CI ? { channel: 'chrome' } : {}),
   },
   webServer: {
     command: 'tsx e2e/server.ts',

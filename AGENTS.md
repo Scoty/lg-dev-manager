@@ -95,7 +95,7 @@ pnpm app            # the standalone bridge app for this OS → apps/bridge/rele
 - Keep e2e fast: set up TVs with `addDevModeTv` / `addRootedTv` (saved straight into the browser's store); only tests about
   the add-device wizard use `addDevModeTvWithWizard` / `addRootedTvWithWizard`. No fixed waits (`waitForTimeout`).
   Traces are recorded only for retried tests (tracing every test doubled the run); debug a failure locally with
-  `pnpm --filter @lgdm/web exec playwright test <file> --trace on`. CI runs Playwright on the runner's Google Chrome.
+  `pnpm --filter @lgdm/web exec playwright test <file> --trace on`. CI caches Playwright's headless Chromium (no `--with-deps`).
 - User flows that touch the TV get a Playwright test against the mock TVs (`apps/web/e2e/devices-apps.spec.ts`,
   `repo.spec.ts`, `files-terminal.spec.ts`, `info.spec.ts`, `debug.spec.ts`, `litefin.spec.ts`). The rig's TVs are shared by parallel tests, so each test uses app ids no other test touches.
 - Debug tools on the mock TV (followed logs, `PmLogCtl`, `ls-monitor -j`, crash reports) live in `tools/mock-tv/src/debug.ts`;
