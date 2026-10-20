@@ -1,11 +1,12 @@
 import { spawn } from 'node:child_process';
 
 /**
- * Opens a fixed https URL in the default browser (the standalone app does this on start). Best effort: a computer
- * without a browser or a desktop just doesn't get the tab. The URL is a constant, never user or web input.
+ * Opens a fixed https URL in the default browser (the standalone app does this on start), optionally with the pairing
+ * fragment (pairing.ts). Best effort: a computer without a browser or a desktop just doesn't get the tab. The URL is
+ * a constant plus the bridge's own token, never user or web input — and nothing else gets past this pattern.
  */
 export function openInBrowser(url: string): void {
-  if (!/^https:\/\/[a-z0-9.-]+\/?$/i.test(url)) return;
+  if (!canOpen(url)) return;
   const [cmd, args] =
     process.platform === 'darwin'
       ? ['open', [url]]
@@ -19,4 +20,9 @@ export function openInBrowser(url: string): void {
   } catch {
     /* no way to open a browser here */
   }
+}
+
+/** The only URLs openInBrowser opens: an https site's root, optionally with the pairing fragment. */
+export function canOpen(url: string): boolean {
+  return /^https:\/\/[a-z0-9.-]+\/?(#\/pair\?token=[A-Za-z0-9_%.~-]+(&port=\d{1,5})?)?$/i.test(url);
 }

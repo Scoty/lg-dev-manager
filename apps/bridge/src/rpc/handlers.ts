@@ -102,6 +102,8 @@ export interface Context {
   lgeUrl?: string;
   /** Started with --dev: unexpected errors include their stack trace. */
   dev?: boolean;
+  /** LAN mode: shared on the local network (reported in system.hello). */
+  lan?: boolean;
 }
 
 /** Console commands and followed logs one tab may run at once. */
@@ -143,6 +145,7 @@ export const handlers: HandlerMap = {
       platform: platform(),
       distribution: distribution(),
       features: [BridgeFeatures.CustomRepos],
+      ...(ctx.lan ? { lan: true } : {}),
     };
   },
   'system.ping': () => ({ now: Date.now() }),

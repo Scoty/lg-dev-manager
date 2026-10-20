@@ -6,6 +6,7 @@ import { Icon } from '../../shell/icons';
 import { useFeedback } from '../../components/Feedback';
 import { Alert } from '../../components/Alert';
 import { AUTH_LABELS, authProblems, emptyAuth, type AuthDraft, type AuthKind } from './auth';
+import { copyText } from '../../lib/secureContext';
 
 type KeyCheck =
   | { state: 'idle' }
@@ -352,7 +353,7 @@ function GeneratedKey({
           type="button"
           className="btn btn--sm btn--ghost"
           onClick={() =>
-            navigator.clipboard.writeText(value.publicKey).then(
+            copyText(value.publicKey).then(
               () => toast({ kind: 'success', title: 'Public key copied' }),
               () => toast({ kind: 'warning', title: 'Copy failed', text: 'Select the key and copy it by hand.' }),
             )

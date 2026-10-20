@@ -16,6 +16,7 @@ import { TV_OFF_HINT, useAppOperations } from './operations';
 import { useInstalledApps, useStorage } from './queries';
 import { useRepoApps, type RepoAppView } from '../repo/useRepoApps';
 import { RepoDetails } from '../repo/RepoDetails';
+import { copyText } from '../../lib/secureContext';
 
 const fmtKb = (kb: number) => (kb >= 1024 * 1024 ? `${(kb / 1024 / 1024).toFixed(1)} GB` : `${Math.round(kb / 1024)} MB`);
 
@@ -318,7 +319,7 @@ function AppRow({
                   className="dd-menu-item"
                   onClick={() => {
                     close();
-                    navigator.clipboard.writeText(app.id).then(() => toast({ kind: 'success', title: 'App id copied', text: app.id }));
+                    copyText(app.id).then(() => toast({ kind: 'success', title: 'App id copied', text: app.id }));
                   }}
                 >
                   <Icon name="copy" /> Copy app id

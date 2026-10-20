@@ -7,7 +7,7 @@ import type { WebFiles } from './http/static.js';
  * How this bridge was installed, so the site can say how to update it: `app` — the standalone download from the
  * GitHub releases (a Node.js single executable application, scripts/build-app.mjs); `npm` — npx; `source` — a clone.
  */
-export type Distribution = 'app' | 'npm' | 'source';
+export type Distribution = 'app' | 'npm' | 'source' | 'docker';
 
 /** Running as the standalone app (Node.js and the bridge packed into one executable)? */
 export function isStandalone(): boolean {
@@ -20,6 +20,8 @@ export function isStandalone(): boolean {
 
 export function distribution(): Distribution {
   if (isStandalone()) return 'app';
+  // Set by the Docker image (Dockerfile ENV), so the site says to pull the new image.
+  if (process.env.LGDM_DISTRIBUTION === 'docker') return 'docker';
   // A clone has the TypeScript sources next to dist/; the npm package ships dist/ only.
   try {
     return existsSync(fileURLToPath(new URL('../src/', import.meta.url))) ? 'source' : 'npm';

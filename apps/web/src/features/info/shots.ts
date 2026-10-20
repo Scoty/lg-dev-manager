@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SHOTS_STORE, db, req, shotListeners } from '../../devices/store';
+import { randomId } from '../../lib/secureContext';
 
 /**
  * Screenshots live only in this browser (IndexedDB, next to the saved TVs). The TV never keeps them: the bridge
@@ -29,7 +30,7 @@ export async function listShots(deviceId: string): Promise<Shot[]> {
 }
 
 export async function addShot(deviceId: string, blob: Blob, method: Shot['method']): Promise<Shot> {
-  const shot: Shot = { id: crypto.randomUUID(), deviceId, at: Date.now(), method, blob };
+  const shot: Shot = { id: randomId(), deviceId, at: Date.now(), method, blob };
   const d = await db();
   await req(d.transaction(SHOTS_STORE, 'readwrite').objectStore(SHOTS_STORE).add(shot));
   notify();

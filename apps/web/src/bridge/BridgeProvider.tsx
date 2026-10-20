@@ -5,7 +5,15 @@ import { bridgeUrlProblem, loadSettings, saveSettings, type BridgeSettings } fro
 export type BridgeStatus =
   | { state: 'unpaired' }
   | { state: 'connecting' }
-  | { state: 'connected'; bridgeVersion: string; platform: string; distribution?: 'app' | 'npm' | 'source'; features?: string[] }
+  | {
+      state: 'connected';
+      bridgeVersion: string;
+      platform: string;
+      distribution?: 'app' | 'npm' | 'source' | 'docker';
+      features?: string[];
+      /** LAN mode: the bridge is shared on the local network (the Docker image). */
+      lan?: boolean;
+    }
   /** `retrying`: the provider keeps trying in the background and switches to `connected` by itself when it works. */
   | { state: 'error'; code: string; message: string; retrying?: boolean };
 
@@ -52,6 +60,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
         platform: hello.platform,
         distribution: hello.distribution,
         features: hello.features,
+        lan: hello.lan,
       });
       c.onClose = (reason) => {
         if (gen !== generation.current) return;
@@ -68,7 +77,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       if (gen !== generation.current) return;
       const err = e instanceof BridgeError ? e : new BridgeError('unknown', String(e));
       setClient(null);
-      const retrying = err.code !== 'unauthorized' && err.code !== 'protocol_mismatch';
+      const retrying = err.code !== 'unauthorized' && err.code !== 'protocol_mismatch' && err.code !== 'rate_limited';
       setStatus((prev) =>
         prev.state === 'error' && prev.code === err.code && prev.message === err.message && !!prev.retrying === retrying
           ? prev // same as before: no re-render, nothing on screen changes

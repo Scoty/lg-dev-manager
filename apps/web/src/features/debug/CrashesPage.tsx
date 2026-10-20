@@ -15,6 +15,7 @@ import { toTarget, type SavedDevice } from '../../devices/store';
 import { saveBlob } from '../files/transfer';
 import { fmtBytes } from '../info/shots';
 import { parseCrashName } from './parse';
+import { copyText } from '../../lib/secureContext';
 
 /** Crash reports (CrashesComponent + crash DetailsComponent). Works for Developer Mode logins too. */
 export function CrashesPage() {
@@ -173,7 +174,7 @@ function CrashDialog({
   });
   const copy = () =>
     q.data &&
-    navigator.clipboard.writeText(q.data.text).then(
+    copyText(q.data.text).then(
       () => toast({ kind: 'success', title: 'Crash report copied' }),
       () => toast({ kind: 'danger', title: 'Couldn’t copy' }),
     );

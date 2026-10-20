@@ -11,6 +11,7 @@ import { saveBlob } from '../files/transfer';
 import { LOG_LEVELS, levelRank, shortTime, type LogEntry, type LogLevel } from './parse';
 import { useLogStream } from './useLogStream';
 import { VirtualList } from './VirtualList';
+import { copyText } from '../../lib/secureContext';
 
 /** Lines kept in the browser per log (LogReaderComponent.retainLogs). */
 export const RETAIN = 10_000;
@@ -276,7 +277,7 @@ function LogDetails({ entry, onClose }: { entry: LogEntry; onClose: () => void }
         <button
           type="button"
           className="btn btn--sm btn--ghost"
-          onClick={() => navigator.clipboard.writeText(entry.raw).then(() => toast({ kind: 'success', title: 'Line copied' }), () => toast({ kind: 'danger', title: 'Couldn’t copy' }))}
+          onClick={() => copyText(entry.raw).then(() => toast({ kind: 'success', title: 'Line copied' }), () => toast({ kind: 'danger', title: 'Couldn’t copy' }))}
         >
           <Icon name="copy" /> Copy line
         </button>

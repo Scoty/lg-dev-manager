@@ -8,6 +8,7 @@ import {
 } from '@lgdm/protocol';
 import { useBridge } from './BridgeProvider';
 import { BridgeError, type BridgeClient } from './client';
+import { randomId } from '../lib/secureContext';
 
 /** Typed bridge calls for components. `ready` is false until the bridge is paired and connected. */
 export function useRpc() {
@@ -31,7 +32,7 @@ export function onOpProgress(client: BridgeClient, opId: string, fn: (p: OpProgr
   });
 }
 
-export const newOpId = () => crypto.randomUUID();
+export const newOpId = () => randomId();
 
 /** 1 MiB per chunk: ~1.4 MB per frame after base64, well under the bridge's 16 MB frame limit. */
 const CHUNK = 1024 * 1024;

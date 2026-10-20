@@ -48,7 +48,9 @@ export const Methods = {
       bridgeVersion: z.string(),
       platform: z.string(),
       /** How the bridge was installed, so the site can say how to update it (bridges before 1.0.2 don't say). */
-      distribution: z.enum(['app', 'npm', 'source']).optional(),
+      distribution: z.enum(['app', 'npm', 'source', 'docker']).optional(),
+      /** LAN mode (2.0): the bridge is shared on the local network and this page reached it over the network. */
+      lan: z.boolean().optional(),
       /** Optional features (BridgeFeatures), e.g. custom repositories from 1.0.5. Older bridges don't say. */
       features: z.array(z.string()).optional(),
     }),

@@ -21,8 +21,10 @@ It has two parts (see `PLAN.md` §1 for why):
 
 1. **The browser never talks to the TV directly.** Every TV operation is a typed RPC in
    `packages/protocol`, implemented in the bridge. No generic "open socket to host:port" RPC — ever.
-2. **Bridge security stays on.** Bind `127.0.0.1` only (no LAN mode), Origin allowlist, pairing token required,
-   Host header checked. The Vite dev origins are accepted only with `--dev` (`pnpm dev:bridge`).
+2. **Bridge security stays on.** Bind `127.0.0.1` by default, Origin allowlist, pairing token required,
+   Host header checked. **LAN mode** (2.0, for the Docker image) is the one exception and only ever opt-in
+   (`--listen` + `--public-url`, `apps/bridge/src/lan.ts`): then only the configured public addresses are accepted, only
+   clients on the local network, nothing forwarded from the internet, and wrong tokens are rate-limited. The Vite dev origins are accepted only with `--dev` (`pnpm dev:bridge`).
    Don't add flags that disable these without an explicit, documented reason. Anything a web page can send the
    bridge (frames, URLs, uploads) must fail that request, never the process — see PLAN.md §10.
 3. **User settings live only in the browser.** Saved TVs (names, addresses, keys, passwords) are kept in
@@ -123,7 +125,7 @@ pnpm app            # the standalone bridge app for this OS → apps/bridge/rele
 | Topic | Decision | Status |
 |---|---|---|
 | Browser↔TV transport | Local bridge over authenticated WebSocket | Decided (technical necessity) |
-| Where the bridge runs | On the user's own computer only, bound to `127.0.0.1`. No NAS / Docker / LAN mode (owner decision, Oct 2026) | Decided |
+| Where the bridge runs | On the user's own computer, bound to `127.0.0.1` (owner decision, Oct 2026). From 2.0 also on a home server / NAS in Docker, in opt-in **LAN mode**: listens on the network for browsers on the LAN, plain HTTP with a warning (HTTPS via the user's reverse proxy), paired with a link from the logs (`#/pair?token=…`), never reachable from the internet (owner decisions, 20 Oct 2026; plan in the project doc `docker-2.0.0-plan.md`) | Decided (2.0) |
 | Bridge distribution | Three ways: `npx lg-dev-manager-bridge` (Node 22.12+), `pnpm bridge` from a clone, or the **standalone app** — a Node.js single executable per OS from the GitHub release (no Node.js needed; `release-app.yml`, PLAN.md §11). All serve the web app at http://localhost:5199 (the "local page"). Still a terminal program: no tray app, installers or running the bridge on the TV (owner decisions, Oct 2026; the standalone app added for 1.0.2) | Decided |
 | Recommended connection | **Rooted (Homebrew Channel SSH)** is listed first and preselected in the wizard; Developer Mode is for TVs that aren't rooted (owner decision, Oct 2026) | Decided |
 | UI framework | React 19 + Vite + TypeScript | Decided |

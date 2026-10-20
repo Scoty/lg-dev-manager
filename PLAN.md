@@ -53,10 +53,25 @@ plus raw TCP to the Dev Mode **key server on port 9991**. A web page cannot open
 
 ### Bridge security (non-negotiable)
 Any website you visit could try to talk to `ws://localhost`. So the bridge:
-1. binds to `127.0.0.1` only — nothing else on the network can reach it;
+1. binds to `127.0.0.1` only — nothing else on the network can reach it (except in opt-in **LAN mode**, below);
 2. checks the `Origin` header against an allowlist (`https://lg.scoty.uk` + localhost dev, plus `--allow-origin`);
 3. requires a **pairing token** printed at startup, entered once in the Web UI and kept in browser storage;
 4. never exposes a generic "connect anywhere" socket — only typed SSH/luna operations (luna URIs validated, params shell-quoted).
+
+**LAN mode (2.0, opt-in; the Docker image).** `--listen 0.0.0.0 --public-url http://nas.local:5199` (env `LGDM_LISTEN`,
+`LGDM_PUBLIC_URL`) shares the bridge with browsers on the local network, which use the page it serves. Then:
+- only the public URLs (and localhost, for the health check) pass the Host and Origin checks;
+- only clients on the local network get in (private, link-local, CGNAT/Tailscale ranges, plus `LGDM_ALLOWED_NETWORKS`);
+  anything forwarded from the internet is refused in every mode (Cloudflare headers, `X-Forwarded-For` / `Forwarded`
+  / `X-Real-IP` naming a public address);
+- wrong pairing tokens from other devices are rate-limited (5 free, then 30 s doubling to 15 min); `LGDM_TOKEN` must be
+  16+ characters;
+- the bridge prints a pairing link, `<url>/#/pair?token=…` (also for the local page; the app opens lg.scoty.uk with it).
+  The fragment never leaves the browser; the page checks the token with the bridge before saving it and removes it
+  from the address bar;
+- plain HTTP: the page warns once that keys and passwords cross the LAN unencrypted (HTTPS through the user's own
+  reverse proxy works: the page then uses `wss://` to its own origin). Browser features that need a secure context
+  (`crypto.randomUUID`, the Clipboard API, COOP) have fallbacks (`apps/web/src/lib/secureContext.ts`).
 
 ---
 

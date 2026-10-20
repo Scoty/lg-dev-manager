@@ -19,7 +19,10 @@ put users at risk right now are fixed and disclosed sooner.
 
 - The bridge (`lg-dev-manager-bridge` on npm and the app from the GitHub releases): anything that lets another
   website, program or computer use it — getting past the pairing token, the origin check or the `127.0.0.1`-only
-  listener, reaching hosts other than your TVs, reading files on your computer, or crashing it remotely.
+  listener, reaching hosts other than your TVs, reading files on your computer, or crashing it remotely. In LAN mode
+  (the bridge shared on your network, e.g. in Docker): getting in from outside your local network, or around the
+  host, origin and rate-limit checks. Someone on your own network reading plain-HTTP traffic is a known limit (use an
+  HTTPS reverse proxy).
 - The web app (https://lg.scoty.uk and the local page): script injection, leaking your saved TVs, keys or passwords to
   anyone but your own bridge, or tricking you into actions on a TV.
 - The release and publishing workflows.

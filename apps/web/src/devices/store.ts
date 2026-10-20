@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { CustomRepo, loadCustomRepos, MAX_CUSTOM_REPOS, mergeCustomRepos } from '../repos/store';
 import { DeviceAuth, type DeviceTarget } from '@lgdm/protocol';
 import { hostProblem, isValidUsername } from './validate';
+import { randomId } from '../lib/secureContext';
 
 /**
  * Saved TVs live ONLY in this browser (IndexedDB, per site). Nothing is stored on the bridge or any server;
@@ -198,7 +199,7 @@ export async function getDevice(id: string): Promise<SavedDevice | undefined> {
 
 export async function addDevice(input: NewDevice): Promise<SavedDevice> {
   const now = Date.now();
-  const device = SavedDevice.parse({ ...input, id: crypto.randomUUID(), createdAt: now, updatedAt: now });
+  const device = SavedDevice.parse({ ...input, id: randomId(), createdAt: now, updatedAt: now });
   await tx('readwrite', (s) => s.add(device));
   if (!getActiveDeviceId()) setActiveDeviceId(device.id);
   notify();

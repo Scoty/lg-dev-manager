@@ -4,6 +4,7 @@ import { PUBLIC_WEB_ORIGIN } from '@lgdm/protocol';
 import { BRIDGE_VERSION } from './version.js';
 import { isStandalone, licenseText } from './standalone.js';
 import { openInBrowser } from './open.js';
+import { pairLink } from './pairing.js';
 
 const HELP = `lg-dev-manager-bridge ${BRIDGE_VERSION}
 
@@ -13,6 +14,10 @@ Usage: lg-dev-manager-bridge [options]
   --allow-origin <url>  Extra web origin allowed to connect (repeatable, env LGDM_ALLOW_ORIGINS)
   --web-root <dir>      Serve the web UI from this folder instead of the bundled one (env LGDM_WEB_ROOT)
   --no-ui               Don't serve the local page; use https://lg.scoty.uk only
+  --listen <address>    LAN mode: listen on this address, e.g. 0.0.0.0, so other devices on your network can open
+                        the bridge (env LGDM_LISTEN; needs --public-url). Default: this computer only
+  --public-url <url>    LAN mode: the address you open the bridge at, e.g. http://nas.local:5199 (repeatable,
+                        env LGDM_PUBLIC_URL, comma-separated). Requests for other addresses are refused
   --reset-token         Generate a new pairing token (un-pairs existing browsers)
   --no-open             The app only: don't open ${PUBLIC_WEB_ORIGIN} in the browser on start (the local page still works)
   --version             Print the version
@@ -41,17 +46,33 @@ async function main() {
   const config = parseArgs(argv);
   await startServer(config);
 
-  const shown = config.host;
+  const local = `http://localhost:${config.port}`;
   console.log(`\n  LG Dev Manager bridge ${BRIDGE_VERSION}`);
-  console.log(`  Listening on   http://${shown}:${config.port} (this computer only)`);
-  console.log(`  Open           ${PUBLIC_WEB_ORIGIN}${config.webRoot ? `  or the local page http://localhost:${config.port}/` : ''}`);
-  console.log(`  Pairing token  ${config.token}`);
-  console.log(`  Allowed origins ${config.allowedOrigins.join(', ')}\n`);
+  if (config.lan) {
+    console.log(`  Listening on   ${config.host}:${config.port} — shared on your local network (LAN mode)`);
+    console.log(`  Open           ${config.lan.publicUrls.join('  or  ')}`);
+    console.log(`  Pairing token  ${config.token}`);
+    console.log('  Pair a browser by opening (once per browser, keep these links to yourself):');
+    for (const u of config.lan.publicUrls) console.log(`                 ${pairLink(u, config.token)}`);
+    console.log(`  Allowed origins ${config.allowedOrigins.join(', ')}`);
+    console.log('  Only devices on your local network are let in. Never make the bridge reachable from the internet.');
+    if (config.lan.publicUrls.some((u) => u.startsWith('http:'))) {
+      console.log('  Plain HTTP: TV keys and passwords you use travel unencrypted on your network. Put the bridge');
+      console.log('  behind your own HTTPS reverse proxy if you don\'t trust everything on it.\n');
+    } else console.log('');
+  } else {
+    console.log(`  Listening on   http://${config.host}:${config.port} (this computer only)`);
+    console.log(`  Open           ${PUBLIC_WEB_ORIGIN}${config.webRoot ? `  or the local page ${local}/` : ''}`);
+    console.log(`  Pairing token  ${config.token}`);
+    if (config.webRoot) console.log(`  Pair link      ${pairLink(local, config.token)}`);
+    console.log(`  Allowed origins ${config.allowedOrigins.join(', ')}\n`);
+  }
 
-  // The standalone app is usually started with a double-click, so it opens the site itself and says how to stop.
+  // The standalone app is usually started with a double-click, so it opens the site itself — already paired — and
+  // says how to stop.
   if (isStandalone()) {
     console.log('  Keep this window open while you use the app. Close it (or press Ctrl+C) to stop the bridge.\n');
-    if (!argv.includes('--no-open')) openInBrowser(PUBLIC_WEB_ORIGIN);
+    if (!argv.includes('--no-open')) openInBrowser(pairLink(PUBLIC_WEB_ORIGIN, config.token, config.port));
   }
 }
 

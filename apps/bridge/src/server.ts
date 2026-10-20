@@ -12,6 +12,8 @@ import { RepoClient } from './repo/repo.js';
 import { RepoRegistry } from './repo/registry.js';
 import { LitefinClient } from './litefin/litefin.js';
 import { ShellSessions } from './shell/shells.js';
+import { forwardedProblem, isLanClient, PairingLimiter } from './lan.js';
+import { ErrorCodes } from '@lgdm/protocol';
 
 export const RPC_PATH = '/rpc';
 
@@ -21,9 +23,30 @@ const HEARTBEAT_MS = 30_000;
 const SEND_HIGH = 4 * 1024 * 1024;
 const SEND_LOW = 1024 * 1024;
 
-/** Requests must name this bridge as 127.0.0.1 or localhost: a page whose DNS name was re-pointed here can't. */
-const hostAllowed = (host: string | undefined, port: number) =>
-  host === `127.0.0.1:${port}` || host === `localhost:${port}` || host === `[::1]:${port}`;
+/**
+ * Requests must name this bridge as 127.0.0.1 or localhost — or, in LAN mode, by one of its public URLs: a page whose
+ * DNS name was re-pointed here (DNS rebinding) can't.
+ */
+const hostAllowed = (host: string | undefined, port: number, publicHosts: string[]) =>
+  host === `127.0.0.1:${port}` || host === `localhost:${port}` || host === `[::1]:${port}` || (!!host && publicHosts.includes(host.toLowerCase()));
+
+/** console.warn, at most once per 10 s per kind of message, counting the ones it held back. */
+function throttledWarn() {
+  const last = new Map<string, { at: number; held: number }>();
+  return (message: string) => {
+    const key = message.replace(/[\d.:a-f]{7,}/gi, '#').slice(0, 80);
+    const now = Date.now();
+    const e = last.get(key);
+    if (e && now - e.at < 10_000) {
+      e.held++;
+      return;
+    }
+    const safe = message.replace(/[^\x20-\x7e]/g, '?').slice(0, 300);
+    console.warn(`[bridge] ${safe}${e?.held ? ` (and ${e.held} more like it)` : ''}`);
+    last.set(key, { at: now, held: 0 });
+    if (last.size > 100) last.delete(last.keys().next().value!);
+  };
+}
 
 export function startServer(
   config: BridgeConfig,
@@ -32,9 +55,32 @@ export function startServer(
   litefin = new LitefinClient(config.litefinUrl),
 ): Promise<Server> {
   const repos = new RepoRegistry(repo);
+  const lan = config.lan;
+  const publicHosts = (lan?.publicUrls ?? []).map((u) => new URL(u).host.toLowerCase());
+  const limiter = new PairingLimiter();
+  /**
+   * Why this request may not use the bridge at all, or null. Every mode: it must not come through a proxy or tunnel
+   * from the internet. LAN mode: the client itself must be on the local network (or this computer).
+   */
+  const clientProblem = (req: import('node:http').IncomingMessage): string | null => {
+    const forwarded = forwardedProblem(req.headers, lan?.extraNetworks);
+    if (forwarded) return `${forwarded}. The bridge controls your TVs: never make it reachable from the internet.`;
+    if (lan && !isLanClient(req.socket.remoteAddress, lan.extraNetworks)) {
+      return `${req.socket.remoteAddress ?? 'the client'} isn't on your local network. If it is (a global IPv6 address, say), add its network to LGDM_ALLOWED_NETWORKS.`;
+    }
+    return null;
+  };
+  const refusedLog = throttledWarn();
+
   const http = createServer((req, res) => {
-    if (!hostAllowed(req.headers.host, listeningPort())) {
-      res.writeHead(421, { 'content-type': 'text/plain' }).end('Wrong host.');
+    const problem = clientProblem(req);
+    if (problem) {
+      refusedLog(`refused a request: ${problem}`);
+      res.writeHead(403, { 'content-type': 'text/plain' }).end('Refused: the LG Dev Manager bridge only answers on your local network.');
+      return;
+    }
+    if (!hostAllowed(req.headers.host, listeningPort(), publicHosts)) {
+      res.writeHead(421, { 'content-type': 'text/plain' }).end(lan ? `Wrong host. Open the bridge at ${lan.publicUrls.join(' or ')}.` : 'Wrong host.');
       return;
     }
     if (req.url === '/healthz') {
@@ -72,7 +118,14 @@ export function startServer(
     socket.on('error', () => socket.destroy());
     const origin = (req.headers.origin ?? '').replace(/\/$/, '');
     const path = (req.url ?? '').split('?')[0];
-    if (path !== RPC_PATH || !hostAllowed(req.headers.host, listeningPort()) || !config.allowedOrigins.includes(origin)) {
+    const problem = clientProblem(req);
+    if (problem) {
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      refusedLog(`refused a connection: ${problem}`);
+      return;
+    }
+    if (path !== RPC_PATH || !hostAllowed(req.headers.host, listeningPort(), publicHosts) || !config.allowedOrigins.includes(origin)) {
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
       socket.destroy();
       if (path === RPC_PATH) warnRejected(origin);
@@ -81,7 +134,11 @@ export function startServer(
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
-  wss.on('connection', (ws: WebSocket) => {
+  wss.on('connection', (ws: WebSocket, req: import('node:http').IncomingMessage) => {
+    const client = (req.socket.remoteAddress ?? '?').replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
+    // Wrong tokens are rate-limited in LAN mode, per device. Not on this computer: a few stale tabs after a token
+    // reset mustn't lock the user out of pairing again.
+    const limited = !!lan && client !== '127.0.0.1' && client !== '::1';
     // A bad frame (too big, invalid UTF-8) ends this connection — without a listener it would end the process.
     ws.on('error', () => ws.terminate());
     let alive = true;
@@ -119,10 +176,28 @@ export function startServer(
 
     ws.on('message', async (data, isBinary) => {
       if (isBinary) return;
-      const res = await dispatch(data.toString(), session, { token: config.token, pool, repos, litefin, lgeUrl: config.lgeUrl, dev: config.dev });
+      // Too many wrong tokens from this address: it waits before it may try again.
+      const wait = session.authed || !limited ? 0 : limiter.waitFor(client);
+      if (wait) {
+        let id: unknown;
+        try {
+          id = (JSON.parse(data.toString()) as { id?: unknown }).id;
+        } catch {
+          /* not JSON */
+        }
+        const message = `Too many wrong pairing tokens from this device. Try again in ${Math.ceil(wait / 1000)} seconds.`;
+        if (typeof id === 'number') ws.send(JSON.stringify({ id, error: { code: ErrorCodes.RateLimited, message } }));
+        ws.close(4429, 'rate limited');
+        return;
+      }
+      const res = await dispatch(data.toString(), session, { token: config.token, pool, repos, litefin, lgeUrl: config.lgeUrl, dev: config.dev, lan: !!lan });
       if (res && ws.readyState === ws.OPEN) ws.send(JSON.stringify(res));
       if (res && 'error' in res && res.error.code === 'unauthorized' && !session.authed) {
+        if (limited) limiter.failed(client);
+        refusedLog(`a wrong pairing token from ${client}`);
         ws.close(4401, 'unauthorized');
+      } else if (session.authed && limited) {
+        limiter.succeeded(client);
       }
     });
     ws.on('close', () => {

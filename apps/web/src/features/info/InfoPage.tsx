@@ -21,6 +21,7 @@ import { useHbChannel, useRepoIndex } from '../repo/queries';
 import { saveBlob } from '../files/transfer';
 import { ScreenshotCard } from './ScreenshotCard';
 import { fmtCountdown, parseRemaining, renewScript, resetUrl } from './renewScript';
+import { copyText } from '../../lib/secureContext';
 
 /** Device info (InfoComponent in the original): the TV, its Developer Mode session, screenshots and Homebrew Channel. */
 export function InfoPage() {
@@ -214,7 +215,7 @@ function CopyBox({ text, label }: { text: string; label: string }) {
         aria-label={`Copy ${label}`}
         title="Copy"
         onClick={() =>
-          navigator.clipboard.writeText(text).then(
+          copyText(text).then(
             () => toast({ kind: 'success', title: `${label} copied` }),
             () => toast({ kind: 'warning', title: 'Copy failed', text: 'Select the text and copy it by hand.' }),
           )
@@ -277,7 +278,7 @@ function AutoRenewDialog({ open, onClose, device, token }: { open: boolean; onCl
                   type="button"
                   className="btn btn--ghost"
                   onClick={() =>
-                    navigator.clipboard.writeText(script).then(
+                    copyText(script).then(
                       () => toast({ kind: 'success', title: 'Script copied' }),
                       () => toast({ kind: 'warning', title: 'Copy failed' }),
                     )

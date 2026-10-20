@@ -44,4 +44,6 @@ export const ErrorCodes = {
   UnknownMethod: 'unknown_method',
   NotImplemented: 'not_implemented',
   Internal: 'internal',
+  /** Too many wrong pairing tokens from this address: wait, then try again. */
+  RateLimited: 'rate_limited',
 } as const;
