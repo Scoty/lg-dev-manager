@@ -153,7 +153,10 @@ function infoIds(info: unknown, file: string): [kind: string, id: string][] {
   if (Array.isArray(o.services)) {
     for (const s of o.services) {
       if (typeof s === 'string') out.push(['services', s]);
-      else if (s && typeof s === 'object' && typeof (s as Record<string, unknown>).name === 'string') out.push(['services', (s as Record<string, string>).name]);
+      else if (s && typeof s === 'object') {
+        const name = (s as Record<string, unknown>).name;
+        if (typeof name === 'string') out.push(['services', name]);
+      }
     }
   }
   return out;
@@ -228,7 +231,7 @@ function paxValue(body: Buffer, key: string): string | null {
 async function* streamTarEntries(gz: Buffer): AsyncGenerator<{ name: string; type: string; link?: string; info?: Buffer }> {
   const gunzip = createGunzip();
   const source = Readable.from([gz]).pipe(gunzip);
-  let pending = Buffer.alloc(0);
+  let pending: Buffer = Buffer.alloc(0);
   let unpacked = 0;
   let entries = 0;
   // State: reading a header, skipping `skip` bytes of a body, or keeping `keep` bytes of one (long name / metadata).
