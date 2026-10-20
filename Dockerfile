@@ -27,6 +27,9 @@ RUN mkdir -p /app /data \
 # ---- Runtime: Node.js, the package, and an empty /data for the pairing token. Nothing runs at build time here, so
 # images for other platforms need no emulation.
 FROM node:${NODE_VERSION}-alpine
+# Links the image on ghcr.io to the repository (and its README and license).
+LABEL org.opencontainers.image.source=https://github.com/Scoty/lg-dev-manager \
+      org.opencontainers.image.licenses=Apache-2.0
 ENV NODE_ENV=production \
     LGDM_DISTRIBUTION=docker \
     LGDM_STATE_DIR=/data \

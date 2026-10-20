@@ -71,6 +71,9 @@ jobs:
   # capabilities. apps/bridge/scripts/docker-smoke.mjs checks pairing, LAN mode, its refusals and a mock TV.
   docker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # the test image of a pull request (below)
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -94,6 +97,19 @@ jobs:
           # The runner's own address on its (private) network: what a browser on the LAN would open.
           ip=$(hostname -I | awk '{print $1}')
           node apps/bridge/scripts/docker-smoke.mjs lg-dev-manager:ci "http://$ip:5199"
+      # A pull request from this repository gets a test image, so it can be tried on a real server before a release:
+      # ghcr.io/scoty/lg-dev-manager:pr-<number> (amd64 only). Releases are tagged X.Y.Z / X / latest (release-docker.yml).
+      - name: Push the test image
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          IMAGE: ghcr.io/scoty/lg-dev-manager:pr-${{ github.event.pull_request.number }}
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker tag lg-dev-manager:ci "$IMAGE"
+          docker push "$IMAGE"
+          echo "Test image: \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
 
   e2e:
     runs-on: ubuntu-latest
