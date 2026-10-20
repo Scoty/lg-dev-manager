@@ -8,6 +8,8 @@
   repositories can contain untested apps or malware, and a box to tick before adding one. For safety the bridge only
   fetches them over https from the public internet. They're saved in your browser and included in **Export backup**.
   Needs bridge 1.0.5.
+- 🩹 Running the bridge from a clone (`pnpm bridge`) served an old copy of the local page if `pnpm pack` had ever run
+  there; it now always serves the fresh build, and packing cleans up after itself.
 
 ## 1.0.4 — 2026-10-11
 

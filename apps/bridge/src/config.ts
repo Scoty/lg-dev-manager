@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, DEV_ALLOWED_ORIGINS } from '@lgdm/protocol';
 import type { WebUi } from './http/static.js';
-import { standaloneUi } from './standalone.js';
+import { distribution, standaloneUi } from './standalone.js';
 
 export interface BridgeConfig {
   host: string;
@@ -69,7 +69,10 @@ export function loadOrCreateToken(reset = false): string {
 export function bundledUi(): WebUi | undefined {
   const packed = standaloneUi();
   if (packed) return packed;
-  for (const rel of ['../web/', '../../web/dist/']) {
+  // A clone serves its own fresh build. `web/` exists there too after a `pnpm pack` (prepack copies the site in; it's
+  // git-ignored), and serving that stale copy first made the local page show an old version.
+  const order = distribution() === 'source' ? ['../../web/dist/'] : ['../web/'];
+  for (const rel of order) {
     try {
       const dir = fileURLToPath(new URL(rel, import.meta.url));
       if (existsSync(join(dir, 'index.html'))) return dir;
