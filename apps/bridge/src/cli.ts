@@ -4,7 +4,7 @@ import { PUBLIC_WEB_ORIGIN } from '@lgdm/protocol';
 import { BRIDGE_VERSION } from './version.js';
 import { isStandalone, licenseText } from './standalone.js';
 import { openInBrowser } from './open.js';
-import { pairLink } from './pairing.js';
+import { oneTimePairRedirect, pairLink } from './pairing.js';
 
 const HELP = `lg-dev-manager-bridge ${BRIDGE_VERSION}
 
@@ -72,7 +72,9 @@ async function main() {
   // says how to stop.
   if (isStandalone()) {
     console.log('  Keep this window open while you use the app. Close it (or press Ctrl+C) to stop the bridge.\n');
-    if (!argv.includes('--no-open')) openInBrowser(pairLink(PUBLIC_WEB_ORIGIN, config.token, config.port));
+    // Through a one-time redirect, so the token never appears in a command line (pairing.ts).
+    const nonce = oneTimePairRedirect(pairLink(PUBLIC_WEB_ORIGIN, config.token, config.port));
+    if (!argv.includes('--no-open')) openInBrowser(`http://localhost:${config.port}/pair/${nonce}`);
   }
 }
 

@@ -130,11 +130,17 @@ export function parseArgs(argv: string[]): BridgeConfig {
   const publicUrls = [...all('public-url'), ...(process.env.LGDM_PUBLIC_URL?.split(',') ?? [])]
     .filter((o) => o.trim())
     .map((u) => {
+      let origin: string;
       try {
-        return parseOrigin(u);
+        origin = parseOrigin(u);
       } catch {
         throw new Error(`--public-url ${u}: not an address like http://nas.local:${port}`);
       }
+      // The page and its storage belong to the whole origin: with a path (https://home.example/lg) every other app on
+      // that host could talk to the bridge and read the pairing. Give it a host (or port) of its own.
+      const path = new URL(u.trim()).pathname;
+      if (path !== '/' && path !== '') throw new Error(`--public-url ${u}: use the bridge's own address without a path (e.g. https://lg.home.example), not a folder on a site shared with other apps`);
+      return origin;
     });
   if (lanMode && !publicUrls.length) {
     throw new Error(
@@ -143,7 +149,11 @@ export function parseArgs(argv: string[]): BridgeConfig {
   }
   if (!lanMode && publicUrls.length) throw new Error('--public-url only applies with --listen (LAN mode).');
   const token = loadOrCreateToken(argv.includes('--reset-token'));
-  if (lanMode && token.length < 16) throw new Error('LGDM_TOKEN must be at least 16 characters when the bridge is shared on your network.');
+  // Shared on the network, the token is what stands between the LAN and the TVs: one someone picked must be long and
+  // not a repeated pattern (the generated one is 22 random characters).
+  if (lanMode && (token.length < 16 || new Set(token).size < 8)) {
+    throw new Error('LGDM_TOKEN must be at least 16 characters, with at least 8 different ones, when the bridge is shared on your network. Leave it unset to get a random one.');
+  }
 
   return {
     host: lanMode ? listen : '127.0.0.1',

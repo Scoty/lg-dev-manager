@@ -1,6 +1,6 @@
 import { BlockList, isIP } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import type { IncomingHttpHeaders } from 'node:http';
-import { isNonPublicAddress } from './repo/repo.js';
 
 /**
  * LAN mode (2.0, opt-in): the bridge runs on a home server or NAS — usually the Docker image — and browsers on the
@@ -29,21 +29,89 @@ export function parseNetworks(csv: string | undefined): BlockList {
   return list;
 }
 
-/** Strip the IPv4-mapped prefix Node reports for IPv4 clients on a dual-stack socket. */
-const plain = (address: string) => address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
+/**
+ * Where a client may be in LAN mode: this computer, the private ranges, link-local and CGNAT (that includes
+ * Tailscale's 100.64.0.0/10). Its own list, not the SSRF blocklist: that one also holds ranges whose hosts are on the
+ * internet (6to4, Teredo, NAT64), which must never count as local here.
+ */
+const LAN = new BlockList();
+for (const [net, prefix] of [['127.0.0.0', 8], ['10.0.0.0', 8], ['172.16.0.0', 12], ['192.168.0.0', 16], ['100.64.0.0', 10], ['169.254.0.0', 16]] as const) {
+  LAN.addSubnet(net, prefix, 'ipv4');
+}
+for (const [net, prefix] of [['::1', 128], ['fc00::', 7], ['fe80::', 10]] as const) LAN.addSubnet(net, prefix, 'ipv6');
 
 /**
- * May a client at this address use the bridge in LAN mode? Only this computer, the private / link-local / CGNAT
- * ranges (that includes Tailscale's 100.64.0.0/10) and networks added with LGDM_ALLOWED_NETWORKS — never an address
- * on the internet, so a forwarded router port doesn't hand the TVs to anyone who finds it.
+ * An address in its plain form: IPv4 for IPv4-mapped IPv6 (however it's spelled), without an IPv6 zone id. Null when
+ * it isn't an IP address.
+ */
+function plain(address: string): { address: string; family: 'ipv4' | 'ipv6' } | null {
+  const a = address.trim().replace(/%[\w.-]+$/, '');
+  if (isIP(a) === 4) return { address: a, family: 'ipv4' };
+  if (isIP(a) !== 6) return null;
+  let canonical: string;
+  try {
+    canonical = new URL(`http://[${a}]/`).hostname.slice(1, -1);
+  } catch {
+    return null;
+  }
+  const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(canonical);
+  if (dotted) return { address: dotted[1]!, family: 'ipv4' };
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(canonical);
+  if (hex) {
+    const hi = Number.parseInt(hex[1]!, 16);
+    const lo = Number.parseInt(hex[2]!, 16);
+    return { address: `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`, family: 'ipv4' };
+  }
+  return { address: canonical, family: 'ipv6' };
+}
+
+/**
+ * This server's own IPv6 networks with global addresses (a home network's /64 from the ISP): devices on them are on
+ * the LAN even though their addresses are global — and the prefix may change, so it's read from the interfaces, not
+ * configured. Refreshed every minute. IPv4 networks aren't included: a server on a public IPv4 subnet (a VPS) shares
+ * it with strangers.
+ */
+let onLink: { at: number; list: BlockList } | undefined;
+function onLinkIpv6(): BlockList {
+  if (onLink && Date.now() - onLink.at < 60_000) return onLink.list;
+  const list = new BlockList();
+  for (const addrs of Object.values(networkInterfaces())) {
+    for (const a of addrs ?? []) {
+      if (a.internal || a.family !== 'IPv6' || !a.cidr) continue;
+      const prefix = Number(a.cidr.split('/')[1]);
+      // Only real LAN-sized prefixes; a /0–/47 "network" would be half the internet.
+      if (prefix >= 48 && prefix <= 128) list.addSubnet(a.address.replace(/%.*$/, ''), prefix, 'ipv6');
+    }
+  }
+  onLink = { at: Date.now(), list };
+  return list;
+}
+
+/**
+ * May a client at this address use the bridge in LAN mode? Only the local ranges above, this server's own IPv6
+ * networks and networks added with LGDM_ALLOWED_NETWORKS — never an address on the internet, so a forwarded router port
+ * doesn't hand the TVs to anyone who finds it. Anything that isn't a plain IP address is refused.
  */
 export function isLanClient(address: string | undefined, extra?: BlockList): boolean {
-  if (!address) return false;
-  const a = plain(address);
-  const family = isIP(a);
-  if (!family) return false;
-  // isNonPublicAddress also counts multicast and documentation ranges; no real client connects from those.
-  return isNonPublicAddress(a) || !!extra?.check(a, family === 4 ? 'ipv4' : 'ipv6');
+  const p = address ? plain(address) : null;
+  if (!p) return false;
+  return LAN.check(p.address, p.family) || (p.family === 'ipv6' && onLinkIpv6().check(p.address, 'ipv6')) || !!extra?.check(p.address, p.family);
+}
+
+/** The key a client is rate-limited by: its IPv4 address, or its IPv6 /64 (a device can pick any address in it). */
+export function limiterKey(address: string): string {
+  const p = plain(address);
+  if (!p) return address;
+  if (p.family === 'ipv4') return p.address;
+  const groups = p.address.includes('::') ? expand(p.address) : p.address.split(':');
+  return `${groups.slice(0, 4).join(':')}::/64`;
+}
+
+function expand(v6: string): string[] {
+  const [head, tail] = v6.split('::') as [string, string];
+  const h = head ? head.split(':') : [];
+  const t = tail ? tail.split(':') : [];
+  return [...h, ...Array<string>(8 - h.length - t.length).fill('0'), ...t];
 }
 
 /**

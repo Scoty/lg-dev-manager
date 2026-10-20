@@ -4,18 +4,24 @@ import { request as httpRequest } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { PROTOCOL_VERSION } from '@lgdm/protocol';
-import { forwardedProblem, isLanClient, PairingLimiter, parseNetworks } from './lan.js';
+import { forwardedProblem, isLanClient, limiterKey, PairingLimiter, parseNetworks } from './lan.js';
 import { parseArgs } from './config.js';
-import { pairLink } from './pairing.js';
+import { oneTimePairRedirect, pairLink, takePairRedirect } from './pairing.js';
 import { canOpen } from './open.js';
 import { startServer } from './server.js';
 
 describe('LAN mode building blocks', () => {
   it('lets in this computer and the local network only', () => {
-    for (const a of ['127.0.0.1', '::1', '192.168.1.20', '10.0.0.5', '172.20.1.1', '100.101.102.103', 'fd00::5', 'fe80::1', '::ffff:192.168.1.20']) {
+    for (const a of ['127.0.0.1', '::1', '192.168.1.20', '10.0.0.5', '172.20.1.1', '100.101.102.103', 'fd00::5', 'fe80::1%eth0', '::ffff:192.168.1.20', '::ffff:c0a8:114']) {
       expect(isLanClient(a), a).toBe(true);
     }
-    for (const a of ['8.8.8.8', '140.82.112.3', '2a02:6b8::1', '::ffff:8.8.8.8', undefined, 'not-an-ip']) expect(isLanClient(a), String(a)).toBe(false);
+    // Internet hosts — including ranges that only look special (6to4, Teredo, NAT64, documentation) — and non-addresses.
+    for (const a of ['8.8.8.8', '140.82.112.3', '2a02:6b8::1', '::ffff:8.8.8.8', '2002:c0a8:101::1', '2001:0:4136:e378::1', '64:ff9b::808:808', '198.18.0.1', '192.0.2.1', undefined, 'not-an-ip', '']) {
+      expect(isLanClient(a), String(a)).toBe(false);
+    }
+    expect(limiterKey('2a02:6b8:1:2:aaaa:bbbb:cccc:dddd')).toBe('2a02:6b8:1:2::/64');
+    expect(limiterKey('2a02:6b8::5')).toBe('2a02:6b8:0:0::/64');
+    expect(limiterKey('::ffff:192.168.1.20')).toBe('192.168.1.20');
     // A home network on global IPv6 can be added.
     const extra = parseNetworks('2a02:6b8::/32, 198.51.100.0/24');
     expect(isLanClient('2a02:6b8::1', extra)).toBe(true);
@@ -64,8 +70,15 @@ describe('LAN mode building blocks', () => {
     expect(pairLink('https://lg.scoty.uk', 'abc', 5200)).toBe('https://lg.scoty.uk/#/pair?token=abc&port=5200');
     expect(pairLink('https://lg.scoty.uk', 'abc', 5199)).toBe('https://lg.scoty.uk/#/pair?token=abc');
     expect(canOpen('https://lg.scoty.uk')).toBe(true);
-    expect(canOpen(pairLink('https://lg.scoty.uk', 'aB3_-x', 5200))).toBe(true);
-    for (const bad of ['http://lg.scoty.uk', 'https://lg.scoty.uk/#/pair?token=a"b', 'https://lg.scoty.uk/x', 'file:///etc/passwd', 'https://a.b/#/pair?token=a&x=1']) {
+    // The app opens the site through a one-time redirect: no token in the browser's command line.
+    const target = pairLink('https://lg.scoty.uk', 'aB3_-x', 5200);
+    const nonce = oneTimePairRedirect(target);
+    expect(canOpen(`http://localhost:5200/pair/${nonce}`)).toBe(true);
+    expect(takePairRedirect(`/pair/${nonce}`)).toBe(target);
+    expect(takePairRedirect(`/pair/${nonce}`)).toBeNull(); // once only
+    expect(takePairRedirect(`/pair/${oneTimePairRedirect(target, -1)}`)).toBeNull(); // expired
+    expect(takePairRedirect('/pair/../../etc')).toBeNull();
+    for (const bad of [target, 'http://lg.scoty.uk', 'https://lg.scoty.uk/x', 'file:///etc/passwd', 'http://evil.example:5199/pair/aaaaaaaaaaaaaaaaaaaa']) {
       expect(canOpen(bad), bad).toBe(false);
     }
   });
@@ -105,8 +118,13 @@ describe('LAN mode settings', () => {
       expect(c.lan?.publicUrls).toEqual(['http://nas.local:5199', 'http://192.0.2.20:5199']);
       expect(c.allowedOrigins).toContain('http://nas.local:5199');
     });
-    env({ LGDM_TOKEN: 'short', LGDM_LISTEN: '0.0.0.0', LGDM_PUBLIC_URL: 'http://nas.local:5199' }, () => {
-      expect(() => parseArgs([])).toThrow(/at least 16 characters/);
+    for (const weak of ['short', 'aaaaaaaaaaaaaaaaaaaa', 'abababababababababab']) {
+      env({ LGDM_TOKEN: weak, LGDM_LISTEN: '0.0.0.0', LGDM_PUBLIC_URL: 'http://nas.local:5199' }, () => {
+        expect(() => parseArgs([])).toThrow(/at least 16 characters/);
+      });
+    }
+    env({ ...token, LGDM_LISTEN: '0.0.0.0', LGDM_PUBLIC_URL: 'https://home.example/lg' }, () => {
+      expect(() => parseArgs([])).toThrow(/without a path/);
     });
     env({ ...token, LGDM_LISTEN: '0.0.0.0', LGDM_PUBLIC_URL: 'http://nas.local:5199,http://nas:5199', LGDM_ALLOWED_NETWORKS: 'bad' }, () => {
       expect(() => parseArgs([])).toThrow(/LGDM_ALLOWED_NETWORKS/);
@@ -174,4 +192,42 @@ describe('a bridge in LAN mode', () => {
     expect(res.result.lan).toBe(true);
     ws.close();
   });
+
+  // Last: it leaves this address rate-limited.
+  it('lets a connection try one token: a burst of guesses gets nowhere, and then the device waits', async () => {
+    const ws = await open({ host: 'nas.test:5199', origin: PUBLIC });
+    const replies: any[] = [];
+    ws.on('message', (raw) => replies.push(JSON.parse(raw.toString())));
+    const closed = new Promise<number>((r) => ws.once('close', (code) => r(code)));
+    const hello = (id: number, token: string) => JSON.stringify({ id, method: 'system.hello', params: { token, protocolVersion: PROTOCOL_VERSION } });
+    // One write: the frames arrive together.
+    const frames = [...Array.from({ length: 20 }, (_, i) => hello(i + 1, `wrong-${i}`)), hello(99, TOKEN), JSON.stringify({ id: 100, method: 'system.ping' })];
+    (ws as any)._socket.write(Buffer.concat(frames.map((f) => maskedTextFrame(f))));
+    expect(await closed).toBe(4401);
+    expect(replies.some((r) => r.result)).toBe(false);
+    // Each new connection is one more try; after a few the device must wait — even with the right token.
+    for (let i = 0; i < 6; i++) {
+      const c = await open({ host: 'nas.test:5199', origin: PUBLIC });
+      await new Promise<void>((r) => {
+        c.once('close', () => r());
+        c.send(hello(1, `wrong-again-${i}`));
+      });
+    }
+    const last = await open({ host: 'nas.test:5199', origin: PUBLIC });
+    const res = await new Promise<any>((resolve) => {
+      last.once('message', (raw) => resolve(JSON.parse(raw.toString())));
+      last.send(hello(1, TOKEN));
+    });
+    expect(res.error.code).toBe('rate_limited');
+  });
 });
+
+/** A client-to-server WebSocket text frame (masked), to put several in one TCP write. */
+function maskedTextFrame(text: string): Buffer {
+  const payload = Buffer.from(text);
+  const mask = Buffer.from([1, 2, 3, 4]);
+  const len = payload.length;
+  const head = len < 126 ? Buffer.from([0x81, 0x80 | len]) : Buffer.from([0x81, 0x80 | 126, len >> 8, len & 255]);
+  const body = Buffer.from(payload.map((b, i) => b ^ mask[i % 4]!));
+  return Buffer.concat([head, mask, body]);
+}

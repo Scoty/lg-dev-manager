@@ -2,13 +2,13 @@
 
 ## 2.0.0 — unreleased
 
-- 🔗 **Pairing links.** The bridge prints a link that pairs a browser in one click (`…/#/pair?token=…`); the app opens
-  lg.scoty.uk already paired. The token stays in the browser (it's after `#`), is checked with the bridge before it's
-  saved, and is removed from the address bar.
+- 🔗 **Pairing links.** The bridge prints a link that pairs a browser with one click (`…/#/pair?token=…`); the app
+  opens lg.scoty.uk ready to pair. The token stays in the browser (it's after `#`), is removed from the address bar,
+  and is checked with the bridge before it's saved.
 - 🏠 **LAN mode** (for running the bridge on a home server or NAS; the Docker image is next): `--listen` and
   `--public-url` share the bridge with browsers on your network, which open the page it serves. Off unless asked for.
-  Only devices on your local network get in, nothing forwarded from the internet (e.g. a Cloudflare Tunnel), wrong
-  tokens are rate-limited, and the page warns that plain HTTP isn't encrypted.
+  Only devices on your local network get in, nothing forwarded from the internet (e.g. a Cloudflare Tunnel), pairing
+  attempts are rate-limited per device, and the page warns that plain HTTP isn't encrypted.
 - Copy buttons, the terminal and screenshots also work on pages served over plain HTTP.
 
 ## 1.0.5 — 2026-10-20

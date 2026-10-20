@@ -61,14 +61,22 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 **LAN mode (2.0, opt-in; the Docker image).** `--listen 0.0.0.0 --public-url http://nas.local:5199` (env `LGDM_LISTEN`,
 `LGDM_PUBLIC_URL`) shares the bridge with browsers on the local network, which use the page it serves. Then:
 - only the public URLs (and localhost, for the health check) pass the Host and Origin checks;
-- only clients on the local network get in (private, link-local, CGNAT/Tailscale ranges, plus `LGDM_ALLOWED_NETWORKS`);
-  anything forwarded from the internet is refused in every mode (Cloudflare headers, `X-Forwarded-For` / `Forwarded`
-  / `X-Real-IP` naming a public address);
-- wrong pairing tokens from other devices are rate-limited (5 free, then 30 s doubling to 15 min); `LGDM_TOKEN` must be
-  16+ characters;
-- the bridge prints a pairing link, `<url>/#/pair?token=…` (also for the local page; the app opens lg.scoty.uk with it).
-  The fragment never leaves the browser; the page checks the token with the bridge before saving it and removes it
-  from the address bar;
+- only clients on the local network get in — a fail-closed allowlist of its own (loopback, 10/8, 172.16/12,
+  192.168/16, 100.64/10 incl. Tailscale, link-local, fc00::/7), the server's own IPv6 networks (/48–/128, read from its
+  interfaces, so a changing ISP prefix keeps working), plus `LGDM_ALLOWED_NETWORKS`. Anything forwarded from the internet
+  is refused in every mode (Cloudflare headers, `X-Forwarded-For` / `Forwarded` / `X-Real-IP` naming a public address).
+  Limits: a relay on the server itself (ssh -R, frp, ngrok) arrives from 127.0.0.1, and Docker's userland proxy hides
+  the real source address — so the Docker image uses `network_mode: host`, and the docs say never to tunnel it;
+- pairing attempts are rate-limited per device (IPv4 address / IPv6 /64), loopback included: one attempt per
+  connection (frames sent together can't each try a token; a failed one closes it), counted before the check, 5 free,
+  then 30 s doubling to 15 min. A chosen `LGDM_TOKEN` must have 16+ characters, 8+ different;
+- public URLs have no path (a folder on a host shared with other apps would share the origin, its storage and the
+  bridge with them);
+- the bridge prints a pairing link, `<url>/#/pair?token=…` (also for the local page). The fragment never leaves the
+  browser; the page removes it from the address bar, and only on a click checks it with its own bridge (a link can name
+  another port on this computer, never another host; the page then says it replaces the current bridge) before saving
+  it. The app opens lg.scoty.uk paired through a one-time redirect (`http://localhost:<port>/pair/<nonce>`, 2 minutes),
+  so the token never appears in a command line other users can see;
 - plain HTTP: the page warns once that keys and passwords cross the LAN unencrypted (HTTPS through the user's own
   reverse proxy works: the page then uses `wss://` to its own origin). Browser features that need a secure context
   (`crypto.randomUUID`, the Clipboard API, COOP) have fallbacks (`apps/web/src/lib/secureContext.ts`).

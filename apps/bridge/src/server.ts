@@ -12,7 +12,8 @@ import { RepoClient } from './repo/repo.js';
 import { RepoRegistry } from './repo/registry.js';
 import { LitefinClient } from './litefin/litefin.js';
 import { ShellSessions } from './shell/shells.js';
-import { forwardedProblem, isLanClient, PairingLimiter } from './lan.js';
+import { forwardedProblem, isLanClient, limiterKey, PairingLimiter } from './lan.js';
+import { takePairRedirect } from './pairing.js';
 import { ErrorCodes } from '@lgdm/protocol';
 
 export const RPC_PATH = '/rpc';
@@ -83,6 +84,11 @@ export function startServer(
       res.writeHead(421, { 'content-type': 'text/plain' }).end(lan ? `Wrong host. Open the bridge at ${lan.publicUrls.join(' or ')}.` : 'Wrong host.');
       return;
     }
+    const redirect = req.method === 'GET' ? takePairRedirect((req.url ?? '').split('?')[0]!) : null;
+    if (redirect) {
+      res.writeHead(302, { location: redirect, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' }).end();
+      return;
+    }
     if (req.url === '/healthz') {
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, version: BRIDGE_VERSION }));
       return;
@@ -136,9 +142,14 @@ export function startServer(
 
   wss.on('connection', (ws: WebSocket, req: import('node:http').IncomingMessage) => {
     const client = (req.socket.remoteAddress ?? '?').replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
-    // Wrong tokens are rate-limited in LAN mode, per device. Not on this computer: a few stale tabs after a token
-    // reset mustn't lock the user out of pairing again.
-    const limited = !!lan && client !== '127.0.0.1' && client !== '::1';
+    // Pairing attempts are rate-limited in LAN mode, per device (IPv4 address or IPv6 /64) — including ones that
+    // arrive from this computer, which a relay (ssh -R, a tunnel client) would look like. Not outside LAN mode: a few
+    // stale tabs after a token reset mustn't lock the user out of the bridge on their own computer.
+    const limited = !!lan;
+    const key = limiterKey(client);
+    // One pairing attempt at a time per connection, and a wrong one ends it: frames that arrive together can't each
+    // try a token.
+    let attempting = false;
     // A bad frame (too big, invalid UTF-8) ends this connection — without a listener it would end the process.
     ws.on('error', () => ws.terminate());
     let alive = true;
@@ -176,8 +187,9 @@ export function startServer(
 
     ws.on('message', async (data, isBinary) => {
       if (isBinary) return;
-      // Too many wrong tokens from this address: it waits before it may try again.
-      const wait = session.authed || !limited ? 0 : limiter.waitFor(client);
+      if (!session.authed && attempting) return; // dropped; the connection closes when the attempt fails
+      // Too many pairing attempts from this device: it waits before it may try again.
+      const wait = session.authed || !limited ? 0 : limiter.waitFor(key);
       if (wait) {
         let id: unknown;
         try {
@@ -190,14 +202,20 @@ export function startServer(
         ws.close(4429, 'rate limited');
         return;
       }
+      const unauthed = !session.authed;
+      if (unauthed) {
+        attempting = true;
+        // Counted before the token is checked (and forgiven once it's right): attempts that run at the same time on
+        // other connections are counted too.
+        if (limited) limiter.failed(key);
+      }
       const res = await dispatch(data.toString(), session, { token: config.token, pool, repos, litefin, lgeUrl: config.lgeUrl, dev: config.dev, lan: !!lan });
       if (res && ws.readyState === ws.OPEN) ws.send(JSON.stringify(res));
-      if (res && 'error' in res && res.error.code === 'unauthorized' && !session.authed) {
-        if (limited) limiter.failed(client);
-        refusedLog(`a wrong pairing token from ${client}`);
+      if (unauthed && session.authed) {
+        if (limited) limiter.succeeded(key);
+      } else if (unauthed) {
+        if (res && 'error' in res && res.error.code === 'unauthorized') refusedLog(`a wrong pairing token from ${client}`);
         ws.close(4401, 'unauthorized');
-      } else if (session.authed && limited) {
-        limiter.succeeded(client);
       }
     });
     ws.on('close', () => {
