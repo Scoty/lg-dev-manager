@@ -158,6 +158,46 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
       });
       if (!ok) return false;
     }
+    if (source.custom) {
+      // Each install from an unofficial repository is the user's own call, with the warning in front of them — and
+      // with what it would replace: an app with the same id from the official repository or already on the TV.
+      const host = new URL(source.custom.url).host;
+      const official = await qc
+        .fetchQuery({ queryKey: ['repo', 'official'], queryFn: () => call('repo.list', {}, 60_000), staleTime: 5 * 60_000 })
+        .then((r) => r.packages.find((p) => p.id === pkg.id))
+        .catch(() => undefined);
+      const installed = apps?.find((a) => a.id === pkg.id);
+      const ok = await confirm({
+        title: `Install ${pkg.title} from ${source.custom.name}?`,
+        message: (
+          <>
+            <p style={{ marginTop: 0 }}>
+              <b>{source.custom.name}</b> (<span className="mono">{host}</span>) is an unofficial repository. Nobody has
+              reviewed its apps: they can be broken or contain malware, and they run on your TV.
+            </p>
+            {(official || installed) && (
+              <p>
+                ⚠️ It uses the id <span className="mono">{pkg.id}</span>
+                {official && (
+                  <>
+                    {' '}
+                    — the same as <b>{official.title}</b> in the official Homebrew repository
+                  </>
+                )}
+                .{' '}
+                {installed
+                  ? `${installed.title} is installed on ${device.name} now; this replaces it with ${source.custom.name}’s build, wherever the installed one came from.`
+                  : `Installing it means updates come from ${source.custom.name}’s build, not the official one.`}
+              </p>
+            )}
+            <p style={{ marginBottom: 0 }}>Install only if you trust whoever publishes it.</p>
+          </>
+        ),
+        confirmText: opts.update ? 'Update' : 'Install',
+        danger: true,
+      });
+      if (!ok) return false;
+    }
     const verb = opts.update ? 'Updating' : channel === 'beta' ? 'Installing the beta of' : 'Installing';
     const target = toTarget(device);
     return runWebInstall(verb, pkg.title, (opId) => client.call('apps.installFromRepo', { device: target, id: pkg.id, channel, opId, ...repoParam(source) }, 20 * 60_000));

@@ -130,15 +130,26 @@ new app from the [releases](https://github.com/Scoty/lg-dev-manager/releases/lat
 ## 🧩 Custom repositories
 
 Besides the official webOS Homebrew repository you can add others under **Setup → Custom repos** — the same addresses
-Homebrew Channel's "Add repository" takes: a `.json` file such as `apps.json` or `repo.json` (for example the official
-non-free one, `https://repo.webosbrew.org/api/non-free/apps.json`); a GitHub link to that file works too. The bridge checks that the address really is a repository before
-it's added; each one then gets its own page under **Apps**, with search, details and one-click install.
+Homebrew Channel's "Add repository" takes: usually a `.json` file such as `apps.json` or `repo.json` (for example the
+official non-free one, `https://repo.webosbrew.org/api/non-free/apps.json`), but also a GitHub link to that file, a
+short link, a pastebin "raw" page or just the site the repository is on. The bridge checks that the address really is a
+repository before it's added (and asks first if a short link leads to another site); each one then gets its own page
+under **Apps**, with search, details and install.
 
 > 🚨 **Unofficial repositories can contain untested apps or malware.** Nobody reviews them — not LG, not the webOS
 > Homebrew team — and on a rooted TV an app can do anything. Only add repositories from people you trust.
 
-Custom repositories are saved in your browser (and in **Export backup**), like your TVs. For safety the bridge only
-fetches them over **https** from the public internet — never from your computer or local network.
+Custom repositories are saved in your browser (and in **Export backup** — importing a backup asks before adding the
+repositories in it), like your TVs. For safety:
+
+- the bridge fetches everything a custom repository points to — its list, manifests, icons, IPKs and every redirect —
+  over **https** from the public internet only, never from your computer or local network;
+- every install from a custom repository asks first, and says when it would replace an app with the same id (from the
+  official repository or already on the TV); the bridge downloads the IPK itself (checking its SHA-256 when the
+  repository gives one) instead of letting the TV fetch it, and refuses an IPK that holds anything but the app the
+  repository lists;
+- Homebrew Channel itself can only be installed or updated from the official repository;
+- descriptions are shown as plain formatting only — repositories can't run scripts in the page.
 
 <a id="litefin-in-one-click"></a>
 

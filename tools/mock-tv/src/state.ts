@@ -213,4 +213,4 @@ export function canWrite(state: MockState, path: string): boolean {
   return path.startsWith('/media/developer/') || path === '/media/developer' || path.startsWith('/tmp/');
 }
 
-export { fakeIpk, readControl } from './ipk.js';
+export { ar as buildAr, fakeIpk, readControl, tar as buildTar } from './ipk.js';

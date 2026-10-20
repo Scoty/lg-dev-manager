@@ -8,9 +8,11 @@ import { z } from 'zod';
 export const DEFAULT_REPO_URL = 'https://repo.webosbrew.org/api';
 
 /**
- * A custom (unofficial) repository: the address of its `apps.json`, as Homebrew Channel's "Add repository" takes it
- * (e.g. https://repo.webosbrew.org/api/non-free/apps.json). Saved in the browser; `repo.check` turns what the user
- * typed into this form. https only — the bridge also refuses hosts on the local network.
+ * A custom (unofficial) repository: the address of its index, as Homebrew Channel's "Add repository" takes it — usually
+ * an `apps.json` or `repo.json` (e.g. https://repo.webosbrew.org/api/non-free/apps.json), but any address that answers
+ * with the index works there (a pastebin "raw" page, a file without an extension), so any path is allowed. Saved in
+ * the browser; `repo.check` turns what the user typed into this form (redirects such as short links already
+ * followed). https only — the bridge also refuses hosts on the local network.
  */
 export const CustomRepoUrl = z
   .string()
@@ -19,11 +21,11 @@ export const CustomRepoUrl = z
     try {
       const p = new URL(u);
       // http is let through here only for the test rig (LGDM_TEST_ALLOW_LOCAL_REPOS); the bridge refuses it otherwise.
-      return (p.protocol === 'https:' || p.protocol === 'http:') && !p.username && !p.password && !p.hash && /\.json$/i.test(p.pathname);
+      return (p.protocol === 'https:' || p.protocol === 'http:') && !p.username && !p.password && !p.hash;
     } catch {
       return false;
     }
-  }, 'Not an https address of a repository’s .json file');
+  }, 'Not an https address of a repository');
 
 /** An absolute http(s) URL — never `javascript:` or `data:`, since the UI uses these as links and images. */
 export const WebUrl = z
@@ -92,6 +94,11 @@ export const RepoErrorCodes = {
   NotARepo: 'repo_not_a_repo',
   /** A custom repository address that isn't allowed (not https, or on the local network). */
   BadRepoUrl: 'repo_bad_url',
+  /**
+   * An install from a custom repository that the bridge won't do: Homebrew Channel itself (only from the official
+   * repository), or an IPK that installs a different app than the entry says.
+   */
+  Refused: 'repo_refused',
 } as const;
 
 /** Features a bridge supports beyond the protocol version, reported in `system.hello`. */

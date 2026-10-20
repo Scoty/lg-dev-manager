@@ -9,7 +9,9 @@ import { CustomRepoUrl } from '@lgdm/protocol';
 export const CustomRepo = z.object({
   id: z.string().regex(/^[a-z0-9]{6,24}$/),
   name: z.string().trim().min(1).max(60),
-  url: CustomRepoUrl,
+  // Always kept in the URL parser's spelling: a look-alike host from a shared backup (a Cyrillic "е" in "repo") shows
+  // as its punycode (xn--…), not as the name it imitates.
+  url: CustomRepoUrl.transform((u) => new URL(u).href),
   addedAt: z.number(),
   /** How many apps it listed when it was added (shown on the Custom repositories page). */
   apps: z.number().int().nonnegative().optional(),
@@ -55,7 +57,13 @@ const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) =>
 
 export function addCustomRepo(r: { name: string; url: string; apps?: number }): CustomRepo {
   const list = loadCustomRepos();
-  const dup = list.find((x) => x.url === r.url);
+  let href: string;
+  try {
+    href = new URL(r.url).href;
+  } catch {
+    throw new Error('That isn’t a web address.');
+  }
+  const dup = list.find((x) => x.url === href);
   if (dup) throw new Error(`That repository is already added, as “${dup.name}”.`);
   if (list.length >= MAX_CUSTOM_REPOS) throw new Error(`You can add up to ${MAX_CUSTOM_REPOS} repositories.`);
   const repo = CustomRepo.parse({ id: newId(), name: r.name, url: r.url, addedAt: Date.now(), apps: r.apps });
@@ -67,11 +75,18 @@ export function removeCustomRepo(id: string) {
   save(loadCustomRepos().filter((r) => r.id !== id));
 }
 
-/** From a backup: repositories with an address that isn't saved yet are added. Returns how many. */
+/**
+ * From a backup (after the user agreed): repositories with an address that isn't saved yet are added, under new ids
+ * so a crafted file can't reuse one that's here already. Returns how many.
+ */
 export function mergeCustomRepos(repos: CustomRepo[]): number {
   const list = loadCustomRepos();
   const known = new Set(list.map((r) => r.url));
-  const added = repos.filter((r) => !known.has(r.url)).slice(0, Math.max(0, MAX_CUSTOM_REPOS - list.length));
+  const added = repos
+    .filter((r) => !known.has(r.url))
+    .filter((r, i, all) => all.findIndex((x) => x.url === r.url) === i)
+    .slice(0, Math.max(0, MAX_CUSTOM_REPOS - list.length))
+    .map((r) => ({ ...r, id: newId() }));
   if (added.length) save([...list, ...added]);
   return added.length;
 }

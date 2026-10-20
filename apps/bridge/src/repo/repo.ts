@@ -36,6 +36,14 @@ const MAX_PAGES = 50;
 const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const IMAGE_CACHE_BYTES = 48 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
+/** Apps read from one custom repository at most (a huge index could otherwise fill the bridge's memory and the page). */
+export const MAX_CUSTOM_PACKAGES = 2000;
+/** Pages read from a custom repository's index at most (the official one: MAX_PAGES). */
+const MAX_CUSTOM_PAGES = 10;
+/** How long reading a custom repository's index (pages and manifests) may take before what's in is used. */
+const CUSTOM_INDEX_MS = 45_000;
+/** Image cache per custom repository (up to 8 are kept: registry.ts). */
+const CUSTOM_IMAGE_CACHE_BYTES = 8 * 1024 * 1024;
 /** Separate manifest files (`manifestUrl` entries): how many are fetched per index load, how many at once, how big. */
 const MAX_MANIFEST_FETCHES = 200;
 const MANIFEST_FETCHES_AT_ONCE = 6;
@@ -47,9 +55,19 @@ export function sniffImage(data: Buffer): string | null {
   if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return 'image/jpeg';
   if (data.subarray(0, 4).toString('latin1') === 'GIF8') return 'image/gif';
   if (data.subarray(0, 4).toString('latin1') === 'RIFF' && data.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
-  const head = data.subarray(0, 1024).toString('utf8').replace(/^\uFEFF/, '').trimStart();
-  if (/^(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE svg[^>]*>\s*)?<svg[\s>]/i.test(head)) return 'image/svg+xml';
-  return null;
+  // SVG: an optional XML declaration, comments and doctype, then <svg. Skipped with indexOf, not one regex — a
+  // backtracking pattern over `<!---->…` from a hostile icon took exponential time and froze the bridge.
+  let head = data.subarray(0, 1024).toString('utf8').replace(/^\uFEFF/, '').trimStart();
+  const skipPast = (end: string) => {
+    const at = head.indexOf(end);
+    if (at < 0) return false;
+    head = head.slice(at + end.length).trimStart();
+    return true;
+  };
+  if (head.startsWith('<?xml') && !skipPast('>')) return null;
+  while (head.startsWith('<!--')) if (!skipPast('-->')) return null;
+  if (/^<!DOCTYPE svg/i.test(head) && !skipPast('>')) return null;
+  return /^<svg[\s>]/i.test(head) ? 'image/svg+xml' : null;
 }
 
 /** Loopback, private, link-local and other non-public ranges: never fetched for URLs that came from app entries. */
@@ -60,11 +78,34 @@ for (const [net, prefix] of [
   // Documentation ranges (RFC 5737): never real servers.
   ['192.0.2.0', 24], ['198.51.100.0', 24], ['203.0.113.0', 24],
 ] as const) NON_PUBLIC.addSubnet(net, prefix, 'ipv4');
-for (const [net, prefix] of [['::', 127], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8], ['64:ff9b::', 96]] as const) NON_PUBLIC.addSubnet(net, prefix, 'ipv6');
+for (const [net, prefix] of [
+  // Unspecified, loopback and IPv4-compatible (::a.b.c.d), unique-local, link-local, site-local (old), multicast.
+  ['::', 96], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10], ['ff00::', 8],
+  // Forms that carry an IPv4 address inside, which may be a private one: NAT64 (well-known and local-use), 6to4,
+  // Teredo. Repositories and their downloads are on ordinary addresses, so these are refused outright.
+  ['64:ff9b::', 96], ['64:ff9b:1::', 48], ['2002::', 16], ['2001::', 32],
+  // Documentation (RFC 3849): never real servers.
+  ['2001:db8::', 32],
+] as const) NON_PUBLIC.addSubnet(net, prefix, 'ipv6');
 
 export function isNonPublicAddress(address: string): boolean {
   const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
   if (mapped) return NON_PUBLIC.check(mapped[1]!, 'ipv4');
+  // IPv4-mapped in any other spelling (::ffff:7f00:1, 0:0:0:0:0:ffff:…): the URL parser writes it one way.
+  if (isIP(address) === 6) {
+    let canonical: string;
+    try {
+      canonical = new URL(`http://[${address}]/`).hostname.slice(1, -1);
+    } catch {
+      return true;
+    }
+    const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(canonical);
+    if (hex) {
+      const hi = Number.parseInt(hex[1]!, 16);
+      const lo = Number.parseInt(hex[2]!, 16);
+      return NON_PUBLIC.check(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`, 'ipv4');
+    }
+  }
   const family = isIP(address);
   return family === 4 ? NON_PUBLIC.check(address, 'ipv4') : family === 6 ? NON_PUBLIC.check(address, 'ipv6') : true;
 }
@@ -96,6 +137,13 @@ export class RepoClient {
   private readonly origin: string;
   /** The repository's own origin, when it may be fetched without the public-address checks. */
   private readonly trusted?: string;
+  /** A repository the user added: untrusted, and its apps are installed with extra checks (installFromRepo). */
+  readonly custom: boolean;
+  /**
+   * Everything a custom repository points the bridge at (manifests, icons, IPKs, every redirect hop) must be https, so
+   * nobody on the network path can swap what gets installed. Off only in the test rig, whose servers are http.
+   */
+  private readonly httpsOnly: boolean;
   /** "the Homebrew repository" or "the repository at host", for messages. */
   readonly name: string;
   private index?: Index;
@@ -112,9 +160,12 @@ export class RepoClient {
     opts: RepoClientOptions = {},
   ) {
     const src = source.replace(/\/+$/, '');
-    this.indexUrl = /\.json$/i.test(new URL(src).pathname) ? src : `${src}/apps.json`;
+    // A custom repository is named by the exact address of its index (repo.check found it): any path, kept as is.
+    this.indexUrl = opts.custom ? new URL(source).href : /\.json$/i.test(new URL(src).pathname) ? src : `${src}/apps.json`;
     this.origin = new URL(this.indexUrl).origin;
     this.trusted = !opts.custom || opts.trustOwnOrigin ? this.origin : undefined;
+    this.custom = !!opts.custom;
+    this.httpsOnly = !!opts.custom && !opts.trustOwnOrigin;
     this.name = opts.custom ? `the repository at ${this.host}` : 'the Homebrew repository';
   }
 
@@ -171,7 +222,7 @@ export class RepoClient {
   private async fetchImage(url: string): Promise<{ mime: string; base64: string }> {
     let res: Response;
     try {
-      res = await safeGet(url, 30_000, this.trusted);
+      res = await safeGet(url, 30_000, this.trusted, undefined, this.httpsOnly);
     } catch (e) {
       if (e instanceof RpcError) throw e;
       throw new RpcError(RepoErrorCodes.Unreachable, 'Couldn’t load the image.', `${url}: ${(e as Error).message}`);
@@ -187,7 +238,7 @@ export class RepoClient {
     this.imageCache.set(url, { ...out, bytes: out.base64.length });
     this.imageCacheBytes += out.base64.length;
     for (const [k, v] of this.imageCache) {
-      if (this.imageCacheBytes <= IMAGE_CACHE_BYTES) break;
+      if (this.imageCacheBytes <= (this.custom ? CUSTOM_IMAGE_CACHE_BYTES : IMAGE_CACHE_BYTES)) break;
       this.imageCache.delete(k);
       this.imageCacheBytes -= v.bytes;
     }
@@ -201,9 +252,9 @@ export class RepoClient {
     const html = (await trace(this.host, `GET ${url}`, () => this.fetchOk(url, HTML_MAX_BYTES))).toString('utf8');
     // Images in the description load through `image()` too, so they join the allowed list.
     if (this.index) {
-      for (const m of html.matchAll(/<img\b[^>]*?\bsrc\s*=\s*["']?([^"'\s>]+)/gi)) {
+      for (const src of imgSources(html)) {
         try {
-          const abs = new URL(m[1]!.replace(/&amp;/g, '&'), url);
+          const abs = new URL(src.replace(/&amp;/g, '&'), url);
           if (abs.protocol === 'https:' || abs.protocol === 'http:') this.index.images.add(abs.toString());
         } catch {
           /* not a URL */
@@ -219,7 +270,7 @@ export class RepoClient {
    */
   download(manifest: RepoManifest, progress?: Progress, trace: HttpTrace = untraced): Promise<{ data: Buffer; sha256: string; done: () => void }> {
     return downloadIpk(
-      { url: manifest.ipkUrl, id: manifest.id, size: manifest.ipkSize, sha256: manifest.ipkHash?.sha256, budget: this.budget, trustedOrigin: this.trusted, checksumFrom: 'the repository’s' },
+      { url: manifest.ipkUrl, id: manifest.id, size: manifest.ipkSize, sha256: manifest.ipkHash?.sha256, budget: this.budget, trustedOrigin: this.trusted, httpsOnly: this.httpsOnly, checksumFrom: 'the repository’s' },
       progress,
       trace,
     );
@@ -241,19 +292,24 @@ export class RepoClient {
     const seen = new Set<string>();
     const manifestUrls = new Map<RepoPackage, string>();
     let maxPage = 1;
-    for (let page = 1; page <= Math.min(maxPage, MAX_PAGES); page++) {
+    // A custom repository gets a time limit for the whole read, and fewer pages and apps: it can't keep the bridge
+    // busy (or its memory full) for long.
+    const deadline = this.custom ? Date.now() + CUSTOM_INDEX_MS : Infinity;
+    for (let page = 1; page <= Math.min(maxPage, this.custom ? MAX_CUSTOM_PAGES : MAX_PAGES); page++) {
       const url = this.pageUrl(page);
       if (!url) break;
+      if (page > 1 && (Date.now() > deadline || (this.custom && packages.length >= MAX_CUSTOM_PACKAGES))) break;
       const body = await trace(this.host, `GET ${url}`, () => this.fetchOk(url, JSON_MAX_BYTES));
       let json: { paging?: { maxPage?: unknown }; packages?: unknown };
       try {
-        json = JSON.parse(body.toString('utf8'));
+        json = JSON.parse(jsonText(body));
       } catch {
         throw new RpcError(RepoErrorCodes.BadResponse, `${this.Name} sent something that isn’t JSON.`, url);
       }
       if (!json || !Array.isArray(json.packages)) throw new RpcError(RepoErrorCodes.BadResponse, `${this.Name}’s app list looks wrong.`, url);
       if (page === 1 && typeof json.paging?.maxPage === 'number') maxPage = json.paging.maxPage;
       for (const raw of json.packages) {
+        if (this.custom && packages.length >= MAX_CUSTOM_PACKAGES) break;
         const pkg = normalizePackage(raw, url);
         if (!pkg || seen.has(pkg.package.id)) continue;
         seen.add(pkg.package.id);
@@ -264,7 +320,7 @@ export class RepoClient {
         else pkg.package.hasDescription = false;
       }
     }
-    await this.fillManifests(manifestUrls, trace);
+    await this.fillManifests(manifestUrls, trace, deadline);
     return { at: Date.now(), packages, descriptions, images };
   }
 
@@ -274,19 +330,22 @@ export class RepoClient {
    * or doesn't match its entry leaves that app without one (shown, not installable). Same public-address rules as
    * icons and IPKs for anything outside the trusted repository.
    */
-  private async fillManifests(todo: Map<RepoPackage, string>, trace: HttpTrace) {
+  private async fillManifests(todo: Map<RepoPackage, string>, trace: HttpTrace, deadline = Infinity) {
     const queue = [...todo].slice(0, MAX_MANIFEST_FETCHES);
     const worker = async () => {
-      for (let next = queue.shift(); next; next = queue.shift()) {
+      for (let next = queue.shift(); next && Date.now() < deadline; next = queue.shift()) {
         const [pkg, manifestUrl] = next;
         try {
-          const res = await trace(new URL(manifestUrl).host, `GET ${manifestUrl}`, () => safeGet(manifestUrl, 30_000, this.trusted));
+          const res = await trace(new URL(manifestUrl).host, `GET ${manifestUrl}`, () => safeGet(manifestUrl, 30_000, this.trusted, undefined, this.httpsOnly));
           if (!res.ok) {
             await res.body?.cancel().catch(() => {});
             continue;
           }
-          const manifest = parseManifest(JSON.parse((await readBody(res, MANIFEST_MAX_BYTES)).toString('utf8')), pkg.id, manifestUrl);
-          if (manifest && manifest.id === pkg.id) pkg.manifest = manifest;
+          const manifest = parseManifest(JSON.parse(jsonText(await readBody(res, MANIFEST_MAX_BYTES))), pkg.id, manifestUrl);
+          if (manifest && manifest.id === pkg.id) {
+            pkg.manifest = manifest;
+            if (!pkg.shortDescription && manifest.appDescription) pkg.shortDescription = plainText(manifest.appDescription).slice(0, 500) || undefined;
+          }
         } catch {
           /* unreachable, not JSON, too big: no manifest for this app */
         }
@@ -306,7 +365,7 @@ export class RepoClient {
   private async fetchOk(url: string, maxBytes: number): Promise<Buffer> {
     let res: Response;
     try {
-      res = this.trusted ? await this.request(url, 30_000) : await safeGet(url, 30_000, undefined, this.origin);
+      res = this.trusted ? await this.request(url, 30_000) : await safeGet(url, 30_000, undefined, this.origin, this.httpsOnly);
     } catch (e) {
       if (e instanceof RpcError) throw e;
       throw new RpcError(RepoErrorCodes.Unreachable, `Couldn’t reach ${this.name}. Is this computer online?`, `${url}: ${(e as Error).message}`);
@@ -328,24 +387,73 @@ export class RepoClient {
  * by hand, and every hop outside `trustedOrigin` (the configured source itself) must be a public address — no
  * loopback, LAN or link-local.
  */
-export async function safeGet(href: string, timeoutMs: number, trustedOrigin?: string, stayOn?: string): Promise<Response> {
+export async function safeGet(href: string, timeoutMs: number, trustedOrigin?: string, stayOn?: string, httpsOnly = false): Promise<Response> {
+  return (await getFollowing(href, timeoutMs, { trustedOrigin, stayOn, httpsOnly })).res;
+}
+
+/**
+ * Where an address ends up after its redirects (a short link like tinyurl.com/…, a GitHub Pages address that moved).
+ * Every hop must be https on a public address, like a custom repository itself; `testRig` (LGDM_TEST_ALLOW_LOCAL_REPOS)
+ * allows http and local addresses. The answer's body is not read.
+ */
+export async function finalUrl(href: string, timeoutMs: number, testRig = false): Promise<string> {
+  const { res, url } = await getFollowing(href, timeoutMs, { httpsOnly: !testRig, anyHost: testRig });
+  await res.body?.cancel().catch(() => {});
+  return url.href;
+}
+
+async function getFollowing(
+  href: string,
+  timeoutMs: number,
+  o: { trustedOrigin?: string; stayOn?: string; httpsOnly?: boolean; anyHost?: boolean },
+): Promise<{ res: Response; url: URL }> {
   const signal = AbortSignal.timeout(timeoutMs);
   let url = new URL(href);
   for (let hop = 0; ; hop++) {
     // `stayOn`: a repository's own files — a redirect to another site is refused, not followed.
-    if (stayOn && url.origin !== stayOn) throw new RpcError(RepoErrorCodes.BadResponse, 'The repository redirected to another site.', url.href);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new RpcError(RepoErrorCodes.BadResponse, 'Only http(s) links can be fetched.', url.href);
-    const trusted = url.origin === trustedOrigin;
+    if (o.stayOn && url.origin !== o.stayOn) throw new RpcError(RepoErrorCodes.BadResponse, 'The repository redirected to another site.', url.href);
+    if (url.protocol !== 'https:' && (o.httpsOnly || url.protocol !== 'http:')) {
+      throw new RpcError(RepoErrorCodes.BadResponse, o.httpsOnly ? 'Only https links can be followed.' : 'Only http(s) links can be fetched.', url.href);
+    }
+    const trusted = o.anyHost || url.origin === o.trustedOrigin;
     if (!trusted) await assertPublicHost(url);
     // Outside the trusted source the connection checks the address it actually uses (pinnedGet), so a host that
     // answers DNS with a public address for the check and 127.0.0.1 a moment later still can't reach this computer.
     const res = trusted ? await fetch(url, { redirect: 'manual', signal, headers: { accept: '*/*' } }) : await pinnedGet(url, signal);
     const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
-    if (!location) return res;
+    if (!location) return { res, url };
     await res.body?.cancel().catch(() => {});
     if (hop >= MAX_REDIRECTS) throw new RpcError(RepoErrorCodes.BadResponse, 'Too many redirects.', href);
     url = new URL(location, url);
   }
+}
+
+/** Most images a description may add to the allowed list. */
+const MAX_DESCRIPTION_IMAGES = 100;
+
+/**
+ * The `src` of each <img> in a description, in linear time: each tag is found with indexOf and only it (at most 4 KB)
+ * is searched. One regex over the whole page was quadratic on `<img <img <img…` and could block the bridge for seconds.
+ */
+export function imgSources(html: string): string[] {
+  const out: string[] = [];
+  const find = /<img/gi;
+  let nextGt = -1;
+  let tags = 0;
+  for (let hit = find.exec(html); hit && out.length < MAX_DESCRIPTION_IMAGES && ++tags <= 5000; hit = find.exec(html)) {
+    const at = hit.index;
+    if (nextGt < at) nextGt = html.indexOf('>', at);
+    if (nextGt < 0) break; // no tag ends after this: none of the rest can either
+    const tag = html.slice(at, Math.min(nextGt, at + 4096));
+    const m = /\ssrc\s*=\s*["']?([^"'\s>]+)/i.exec(tag);
+    if (m) out.push(m[1]!);
+  }
+  return out;
+}
+
+/** A JSON file's text: UTF-8, without the byte-order mark some editors (and pastebins) put in front. */
+export function jsonText(body: Buffer): string {
+  return body.toString('utf8').replace(/^﻿/, '');
 }
 
 /**
@@ -353,7 +461,7 @@ export async function safeGet(href: string, timeoutMs: number, trustedOrigin?: s
  * sha256. Returns the data and a function that releases the budget.
  */
 export async function downloadIpk(
-  o: { url: string; id: string; size?: number; sha256?: string; budget: UploadBudget; trustedOrigin?: string; checksumFrom: string },
+  o: { url: string; id: string; size?: number; sha256?: string; budget: UploadBudget; trustedOrigin?: string; httpsOnly?: boolean; checksumFrom: string },
   progress?: Progress,
   trace: HttpTrace = untraced,
 ): Promise<{ data: Buffer; sha256: string; done: () => void }> {
@@ -364,7 +472,7 @@ export async function downloadIpk(
   const done = () => frees.splice(0).forEach((f) => f());
   const data = await trace(url.host, `GET ${url.href}`, async () => {
     try {
-      const res = await safeGet(url.href, 300_000, o.trustedOrigin).catch((e: Error) => {
+      const res = await safeGet(url.href, 300_000, o.trustedOrigin, undefined, o.httpsOnly).catch((e: Error) => {
         if (e instanceof RpcError) throw e;
         throw new RpcError(RepoErrorCodes.DownloadFailed, `Couldn't download ${o.id}.`, e.message);
       });
@@ -548,7 +656,9 @@ export function normalizePackage(
   // IPK addresses in an embedded manifest resolve against it too, else against the index page.
   const manifestUrl = url(r.manifestUrl, pageUrl);
   const manifest = (m: unknown) => parseManifest(m, id, manifestUrl ?? pageUrl);
-  const short = str(r.shortDescription, 2000);
+  // Many third-party entries leave shortDescription out; the manifest's appDescription is the next best line.
+  const rawManifest = r.manifest && typeof r.manifest === 'object' ? (r.manifest as Record<string, unknown>) : undefined;
+  const short = str(r.shortDescription, 2000) ?? str(rawManifest?.appDescription, 2000);
 
   const reqs = r.requirements && typeof r.requirements === 'object' ? (r.requirements as Record<string, unknown>) : undefined;
   const requirements = reqs

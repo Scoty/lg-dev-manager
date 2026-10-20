@@ -11,16 +11,28 @@ import { useRpc } from '../../bridge/useRpc';
 import { useBridgeFeature } from '../../bridge/BridgeProvider';
 import { addCustomRepo, MAX_CUSTOM_REPOS, removeCustomRepo, useCustomRepos, type CustomRepo } from '../../repos/store';
 
+/** Whether the address the bridge found is on the site the user typed (no short link or redirect to elsewhere). */
+function sameSite(typed: string, found: string): boolean {
+  try {
+    const t = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(typed) ? typed : `https://${typed}`);
+    const f = new URL(found);
+    // github.com/…/blob/… → raw.githubusercontent.com is the same file, not a redirect.
+    return t.host === f.host || (t.host === 'github.com' && f.host === 'raw.githubusercontent.com');
+  } catch {
+    return false;
+  }
+}
+
 /** What the user should do about a failed check, beyond the bridge's message. */
 function checkHint(e: unknown) {
   const { code } = describeError(e);
   if (code === RepoErrorCodes.NotARepo) {
     return (
       <>
-        A repository’s address is a <span className="mono">.json</span> file — often <span className="mono">apps.json</span>{' '}
+        Use the exact address its author gives for Homebrew Channel — usually an <span className="mono">apps.json</span>{' '}
         or <span className="mono">repo.json</span>, like{' '}
-        <span className="mono">https://repo.webosbrew.org/api/non-free/apps.json</span>. Its author usually gives it as
-        the address to add in Homebrew Channel.
+        <span className="mono">https://repo.webosbrew.org/api/non-free/apps.json</span>, but short links and pastebin
+        “raw” pages work too. “Technical details” shows what each address that was tried answered.
       </>
     );
   }
@@ -55,7 +67,22 @@ export function CustomReposPage() {
     if (!url.trim() || !understood || !canCheck || full) return;
     setBusy(true);
     try {
-      const res = await call('repo.check', { url: url.trim() }, 90_000);
+      const typed = url.trim();
+      const res = await call('repo.check', { url: typed }, 120_000);
+      // A short link or a redirect can lead somewhere else entirely: say where before saving it.
+      if (!sameSite(typed, res.url)) {
+        const ok = await confirm({
+          title: 'This address leads to another site',
+          message: (
+            <>
+              <span className="mono">{typed}</span> leads to <span className="mono">{res.url}</span>. That address is what
+              gets added, and where apps would be installed from. Add it?
+            </>
+          ),
+          confirmText: 'Add it',
+        });
+        if (!ok) return;
+      }
       const repo = addCustomRepo({ name: name.trim() || new URL(res.url).host, url: res.url, apps: res.apps });
       toast({
         kind: 'success',
@@ -138,8 +165,8 @@ export function CustomReposPage() {
               ) : (
                 <span className="field-help" id="repo-url-help">
                   The address you’d add in Homebrew Channel — its <span className="mono">apps.json</span> or{' '}
-                  <span className="mono">repo.json</span>, or just the site it’s on (a GitHub link to the file works too). https
-                  only, on the public internet.
+                  <span className="mono">repo.json</span>, a short link or pastebin “raw” page, or just the site it’s on (a
+                  GitHub link to the file works too). https only, on the public internet.
                 </span>
               )}
             </div>

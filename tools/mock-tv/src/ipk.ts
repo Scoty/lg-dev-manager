@@ -2,7 +2,8 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 
 /** Build and read real (if tiny) IPKs: an ar archive with debian-binary, control.tar.gz and data.tar.gz. */
 
-function tar(files: { name: string; data: Buffer }[]): Buffer {
+/** A ustar archive of `files` (for tests that build unusual IPKs). */
+export function tar(files: { name: string; data: Buffer; type?: string; link?: string }[]): Buffer {
   const parts: Buffer[] = [];
   for (const f of files) {
     const h = Buffer.alloc(512);
@@ -13,7 +14,8 @@ function tar(files: { name: string; data: Buffer }[]): Buffer {
     h.write(`${f.data.length.toString(8).padStart(11, '0')}\0`, 124, 'latin1');
     h.write(`${Math.floor(Date.now() / 1000).toString(8).padStart(11, '0')}\0`, 136, 'latin1');
     h.write('        ', 148, 'latin1');
-    h[156] = 48; // '0' regular file
+    h[156] = (f.type ?? '0').charCodeAt(0); // '0' regular file, '2' symlink, 'x' pax header…
+    if (f.link) h.write(f.link, 157, 100, 'utf8');
     h.write('ustar\0', 257, 'latin1');
     h.write('00', 263, 'latin1');
     let sum = 0;
@@ -25,7 +27,8 @@ function tar(files: { name: string; data: Buffer }[]): Buffer {
   return Buffer.concat(parts);
 }
 
-function ar(members: { name: string; data: Buffer }[]): Buffer {
+/** An `ar` archive of `members`, the IPK container. */
+export function ar(members: { name: string; data: Buffer }[]): Buffer {
   const parts: Buffer[] = [Buffer.from('!<arch>\n', 'latin1')];
   for (const m of members) {
     const header =
@@ -37,12 +40,24 @@ function ar(members: { name: string; data: Buffer }[]): Buffer {
 }
 
 /** A minimal IPK for `id`. `padBytes` adds payload so transfers have something to show progress for. */
-export function fakeIpk(id: string, version = '1.0.0', title = id, padBytes = 0): Buffer {
+export function fakeIpk(id: string, version = '1.0.0', title = id, padBytes = 0, opts: { alsoApps?: string[] } = {}): Buffer {
   const control = `Package: ${id}\nVersion: ${version}\nSection: misc\nPriority: optional\nArchitecture: all\nDescription: ${title}\n`;
+  const json = (o: unknown) => Buffer.from(JSON.stringify(o));
+  // Laid out like ares-package's output: the app and its package info under usr/palm.
+  const apps = [id, ...(opts.alsoApps ?? [])];
   return ar([
     { name: 'debian-binary', data: Buffer.from('2.0\n') },
     { name: 'control.tar.gz', data: gzipSync(tar([{ name: './control', data: Buffer.from(control) }])) },
-    { name: 'data.tar.gz', data: gzipSync(tar([{ name: './payload.bin', data: Buffer.alloc(padBytes, 0x2e) }])) },
+    {
+      name: 'data.tar.gz',
+      data: gzipSync(
+        tar([
+          ...apps.map((a) => ({ name: `./usr/palm/applications/${a}/appinfo.json`, data: json({ id: a, version, type: 'web', title, main: 'index.html' }) })),
+          { name: `./usr/palm/applications/${id}/payload.bin`, data: Buffer.alloc(padBytes, 0x2e) },
+          { name: `./usr/palm/packages/${id}/packageinfo.json`, data: json({ id, version, app: id }) },
+        ]),
+      ),
+    },
   ]);
 }
 

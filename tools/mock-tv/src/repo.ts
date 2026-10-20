@@ -26,6 +26,10 @@ export interface MockRepoApp {
   screenshots?: number;
   featured?: boolean;
   padBytes?: number;
+  /** The id inside the IPK's control file, when it differs from the entry's (an IPK that installs another app). */
+  ipkPackageId?: string;
+  /** Other apps the IPK also carries (an IPK that installs more than the entry says). */
+  ipkAlsoApps?: string[];
   /** Icon URL served as a redirect to http://localhost:<port>/… (a different, local origin). */
   iconRedirect?: boolean;
   /** Icon URL on http://localhost:<port> instead of the repository's own host. */
@@ -120,7 +124,7 @@ export async function startMockRepo(
     const key = `${app.id}@${version}`;
     let data = ipks.get(key);
     if (!data) {
-      data = fakeIpk(app.id, version, app.title, app.padBytes ?? 0);
+      data = fakeIpk(app.ipkPackageId ?? app.id, version, app.title, app.padBytes ?? 0, { alsoApps: app.ipkAlsoApps });
       ipks.set(key, data);
     }
     return data;
@@ -210,6 +214,11 @@ export async function startMockRepo(
     let m: RegExpMatchArray | null;
     // Third-party repositories often name their index repo.json (Homebrew Channel takes any address).
     if ((path === '/api/apps.json' && !opts.repoJsonOnly) || path === '/api/repo.json') return json(page(1));
+    // Other ways repositories get published: GitHub Pages also answers with a trailing slash (syspoke.github.io/backup.json/);
+    // a pastebin "raw" page is text/plain, sometimes with a byte-order mark; a short link redirects to another site.
+    if (path === '/api/repo.json/') return json(page(1));
+    if (path === '/raw/repo') return res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }).end(`﻿${JSON.stringify(page(1))}`);
+    if (path === '/s/repo') return res.writeHead(302, { location: `http://localhost:${port}/raw/repo` }).end();
     if ((m = path.match(/^\/api\/apps\/([\w.-]+)\/manifest\.json$/))) {
       const app = apps.find((a) => a.id === m![1] && a.manifestByUrl);
       if (!app) return notFound();

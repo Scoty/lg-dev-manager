@@ -46,6 +46,10 @@ test('add a custom repository after checking it, browse and install from it, rem
   await expect(card(page, 'Stream Client')).toContainText('Game streaming, 4K & HDR');
 
   await card(page, 'Custom Player').getByRole('button', { name: 'Install Custom Player' }).click();
+  // Every install from an unofficial repository asks first, with the warning.
+  const ask = page.getByRole('dialog', { name: 'Install Custom Player from Friends’ apps?' });
+  await expect(ask).toContainText('Nobody has reviewed its apps');
+  await ask.getByRole('button', { name: 'Install', exact: true }).click();
   const progress = page.getByRole('dialog', { name: 'Installing Custom Player' });
   await expect(progress.getByText('Custom Player v3.1.0 is installed')).toBeVisible({ timeout: 30_000 });
   await progress.getByRole('button', { name: 'Done' }).click();

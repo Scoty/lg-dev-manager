@@ -263,10 +263,22 @@ export async function exportDevices(): Promise<ExportFile> {
 }
 
 /**
- * Import a backup. Devices with an id that already exists are replaced. Returns how many were imported.
- * All or nothing: one bad device rejects the whole file with a BackupError.
+ * The custom repositories a backup would add (ones not saved here yet). A backup can come from someone else, and a
+ * repository can carry malware, so the page asks before adding these (importDevices `customRepos`).
  */
-export async function importDevices(json: unknown): Promise<number> {
+export function newCustomReposIn(json: unknown): CustomRepo[] {
+  const parsed = ExportFile.safeParse(json);
+  if (!parsed.success || !parsed.data.customRepos) return [];
+  const known = new Set(loadCustomRepos().map((r) => r.url));
+  return parsed.data.customRepos.filter((r) => !known.has(r.url));
+}
+
+/**
+ * Import a backup. Devices with an id that already exists are replaced. Returns how many were imported.
+ * All or nothing: one bad device rejects the whole file with a BackupError. Its custom repositories are added only
+ * with `customRepos: true` — after the user agreed to them.
+ */
+export async function importDevices(json: unknown, opts: { customRepos?: boolean } = {}): Promise<number> {
   const parsed = ExportFile.safeParse(json);
   if (!parsed.success) throw new BackupError(describeBackupProblem(parsed.error, json));
   const file = parsed.data;
@@ -278,7 +290,7 @@ export async function importDevices(json: unknown): Promise<number> {
     t.onerror = () => reject(t.error);
   });
   if (!getActiveDeviceId() && file.devices[0]) setActiveDeviceId(file.devices[0].id);
-  if (file.customRepos) mergeCustomRepos(file.customRepos);
+  if (file.customRepos && opts.customRepos) mergeCustomRepos(file.customRepos);
   notify();
   return file.devices.length;
 }

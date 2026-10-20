@@ -7,6 +7,7 @@ import {
   exportDevices,
   getActiveDeviceId,
   importDevices,
+  newCustomReposIn,
   listDevices,
   removeDevice,
   toTarget,
@@ -64,8 +65,13 @@ describe('browser device store', () => {
     localStorage.clear();
     resetCustomReposCache();
     await clearAllDevices();
+    expect(newCustomReposIn(file).map((r) => r.name)).toEqual(['Friends']);
+    // Not without the user's say-so: a backup can come from someone else.
     expect(await importDevices(file)).toBe(1);
+    expect(loadCustomRepos()).toEqual([]);
+    expect(await importDevices(file, { customRepos: true })).toBe(1);
     expect(loadCustomRepos().map((r) => r.name)).toEqual(['Friends']);
+    expect(newCustomReposIn(file)).toEqual([]); // already there
     const { customRepos: _, ...older } = file;
     expect(await importDevices(older)).toBe(1);
   });

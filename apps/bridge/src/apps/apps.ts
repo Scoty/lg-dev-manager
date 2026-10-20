@@ -15,7 +15,7 @@ import { lunaCall, lunaSubscribe, type SubscriptionStep } from '../ssh/luna.js';
 import type { SshRunner } from '../ssh/pool.js';
 import { serveToDevice } from '../ssh/serve.js';
 import { mkdirp, putFile, readFile, rmFile, sha256sum } from '../ssh/transfer.js';
-import { readIpkControl } from './ipk.js';
+import { readIpkControl, untrustedIpkProblem } from './ipk.js';
 import { turnOnScreen, tvPower } from '../devices/power.js';
 import type { HttpTrace, RepoClient } from '../repo/repo.js';
 
@@ -320,13 +320,32 @@ export async function installFromRepo(
   if (!manifest) {
     throw new RpcError(RepoErrorCodes.NoManifest, `${pkg.title} has no ${channel === 'beta' ? 'beta' : 'release'} to install.`);
   }
+  // Also an id that Homebrew Channel's ids start with: its services (org.webosbrew.hbchannel.service) could ride along.
+  if (repo.custom && [...HOMEBREW_CHANNEL_IDS].some((hb) => hb === pkg.id || hb.startsWith(`${pkg.id}.`))) {
+    throw new RpcError(
+      RepoErrorCodes.Refused,
+      `${pkg.title} is Homebrew Channel itself — install or update it only from the official Homebrew repository, not from ${repo.name}.`,
+    );
+  }
   return installDownloadable(
     pool,
     device,
     { id: pkg.id, title: pkg.title, version: manifest.version, ipkUrl: manifest.ipkUrl, sha256: manifest.ipkHash?.sha256 },
     () => repo.download(manifest, progress, trace),
     progress,
+    // A custom repository isn't trusted: the bridge downloads the IPK itself (https, public addresses only, checksum
+    // checked) instead of handing the address to the TV, and it must hold the app the entry names.
+    repo.custom ? { untrustedFrom: repo.name } : {},
   );
+}
+
+/** Homebrew Channel and its updater: a custom repository can't replace the app that keeps the TV rooted. */
+const HOMEBREW_CHANNEL_IDS = new Set([APP_ID_HBCHANNEL, 'org.webosbrew.safeupdate']);
+
+/** The IPK must install the app the repository listed — not Homebrew Channel or another app under a friendly name. */
+async function assertInstallsOnly(data: Buffer, id: string, from: string) {
+  const problem = await untrustedIpkProblem(data, id);
+  if (problem) throw new RpcError(RepoErrorCodes.Refused, `Not installed: the IPK from ${from} should install only ${id}, but ${problem}.`);
 }
 
 /**
@@ -340,6 +359,7 @@ export async function installDownloadable(
   pkg: { id: string; title: string; version: string; ipkUrl: string; sha256?: string },
   download: () => Promise<{ data: Buffer; sha256: string; done: () => void }>,
   progress?: Progress,
+  opts: { untrustedFrom?: string } = {},
 ): Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel' }> {
   const location = await findInstallLocation(pool, device, pkg.id).catch(() => null);
   if (location && location !== 'developer') {
@@ -352,10 +372,11 @@ export async function installDownloadable(
   }
   // Homebrew Channel's installer insists on a checksum: without one, download here and install from a local copy
   // (installIpk still uses Homebrew Channel when present, so root is kept).
-  if (!pkg.sha256) {
+  if (!pkg.sha256 || opts.untrustedFrom) {
     progress?.({ stage: 'upload', text: 'Downloading the IPK…' });
     const { data, done } = await download();
     try {
+      if (opts.untrustedFrom) await assertInstallsOnly(data, pkg.id, opts.untrustedFrom);
       const res = await installIpk(pool, device, `${pkg.id}.ipk`, data, progress);
       return { appId: res.appId || pkg.id, version: pkg.version, via: res.via };
     } finally {

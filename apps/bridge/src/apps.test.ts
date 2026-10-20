@@ -1,12 +1,12 @@
 import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { fakeIpk, startMockTv, type MockTv } from '@lgdm/mock-tv';
+import { buildAr, buildTar, fakeIpk, startMockTv, type MockTv } from '@lgdm/mock-tv';
 import type { DeviceTarget, OpProgress } from '@lgdm/protocol';
 import { appIcon, installIpk, launchApp, listApps, removeApp } from './apps/apps.js';
 import { deviceInfo, generateKey, storageInfo } from './devices/info.js';
 import { powerStateOf, tvPower } from './devices/power.js';
 import { RpcError } from './rpc/errors.js';
-import { readIpkControl } from './apps/ipk.js';
+import { readIpkControl, untrustedIpkProblem } from './apps/ipk.js';
 import { SshPool } from './ssh/pool.js';
 import { putFile, readFile } from './ssh/transfer.js';
 
@@ -231,6 +231,61 @@ describe('IPK control', () => {
       Version: '21.1.0',
       Description: 'Kodi',
     });
+  });
+
+  it('checks strictly that an untrusted IPK installs only its own app', async () => {
+    const id = 'org.example.nice';
+    expect(await untrustedIpkProblem(fakeIpk(id), id)).toBeNull();
+    expect(await untrustedIpkProblem(fakeIpk('org.example.other'), id)).toBe('it is org.example.other');
+    expect(await untrustedIpkProblem(fakeIpk(id, '1.0.0', id, 0, { alsoApps: ['org.webosbrew.hbchannel'] }), id)).toMatch(
+      /also installs org\.webosbrew\.hbchannel/,
+    );
+    // A second app, even one named like it, isn't (only services may be id.<something>).
+    expect(await untrustedIpkProblem(fakeIpk(id, '1.0.0', id, 0, { alsoApps: [`${id}.second`] }), id)).toMatch(/also installs org\.example\.nice\.second/);
+
+    const json = (o: unknown) => Buffer.from(JSON.stringify(o));
+    const ipk = (control: string, data: { name: string; data: Buffer; type?: string; link?: string }[], extra: { name: string; data: Buffer }[] = []) =>
+      buildAr([
+        { name: 'debian-binary', data: Buffer.from('2.0\n') },
+        { name: 'control.tar.gz', data: gzipSync(buildTar([{ name: './control', data: Buffer.from(control) }])) },
+        { name: 'data.tar.gz', data: gzipSync(buildTar(data)) },
+        ...extra,
+      ]);
+    const own = [{ name: `./usr/palm/applications/${id}/appinfo.json`, data: json({ id }) }];
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, own), id)).toBeNull();
+    // opkg reads the first paragraph, a quick parser the last line: refuse anything they could read differently.
+    expect(await untrustedIpkProblem(ipk(`Package: org.webosbrew.hbchannel\n\nPackage: ${id}\n`, own), id)).toMatch(/more than one paragraph/);
+    expect(await untrustedIpkProblem(ipk(`Package: org.webosbrew.hbchannel\npackage: ${id}\n`, own), id)).toMatch(/exactly one package/);
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, own, [{ name: 'control.tar.gz', data: Buffer.from('x') }]), id)).toMatch(/same name/);
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, own, [{ name: 'data.tar.xz', data: Buffer.from('x') }]), id)).toMatch(/single data/);
+    // What the data really installs: folder names and the ids inside the metadata files.
+    const lying = [{ name: `./usr/palm/applications/${id}/appinfo.json`, data: json({ id: 'org.webosbrew.hbchannel' }) }];
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, lying), id)).toMatch(/also installs org\.webosbrew\.hbchannel \(named in appinfo\.json\)/);
+    const svc = [...own, { name: `./usr/palm/services/com.webos.service.x/services.json`, data: json({ id: 'com.webos.service.x' }) }];
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, svc), id)).toMatch(/also installs com\.webos\.service\.x/);
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, [...own, { name: './../../etc/passwd', data: Buffer.from('x') }]), id)).toMatch(/climbs out/);
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, [{ name: './payload.bin', data: Buffer.from('x') }]), id)).toMatch(/no app or package folder/);
+    expect(await untrustedIpkProblem(Buffer.from('not an ipk'), id)).toMatch(/isn’t an IPK/);
+    // Ways around a quick folder check: another app next to its own (only services may share the prefix), `.`
+    // segments, the last of two pax paths, links out of the folder.
+    const shortId = 'org.webosbrew';
+    const sneaky = (name: string) => [{ name: `./usr/palm/applications/${shortId}/appinfo.json`, data: json({ id: shortId }) }, { name, data: Buffer.from('x') }];
+    expect(await untrustedIpkProblem(ipk(`Package: ${shortId}\n`, sneaky('./usr/palm/applications/org.webosbrew.hbchannel/x')), shortId)).toMatch(/also installs org\.webosbrew\.hbchannel/);
+    expect(await untrustedIpkProblem(ipk(`Package: ${shortId}\n`, sneaky(`./usr/palm/services/${shortId}.svc/x`)), shortId)).toBeNull();
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, [...own, { name: './usr/./palm/applications/evil/x', data: Buffer.from('x') }]), id)).toMatch(/also installs evil/);
+    const paxRecord = (key: string, value: string) => {
+      const rest = ` ${key}=${value}\n`;
+      let n = rest.length + 1;
+      while (String(n).length + rest.length !== n) n++;
+      return `${n}${rest}`;
+    };
+    const twoPaths = Buffer.from(paxRecord('path', `usr/palm/applications/${id}/x`) + paxRecord('path', 'usr/palm/applications/evil/x'));
+    const paxed = [{ name: 'PaxHeader', data: twoPaths, type: 'x' }, { name: `./usr/palm/applications/${id}/x`, data: Buffer.from('x') }];
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, [...own, ...paxed]), id)).toMatch(/also installs evil/);
+    const link = (target: string) => [...own, { name: `./usr/palm/applications/${id}/l`, data: Buffer.alloc(0), type: '2', link: target }];
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, link('../org.webosbrew.hbchannel')), id)).toMatch(/points outside/);
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, link('/media/developer')), id)).toMatch(/points outside/);
+    expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, link('lib/x.so.1')), id)).toBeNull();
   });
 
   it('returns null for anything else', () => {

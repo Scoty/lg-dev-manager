@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Alert } from '../../components/Alert';
 import { Icon } from '../../shell/icons';
-import { BackupError, clearAllDevices, exportDevices, importDevices } from '../../devices/store';
+import { BackupError, clearAllDevices, exportDevices, importDevices, newCustomReposIn } from '../../devices/store';
 import { saveBlob } from '../files/transfer';
 import { useDevices } from '../../devices/useDevices';
 import { useFeedback } from '../../components/Feedback';
@@ -27,8 +27,37 @@ export function DataPrivacyCard() {
 
   const doImport = async (file: File) => {
     try {
-      const n = await importDevices(JSON.parse(await file.text()));
-      setMsg({ kind: 'success', text: `Imported ${n} device${n === 1 ? '' : 's'}.` });
+      const json: unknown = JSON.parse(await file.text());
+      // Custom repositories in a backup are only added once the user has seen them and the warning — a backup can
+      // come from someone else, and a repository can carry malware.
+      const repos = newCustomReposIn(json);
+      const withRepos =
+        repos.length > 0 &&
+        (await confirm({
+          title: `Also add ${repos.length === 1 ? 'a custom repository' : `${repos.length} custom repositories`}?`,
+          message: (
+            <>
+              <p style={{ marginTop: 0 }}>
+                This backup also lists unofficial app repositories. They can contain untested apps or malware — add them
+                only if you trust where the backup came from.
+              </p>
+              <ul style={{ marginBottom: 0 }}>
+                {repos.map((r) => (
+                  <li key={r.id}>
+                    <b>{r.name}</b> — <span className="mono">{r.url}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ),
+          confirmText: 'Add them too',
+          cancelText: 'Only the TVs',
+        }));
+      const n = await importDevices(json, { customRepos: withRepos });
+      setMsg({
+        kind: 'success',
+        text: `Imported ${n} device${n === 1 ? '' : 's'}${withRepos ? ` and ${repos.length} custom repositor${repos.length === 1 ? 'y' : 'ies'}` : ''}.`,
+      });
     } catch (e) {
       setMsg({ kind: 'danger', text: e instanceof BackupError ? e.message : 'That file is not an LG Dev Manager device backup.' });
     }

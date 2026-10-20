@@ -3,10 +3,14 @@ import { isIP } from 'node:net';
 import { RepoErrorCodes } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
 import { bridgeUploadBudget, type UploadBudget } from '../rpc/uploads.js';
-import { isNonPublicAddress, RepoClient, type HttpTrace } from './repo.js';
+import { finalUrl, isNonPublicAddress, RepoClient, type HttpTrace } from './repo.js';
+
+const noTrace: HttpTrace = (_host, _what, run) => run();
 
 /** Custom repositories kept in memory at once (index, images); the least recently used is dropped first. */
 const MAX_CUSTOM = 8;
+/** How long repo.check keeps trying the addresses it guesses from what the user typed. */
+const CHECK_BUDGET_MS = 45_000;
 
 /**
  * The official Homebrew repository plus the custom ones the user added. The browser keeps the list (it is a user
@@ -44,9 +48,15 @@ export class RepoRegistry {
   }
 
   /**
-   * repo.check: is there a webOS Homebrew repository at what the user typed? Accepts the apps.json address (what
-   * Homebrew Channel's "Add repository" takes), or the folder or site it is in (tries …/apps.json and
-   * …/api/apps.json). Answers with the address to save and what the repository lists.
+   * repo.check: is there a webOS Homebrew repository at what the user typed? Repository owners publish them in many
+   * ways, and Homebrew Channel takes any address that answers with the index, so this tries, in order:
+   * - the address itself — an apps.json or repo.json, but also a pastebin "raw" page, a file without an extension, a
+   *   folder whose index page is the JSON, or `…/backup.json/` with a trailing slash (GitHub Pages serves those);
+   * - for a site or folder, the names repositories use: apps.json (the official repo, repogen) and repo.json (many
+   *   third-party ones, e.g. webosappclub.github.io/repo.json), at the top or under api/.
+   * Redirects are followed first (short links like tinyurl.com/…, moved GitHub Pages sites) — every hop https and
+   * public — and the address saved is where they end, so later requests go straight there. Answers with that address
+   * and what the repository lists.
    */
   async check(input: string, trace?: HttpTrace): Promise<{ url: string; apps: number; installable: number; sample: string[] }> {
     let text = input.trim();
@@ -61,43 +71,64 @@ export class RepoRegistry {
     this.assertAllowedScheme(u);
     if (!this.allowLocal) await assertPublicRepoHost(u);
     u.hash = '';
-    u.search = '';
     // A GitHub page about the file (github.com/<owner>/<repo>/blob/<branch>/repo.json) is HTML; the file itself is on
     // raw.githubusercontent.com — what a repository's README usually gives for Homebrew Channel.
     u = githubRaw(u) ?? u;
-    const base = u.href.replace(/\/+$/, '');
-    if (base === this.official.indexUrl || `${base}/apps.json` === this.official.indexUrl) {
-      throw new RpcError(RepoErrorCodes.BadRepoUrl, 'That’s the official Homebrew repository — it’s already built in (Apps → Homebrew repo).');
-    }
-    // A site or folder: the names repositories use — apps.json (the official repo, repogen) and repo.json (many
-    // third-party ones, e.g. webosappclub.github.io/repo.json), at the top or under api/.
-    const candidates = /\.json$/i.test(u.pathname)
-      ? [base]
-      : [`${base}/apps.json`, `${base}/repo.json`, `${base}/api/apps.json`, `${base}/api/repo.json`];
+    this.assertNotOfficial(u.href);
+    const base = `${u.origin}${u.pathname.replace(/\/+$/, '')}`;
+    const looksLikeFile = /\.json$/i.test(base);
+    const candidates = [
+      ...new Set([
+        u.href,
+        ...(looksLikeFile ? [base] : u.search ? [] : [`${base}/apps.json`, `${base}/repo.json`, `${base}/api/apps.json`, `${base}/api/repo.json`]),
+      ]),
+    ];
     const problems: string[] = [];
+    // Slow or unanswering servers can't keep the check (and the page waiting on it) going for minutes.
+    const deadline = Date.now() + CHECK_BUDGET_MS;
     for (const candidate of candidates) {
-      const client = this.for(candidate);
+      if (Date.now() > deadline) {
+        problems.push(`Stopped trying after ${CHECK_BUDGET_MS / 1000} seconds.`);
+        break;
+      }
       try {
-        const { packages } = await client.list({ refresh: true, trace });
-        if (!packages.length) {
-          problems.push(`${candidate}: lists no apps this app can read`);
-          continue;
-        }
-        return {
-          url: candidate,
-          apps: packages.length,
-          installable: packages.filter((p) => p.manifest).length,
-          sample: packages.slice(0, 3).map((p) => p.title),
-        };
+        const found = await this.tryIndex(candidate, trace);
+        if (found) return found;
       } catch (e) {
+        if (e instanceof RpcError && e.code === RepoErrorCodes.BadRepoUrl) throw e;
         problems.push(`${candidate}: ${e instanceof RpcError ? `${e.message}${e.detail ? ` (${e.detail})` : ''}` : (e as Error).message}`);
       }
     }
     throw new RpcError(
       RepoErrorCodes.NotARepo,
-      'There’s no webOS Homebrew repository at that address. Use the address of its apps.json — the one you’d add in Homebrew Channel.',
+      'There’s no webOS Homebrew repository at that address. Use the address its author gives for Homebrew Channel.',
       problems.join('\n'),
     );
+  }
+
+  /** The repository at `candidate` (after its redirects), or an error saying why there isn't one. */
+  private async tryIndex(candidate: string, trace?: HttpTrace) {
+    const host = new URL(candidate).host;
+    const resolved = await (trace ?? noTrace)(host, `GET ${candidate} (following redirects)`, () => finalUrl(candidate, 15_000, this.allowLocal));
+    let target = new URL(resolved);
+    target = githubRaw(target) ?? target;
+    target.hash = '';
+    this.assertNotOfficial(target.href);
+    const { packages } = await this.for(target.href).list({ refresh: true, trace });
+    return {
+      url: target.href,
+      apps: packages.length,
+      installable: packages.filter((p) => p.manifest).length,
+      sample: packages.slice(0, 3).map((p) => p.title),
+    };
+  }
+
+  private assertNotOfficial(href: string) {
+    const official = this.official.indexUrl;
+    const bare = href.replace(/\/+$/, '');
+    if (bare === official || `${bare}/apps.json` === official) {
+      throw new RpcError(RepoErrorCodes.BadRepoUrl, 'That’s the official Homebrew repository — it’s already built in (Apps → Homebrew repo).');
+    }
   }
 
   private assertAllowedScheme(u: URL) {

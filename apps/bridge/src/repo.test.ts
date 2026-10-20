@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { makeIconPng, MOCK_CUSTOM_REPO_APPS, startMockRepo, startMockTv, type MockRepo, type MockTv } from '@lgdm/mock-tv';
 import type { DeviceTarget, OpProgress } from '@lgdm/protocol';
 import { findInstallLocation, hbChannelConfig, installFromRepo, listApps } from './apps/apps.js';
-import { isNonPublicAddress, normalizePackage, plainText, RepoClient, sniffImage } from './repo/repo.js';
+import { finalUrl, imgSources, isNonPublicAddress, normalizePackage, plainText, RepoClient, safeGet, sniffImage } from './repo/repo.js';
 import { githubRaw, RepoRegistry } from './repo/registry.js';
 import { RpcError } from './rpc/errors.js';
 import { UploadBudget } from './rpc/uploads.js';
@@ -31,6 +31,14 @@ async function code(p: Promise<unknown>): Promise<string> {
     return e instanceof RpcError ? e.code : `non-rpc: ${(e as Error).message}`;
   }
   return 'no error';
+}
+
+/** A server whose every address redirects to `to` (a short link). */
+async function startRedirect(to: string): Promise<{ url: string; close: () => Promise<void> }> {
+  const server: Server = createServer((_req, res) => res.writeHead(302, { location: to }).end());
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+  const { port } = server.address() as AddressInfo;
+  return { url: `http://127.0.0.1:${port}/go`, close: () => new Promise((r) => server.close(() => r())) };
 }
 
 const collect = () => {
@@ -156,10 +164,22 @@ describe('repository index', () => {
     expect(sniffImage(Buffer.from('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBe('image/svg+xml');
     expect(sniffImage(Buffer.from([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg');
     expect(sniffImage(Buffer.from('<html></html>'))).toBeNull();
-    for (const a of ['127.0.0.1', '10.1.2.3', '192.168.1.10', '172.20.0.1', '169.254.169.254', '::1', 'fe80::1', 'fd00::1', '::ffff:127.0.0.1', '0.0.0.0']) {
+    expect(sniffImage(Buffer.from('<?xml version="1.0"?><!-- a --><!-- b --><!DOCTYPE svg><svg xmlns="x">'))).toBe('image/svg+xml');
+    // Hostile input is answered at once (a backtracking pattern used to take exponential time here, and in descriptions).
+    let t = Date.now();
+    expect(sniffImage(Buffer.from(`${'<!---->'.repeat(140)}x`))).toBeNull();
+    expect(imgSources('<img '.repeat(200_000))).toEqual([]);
+    expect(imgSources(`<p><IMG alt="a" src="x.png"><img src='y.png'></p>${'<img '.repeat(100_000)}>`)).toEqual(['x.png', 'y.png']);
+    expect(Date.now() - t).toBeLessThan(1000);
+    t = 0;
+    for (const a of [
+      '127.0.0.1', '10.1.2.3', '192.168.1.10', '172.20.0.1', '169.254.169.254', '::1', 'fe80::1', 'fd00::1', '::ffff:127.0.0.1', '0.0.0.0',
+      // Hex IPv4-mapped, IPv4-compatible, NAT64 (local-use), 6to4, Teredo, site-local, documentation.
+      '::ffff:7f00:1', '0:0:0:0:0:ffff:c0a8:0101', '::7f00:1', '64:ff9b:1::a00:1', '2002:c0a8:101::1', '2001:0:4136:e378::1', 'fec0::1', '2001:db8::1',
+    ]) {
       expect(isNonPublicAddress(a), a).toBe(true);
     }
-    for (const a of ['140.82.112.3', '185.199.108.133', '2606:50c0:8000::153']) expect(isNonPublicAddress(a), a).toBe(false);
+    for (const a of ['140.82.112.3', '185.199.108.133', '2606:50c0:8000::153', '::ffff:8c52:7003']) expect(isNonPublicAddress(a), a).toBe(false);
   });
 
   it('allows images found in a description', async () => {
@@ -321,7 +341,9 @@ describe('custom repositories', () => {
   it('says what is wrong with an address that isn’t a repository', async () => {
     const reg = local();
     expect(await code(reg.check(`${custom.url}/nothing.json`))).toBe('repo_not_a_repo');
-    expect(await code(reg.check(`${empty.url}/apps.json`))).toBe('repo_not_a_repo');
+    expect(await code(reg.check(`${custom.url}/apps/icons/org.example.custom.png`))).toBe('repo_not_a_repo'); // not JSON
+    // An empty repository is still one (the official non-free repository has no apps at times).
+    expect(await reg.check(`${empty.url}/apps.json`)).toEqual({ url: `${empty.url}/apps.json`, apps: 0, installable: 0, sample: [] });
     expect(await code(reg.check('not a url at all :/'))).toBe('repo_bad_url');
     expect(await code(reg.check('https://user:pw@example.com/apps.json'))).toBe('repo_bad_url');
     // The official repository is built in.
@@ -387,6 +409,79 @@ describe('custom repositories', () => {
       expect((await reg.check(club.url.replace(/\/api$/, ''))).url).toBe(`${club.url}/repo.json`); // the site: …/api/repo.json
     } finally {
       await club.close();
+    }
+  });
+
+  it('takes the other addresses repositories are published at: raw pages, trailing slashes, short links', async () => {
+    const reg = local();
+    const site = custom.url.replace(/\/api$/, '');
+    // A pastebin-style raw page: no .json, text/plain, a byte-order mark. Saved as typed.
+    expect(await reg.check(`${site}/raw/repo`)).toMatchObject({ url: `${site}/raw/repo`, apps: 2, installable: 2 });
+    // …/repo.json/ (GitHub Pages answers it too): the address works as typed.
+    expect((await reg.check(`${custom.url}/repo.json/`)).url).toBe(`${custom.url}/repo.json/`);
+    // A short link to another site: followed, and where it ends is what's saved.
+    const short = await reg.check(`${site}/s/repo`);
+    expect(short).toMatchObject({ url: `${site.replace('127.0.0.1', 'localhost')}/raw/repo`, apps: 2 });
+    const { packages } = await reg.for(short.url).list();
+    expect(packages.map((p) => p.id)).toEqual(['org.example.custom', 'org.example.custom2']);
+    // A link that ends at the official repository says so.
+    const toOfficial = await startRedirect(`${repo.url}/apps.json`);
+    try {
+      expect(await code(reg.check(toOfficial.url))).toBe('repo_bad_url');
+    } finally {
+      await toOfficial.close();
+    }
+  });
+
+  it('follows a short link only over https to public addresses outside the test rig', async () => {
+    const reg = new RepoRegistry(new RepoClient(repo.url, new UploadBudget()), false);
+    // finalUrl itself: http hops are refused, and so are local ones.
+    await expect(finalUrl(`${custom.url}/apps.json`, 5_000)).rejects.toThrow(/Only https/);
+    await expect(finalUrl('https://127.0.0.1:1/x', 5_000)).rejects.toThrow(/local or private/);
+    // What a custom repository points at (manifests, icons, IPKs) is fetched over https only, every hop.
+    await expect(safeGet('http://192.0.2.1/app.ipk', 5_000, undefined, undefined, true)).rejects.toThrow(/Only https/);
+    expect(await code(reg.check('https://192.0.2.10/s/repo'))).toBe('repo_bad_url');
+  });
+
+  it('installs from a custom repository only what it says, and never Homebrew Channel', async () => {
+    const shady = await startMockRepo({
+      apps: [
+        { id: 'org.example.honest', title: 'Honest App', version: '1.0.0' },
+        // Listed as a harmless app, but the IPK is another one.
+        { id: 'org.example.player', title: 'Nice Player', version: '1.0.0', ipkPackageId: 'org.example.other' },
+        // The right package name, with Homebrew Channel tucked inside.
+        { id: 'org.example.bundle', title: 'Bundle', version: '1.0.0', ipkAlsoApps: ['org.webosbrew.hbchannel'] },
+        { id: 'org.webosbrew.hbchannel', title: 'Homebrew Channel (patched)', version: '9.9.9' },
+        { id: 'org.webosbrew.safeupdate', title: 'Updater', version: '9.9.9' },
+        { id: 'org.webosbrew', title: 'Prefix', version: '9.9.9' },
+      ],
+    });
+    try {
+      const shadyRepo = local().for(`${shady.url}/apps.json`);
+      const refused = async (p: Promise<unknown>) => {
+        try {
+          await p;
+        } catch (e) {
+          return e instanceof RpcError ? `${e.code}: ${e.message}` : String(e);
+        }
+        return 'no error';
+      };
+      expect(await refused(installFromRepo(pool, shadyRepo, devmode(devTv), 'org.example.player', 'stable'))).toMatch(
+        /^repo_refused: .*should install only org\.example\.player, but it is org\.example\.other/,
+      );
+      expect(await refused(installFromRepo(pool, shadyRepo, rooted(rootTv), 'org.example.bundle', 'stable'))).toMatch(/also installs org\.webosbrew\.hbchannel/);
+      expect(devTv.state.apps.some((a) => a.id === 'org.example.other' || a.id === 'org.example.player')).toBe(false);
+      for (const id of ['org.webosbrew.hbchannel', 'org.webosbrew.safeupdate', 'org.webosbrew']) {
+        expect(await refused(installFromRepo(pool, shadyRepo, rooted(rootTv), id, 'stable'))).toMatch(/^repo_refused: .*official Homebrew repository/);
+      }
+      // A rooted TV still gets it through Homebrew Channel (root kept), from the copy the bridge downloaded and checked.
+      expect(await installFromRepo(pool, shadyRepo, rooted(rootTv), 'org.example.honest', 'stable')).toEqual({
+        appId: 'org.example.honest',
+        version: '1.0.0',
+        via: 'hbchannel',
+      });
+    } finally {
+      await shady.close();
     }
   });
 
