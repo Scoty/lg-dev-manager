@@ -113,7 +113,7 @@ To update: `docker compose pull && docker compose up -d`. Your pairing and TVs s
 
 ### Example: a Ugreen NAS
 
-On a Ugreen NAS (UGOS Pro, e.g. the DXP2800), with the address you open it at being either the NAS's name or its IP:
+On a Ugreen NAS (UGOS Pro), with the address you open it at being either the NAS's name or its IP:
 
 1. In the **Files** app, create the folder `lg-dev-manager` in the `docker` shared folder (`/volume1/docker/lg-dev-manager`).
 2. In the **Docker** app, open **Project → Create** (or create a stack in Dockhand or Portainer) and paste
