@@ -39,9 +39,11 @@ const exe = process.platform === 'win32' ? 'lg-dev-manager-bridge.exe' : 'lg-dev
 const name = `lg-dev-manager-bridge-${version}-${os}-${arch}`;
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: 'inherit', ...opts });
 
-// The blob only works with the Node.js version that made it.
+// The blob only works with the Node.js version that made it. A nodejs.org download says its version in its folder name
+// (node-v24.21.0-darwin-x64/bin/node), which spares starting another CPU's binary (under Rosetta, a slow first start).
 if (targetNode !== process.execPath) {
-  const targetVersion = execFileSync(targetNode, ['--version'], { encoding: 'utf8' }).trim();
+  const targetVersion =
+    /[\\/]node-(v\d+\.\d+\.\d+)-[a-z]+-[a-z0-9]+[\\/]/.exec(targetNode)?.[1] ?? execFileSync(targetNode, ['--version'], { encoding: 'utf8' }).trim();
   if (targetVersion !== process.version) throw new Error(`--target-node is Node.js ${targetVersion}; run this script with the same version (now ${process.version}).`);
 }
 
