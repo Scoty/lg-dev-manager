@@ -1,14 +1,15 @@
 # LG Dev Manager
 
-Manage LG webOS TVs from your browser — rooted (Homebrew Channel) or in Developer Mode. Install apps from the
-webOS Homebrew repository or from an IPK file, update them, install any build of [Litefin](#litefin-in-one-click)
-in one click, browse the TV's files, open a shell, take screenshots, renew the Dev Mode session and dig into logs and
-the luna bus.
+Manage LG webOS TVs from your browser — rooted (Homebrew Channel) or in Developer Mode. From your computer, or from any
+computer, phone or tablet at home with the bridge on a NAS or home server.
 
-**Open it:** run the bridge — on your computer (one download or one command), or once on a NAS or home server with
-Docker for every computer, phone and tablet on your network — then open the page it serves: http://localhost:5199 on
-your computer, or the server's address. With the bridge on your computer, https://lg.scoty.uk works too; it's the same
-app either way.
+- **Apps:** install and update apps from the webOS Homebrew repository, from [custom repositories](#custom-repositories)
+  you add (the same ones Homebrew Channel takes), or from an IPK file — and any build of
+  [Litefin](#litefin-in-one-click) in one click.
+- **Files and shell:** browse, upload and download the TV's files, and open a terminal.
+- **The TV itself:** model and firmware, screenshots, Homebrew Channel updates and the Developer Mode session.
+- **Debug:** live system and kernel logs, log levels, crash reports and the luna bus monitor.
+- **Your TVs, wherever you are:** saved in your browser, or on the bridge so every browser you pair sees the same TVs.
 
 A web rebuild of [webosbrew/dev-manager-desktop](https://github.com/webosbrew/dev-manager-desktop), styled after
 [Adminator](https://github.com/puikinsh/adminator-admin-dashboard).
@@ -27,17 +28,21 @@ A web rebuild of [webosbrew/dev-manager-desktop](https://github.com/webosbrew/de
 
 ## Get started
 
-The app needs a small helper, **the bridge** (why: [How it works](#how-it-works)). It's the same bridge every time, so
-pick whichever way suits you:
+The app runs in your browser and needs a small helper, **the bridge**, that talks to your TVs (why:
+[How it works](#how-it-works)). It's the same bridge every way you run it — pick the one that suits you:
 
-| | Runs on | Needs | How |
+| | Runs on | Needs | Use it from |
 |---|---|---|---|
-| **The app** | your computer | nothing | Download it from the [latest release](https://github.com/Scoty/lg-dev-manager/releases/latest) and open it |
-| **npx** | your computer | Node.js 22.12+ | `npx lg-dev-manager-bridge@latest` in a terminal |
-| **Docker** | a NAS or home server, for your whole network (phones and tablets too) | Docker (Linux) | [`docker compose up -d`](#docker) |
-| **From the source code** | your computer | Node.js 22.12+ | [Clone, build and run](#run-from-source) |
+| [**1. The app**](#app) | your computer (Windows, macOS, Linux) | nothing | that computer |
+| [**2. npx**](#npx) | your computer | Node.js 22.12+ | that computer |
+| [**3. Docker**](#docker) | a NAS or home server (Linux) | Docker | every computer, phone and tablet on your network |
+| [**4. From the source code**](#run-from-source) | your computer | Node.js 22.12+, git | that computer |
 
-### Option 1: the app — no Node.js needed
+Then [pair your browser and add a TV](#pair).
+
+<a id="app"></a>
+
+## Way 1: the app — no Node.js needed
 
 One file with everything inside. Download the one for your computer from the
 [latest release](https://github.com/Scoty/lg-dev-manager/releases/latest):
@@ -49,8 +54,9 @@ One file with everything inside. Download the one for your computer from the
 | Mac with Intel | `…-macos-x64.dmg` |
 | Linux (x64 / ARM64) | `…-linux-x64.tar.gz` / `…-linux-arm64.tar.gz` — `tar -xzf …`, then `./lg-dev-manager-bridge` |
 
-A window opens with the **pairing token** and the app's addresses, and the app opens https://lg.scoty.uk in your
-browser, ready to pair with one click. Keep the window open while you use the app; closing it stops the bridge.
+A window opens with the **pairing token** and a pairing link. On Windows and macOS, https://lg.scoty.uk also opens in
+your browser, ready to pair with one click. Keep the window open while you use the app; closing it stops the bridge.
+Then [pair and add a TV](#pair).
 
 > **The first time:** the app isn't signed by Apple or Microsoft (that costs a yearly fee), so your computer asks
 > before running it. **Windows**: "Windows protected your PC" → **More info** → **Run anyway**. **macOS**: "Apple
@@ -58,7 +64,9 @@ browser, ready to pair with one click. Keep the window open while you use the ap
 > once. It's the same code as the npm package, built and tested by GitHub Actions in public. Each release lists
 > SHA-256 checksums.
 
-### Option 2: npx
+<a id="npx"></a>
+
+## Way 2: npx
 
 **You need [Node.js](https://nodejs.org) 22.12 or newer** (any current LTS — 22 or 24). `node --version` shows
 yours. In a terminal:
@@ -68,31 +76,15 @@ npx lg-dev-manager-bridge@latest
 ```
 
 It prints a **pairing token**, a pairing link and both addresses of the app. Keep the terminal open while you use the
-app (Ctrl+C stops it).
+app (Ctrl+C stops it). Then [pair and add a TV](#pair).
 
-### Then, with the app or npx
-
-1. Open the local page the bridge serves, **http://localhost:5199** — or **https://lg.scoty.uk**, the same app. On the
-   **Bridge** page, paste the token (or open the pairing link the bridge printed).
-2. On **Devices → Add a TV**, pick your TV from the scan. Rooted TVs log in as root (Homebrew Channel's SSH server);
-   other TVs use the Developer Mode app and its passphrase.
-
-On macOS, the first time the bridge looks for your TV, the system asks whether your terminal may find devices on the
-local network — choose **Allow**. Phones and tablets can't run the bridge; to use the app on them, run the bridge on a
-NAS or home server ([Docker](#docker)) and open the page it serves.
-
-Which page to use is up to you:
-
-1. **http://localhost:5199**, the local page, is served from your computer by the bridge itself. It always matches
-   your bridge's version, and it works offline and even when the website can't be reached.
-2. **https://lg.scoty.uk** always has the latest version of the app and needs nothing installed besides the bridge.
-
-Each keeps its own list of TVs (browsers store them per site); use **Export backup** / **Import backup** on the Devices
-page to move them, or start the bridge with [`--store`](#run-from-source) to keep them on the bridge for every page.
+To use it from your other devices too, share it on your network — the same as [Docker](#docker) does, on any computer
+that stays on, with that computer's name or IP as the address:
+`npx lg-dev-manager-bridge@latest --listen 0.0.0.0 --public-url http://nasname.local:5199 --store`.
 
 <a id="docker"></a>
 
-## Run it on a NAS or home server (Docker)
+## Way 3: on a NAS or home server (Docker)
 
 Run the bridge once on a NAS or home server and use LG Dev Manager from every computer, phone and tablet on your
 network — nothing to install anywhere else. The Docker image (`ghcr.io/scoty/lg-dev-manager`, Linux on amd64 or arm64)
@@ -178,8 +170,7 @@ bridge doesn't accept it in this mode: use the page the container serves. Settin
 | `LGDM_TOKEN` | Your own pairing token (16+ characters); otherwise a random one is made and kept in `/data` |
 | `LGDM_CF_ACCESS_TEAM`, `LGDM_CF_ACCESS_AUD`, `LGDM_CF_ACCESS_ALLOW` | Reaching it from outside through Cloudflare Access: [see below](#cloudflare-access) |
 
-The same works without Docker on any computer that stays on:
-`npx lg-dev-manager-bridge@latest --listen 0.0.0.0 --public-url http://nasname.local:5199 --store`.
+No Docker? The same works with [npx](#npx) on any computer that stays on.
 
 <a id="cloudflare-access"></a>
 
@@ -246,37 +237,49 @@ Before you rely on it:
   and start it again (every browser has to pair again).
 - **Tunnel only.** Don't also forward the port on your router.
 
-<a id="how-it-works"></a>
+<a id="run-from-source"></a>
 
-## How it works
+## Way 4: from the source code
 
-Browsers can't open SSH connections, so the app comes in two parts:
+Run it from a clone. It's the same bridge, and it serves the local page (http://localhost:5199) too:
 
+```bash
+git clone https://github.com/Scoty/lg-dev-manager.git
+cd lg-dev-manager
+corepack enable      # once, to get pnpm
+pnpm install
+pnpm build
+pnpm bridge          # same as: node apps/bridge/dist/cli.js
 ```
- Browser                                         Your computer or a server         Your TV
- ┌──────────────────────────────────┐ WebSocket ┌────────────────────┐ SSH / SFTP ┌──────────────┐
- │ Web app: localhost:5199,         │ ────────▶ │ Bridge             │ ─────────▶ │ webOS        │
- │ lg.scoty.uk or a server          │  + token  │ (app, npx, Docker) │            │ (port 22 or  │
- └──────────────────────────────────┘           └────────────────────┘            │  9922)       │
-                                                                                  └──────────────┘
-```
 
-- **The web app** is a static site, served by the bridge as the local page and at lg.scoty.uk. Saved TVs — names,
-  addresses, keys and passwords — live in your browser's storage. They are never sent to the website; each request
-  sends them to your own bridge, and only to it. (A bridge started with `--store`, like the Docker image, keeps them
-  instead, for every browser paired with it, and never sends the logins back. It remembers each stored TV's SSH host
-  key and sends a stored login only to the TV that has it.)
-- **The bridge** is a small Node.js program that does the SSH, SFTP and HTTP work the browser can't. On your computer
-  it listens on `127.0.0.1` only (nothing else on your network can reach it); in Docker (LAN mode) it answers only
-  devices on your local network, at the addresses you set. Either way it accepts only the app's own pages and needs the
-  pairing token. It keeps nothing on disk but that token — and, with `--store`, your TVs, repositories and screenshots.
-  It offers fixed operations — list apps, install, read a log — never a general "connect anywhere" tunnel.
-- **Homebrew repository and Litefin releases** are fetched by the bridge, so the site itself talks to no one but your
-  bridge. Downloads are checked against their published SHA-256 whenever one is published.
+This needs Node.js 22.12 or newer, the same as npx (the project itself is developed on Node 24, see `.nvmrc`).
+To update: `git pull`, `pnpm install`, `pnpm build`, then `pnpm bridge`.
 
-The bridge tells the site its version; when a newer one is out, the app says so and how to update: download the
-new app from the [releases](https://github.com/Scoty/lg-dev-manager/releases/latest), run
-`npx lg-dev-manager-bridge@latest` again, or pull the new Docker image. Your pairing and TVs stay as they are.
+It prints the pairing token and a pairing link; then [pair and add a TV](#pair).
+
+<a id="pair"></a>
+
+## Pair and add a TV
+
+1. **Open the app.** With the bridge on your computer, open its local page, **http://localhost:5199**, or
+   **https://lg.scoty.uk** — the same app. With [Docker](#docker), open the address you gave it.
+2. **Pair.** Open the pairing link the bridge printed (or paste the pairing token on the **Bridge** page). Each
+   browser pairs once.
+3. **Add your TV.** On **Devices → Add a TV**, pick it from the scan. Rooted TVs log in as root (Homebrew Channel's SSH
+   server); other TVs use the Developer Mode app and its passphrase.
+
+On macOS, the first time the bridge looks for your TV, the system asks whether your terminal may find devices on the
+local network — choose **Allow**. Phones and tablets can't run the bridge; to use the app on them, run it on a NAS or
+home server ([Docker](#docker)) and open the page it serves.
+
+**Which page, with the bridge on your computer:**
+
+1. **http://localhost:5199**, the local page, is served by the bridge itself. It always matches your bridge's version,
+   and it works offline and even when the website can't be reached.
+2. **https://lg.scoty.uk** always has the latest version of the app and needs nothing installed besides the bridge.
+
+Each keeps its own list of TVs (browsers store them per site); use **Export backup** / **Import backup** on the Devices
+page to move them, or start the bridge with [`--store`](#options) to keep them on the bridge for every page.
 
 ## What it does
 
@@ -340,25 +343,44 @@ downloading the right IPK by hand and installing it through the desktop webOS De
   — through Homebrew Channel on a rooted TV, or the Developer Mode installer otherwise. All builds are the same app,
   so switching builds or versions simply replaces it.
 
-<a id="run-from-source"></a>
+<a id="how-it-works"></a>
 
-## Run the bridge from the source code
+## How it works
 
-Or run it from a clone. It's the same bridge, and it serves the local page (http://localhost:5199) too:
+Browsers can't open SSH connections, so the app comes in two parts:
 
-```bash
-git clone https://github.com/Scoty/lg-dev-manager.git
-cd lg-dev-manager
-corepack enable      # once, to get pnpm
-pnpm install
-pnpm build
-pnpm bridge          # same as: node apps/bridge/dist/cli.js
+```
+ Browser                                         Your computer or a server         Your TV
+ ┌──────────────────────────────────┐ WebSocket ┌────────────────────┐ SSH / SFTP ┌──────────────┐
+ │ Web app: localhost:5199,         │ ────────▶ │ Bridge             │ ─────────▶ │ webOS        │
+ │ lg.scoty.uk or a server          │  + token  │ (app, npx, Docker) │            │ (port 22 or  │
+ └──────────────────────────────────┘           └────────────────────┘            │  9922)       │
+                                                                                  └──────────────┘
 ```
 
-This needs Node.js 22.12 or newer, the same as npx (the project itself is developed on Node 24, see `.nvmrc`).
-To update: `git pull`, `pnpm install`, `pnpm build`, then `pnpm bridge`.
+- **The web app** is a static site, served by the bridge as the local page and at lg.scoty.uk. Saved TVs — names,
+  addresses, keys and passwords — live in your browser's storage. They are never sent to the website; each request
+  sends them to your own bridge, and only to it. (A bridge started with `--store`, like the Docker image, keeps them
+  instead, for every browser paired with it, and never sends the logins back. It remembers each stored TV's SSH host
+  key and sends a stored login only to the TV that has it.)
+- **The bridge** is a small Node.js program that does the SSH, SFTP and HTTP work the browser can't. On your computer
+  it listens on `127.0.0.1` only (nothing else on your network can reach it); in Docker (LAN mode) it answers only
+  devices on your local network, at the addresses you set. Either way it accepts only the app's own pages and needs the
+  pairing token. It keeps nothing on disk but that token — and, with `--store`, your TVs, repositories and screenshots.
+  It offers fixed operations — list apps, install, read a log — never a general "connect anywhere" tunnel.
+- **Homebrew repository and Litefin releases** are fetched by the bridge, so the site itself talks to no one but your
+  bridge. Downloads are checked against their published SHA-256 whenever one is published.
 
-Bridge options (`--help`; with the app, run it from a terminal: `lg-dev-manager-bridge --help`):
+The bridge tells the site its version; when a newer one is out, the app says so and how to update: download the
+new app from the [releases](https://github.com/Scoty/lg-dev-manager/releases/latest), run
+`npx lg-dev-manager-bridge@latest` again, or pull the new Docker image. Your pairing and TVs stay as they are.
+
+<a id="options"></a>
+
+## Bridge options
+
+For the bridge however you run it (`--help`; with the app, run it from a terminal: `lg-dev-manager-bridge --help`).
+In Docker, use the `LGDM_…` settings instead (see [Docker](#docker)):
 
 | Option | |
 |---|---|
