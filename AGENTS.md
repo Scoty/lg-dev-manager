@@ -81,7 +81,7 @@ pnpm e2e            # Playwright: built UI + real bridge + mock TVs + fake Homeb
 pnpm dev:rig        # same rig for trying the UI by hand: http://127.0.0.1:5299, token e2e-token
 pnpm bridge         # the built bridge as users run it from a clone (serves the local page from apps/web/dist)
 pnpm lint && pnpm typecheck
-pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
+pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist (no type check: that's pnpm typecheck / lint)
 pnpm app            # the standalone bridge app for this OS → apps/bridge/release (after pnpm build)
 docker build -t lg-dev-manager:dev .   # the Docker image (Dockerfile; compose.yaml runs it in LAN mode)
 node apps/bridge/scripts/docker-smoke.mjs lg-dev-manager:dev http://<this machine's IP>:5199   # with the mock TV running

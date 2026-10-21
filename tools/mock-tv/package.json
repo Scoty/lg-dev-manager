@@ -13,7 +13,6 @@
     "start": "tsx src/cli.ts",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "build": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {

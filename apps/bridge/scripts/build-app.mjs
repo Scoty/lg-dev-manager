@@ -5,6 +5,9 @@
 //
 // Build on the platform you are building for (CI uses one runner per OS and CPU): `pnpm build`, then
 //   node apps/bridge/scripts/build-app.mjs
+// or, for the other CPU of the same OS (CI builds macOS x64 on Apple Silicon), with that CPU's node binary of the same
+// Node.js version (from nodejs.org): node apps/bridge/scripts/build-app.mjs --target-node <path/to/bin/node> --arch x64
+// The app blob is made without a code cache or snapshot, so it doesn't depend on the CPU that makes it.
 // Output in apps/bridge/release/: lg-dev-manager-bridge-<version>-<os>-<arch>.exe | .tar.gz | .dmg, plus the bare
 // executable in apps/bridge/release/bin/ for testing.
 import { execFileSync } from 'node:child_process';
@@ -24,10 +27,23 @@ const version = JSON.parse(readFileSync(join(bridgeDir, 'package.json'), 'utf8')
 
 const os = { win32: 'windows', darwin: 'macos', linux: 'linux' }[process.platform];
 if (!os) throw new Error(`Unsupported platform ${process.platform}`);
-const arch = process.arch; // x64 | arm64
+const flag = (name) => {
+  const i = process.argv.indexOf(`--${name}`);
+  return i > 0 ? process.argv[i + 1] : undefined;
+};
+// The node binary the app is made from (this one, or another CPU's: --target-node), and its CPU.
+const targetNode = resolve(flag('target-node') ?? process.execPath);
+const arch = flag('arch') ?? process.arch; // x64 | arm64
+if (!['x64', 'arm64'].includes(arch)) throw new Error(`--arch ${arch}: x64 or arm64`);
 const exe = process.platform === 'win32' ? 'lg-dev-manager-bridge.exe' : 'lg-dev-manager-bridge';
 const name = `lg-dev-manager-bridge-${version}-${os}-${arch}`;
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: 'inherit', ...opts });
+
+// The blob only works with the Node.js version that made it.
+if (targetNode !== process.execPath) {
+  const targetVersion = execFileSync(targetNode, ['--version'], { encoding: 'utf8' }).trim();
+  if (targetVersion !== process.version) throw new Error(`--target-node is Node.js ${targetVersion}; run this script with the same version (now ${process.version}).`);
+}
 
 if (!existsSync(join(webDist, 'index.html'))) throw new Error('apps/web/dist is missing: run `pnpm build` at the repository root first.');
 rmSync(out, { recursive: true, force: true });
@@ -68,8 +84,8 @@ for (const [pkg, dir] of [...packages].sort(([a], [b]) => a.localeCompare(b))) {
   sections.push(`${pkg} ${meta.version} (${kind})\n\n${readFileSync(join(dir, file), 'utf8').trim()}`);
 }
 // Node's own license sits next to its install (…/bin/node → …/LICENSE on macOS and Linux, beside node.exe on Windows).
-const nodeLicense = [join(dirname(process.execPath), '..', 'LICENSE'), join(dirname(process.execPath), 'LICENSE')].find(existsSync);
-if (!nodeLicense) throw new Error(`Node.js LICENSE not found next to ${process.execPath}`);
+const nodeLicense = [join(dirname(targetNode), '..', 'LICENSE'), join(dirname(targetNode), 'LICENSE')].find(existsSync);
+if (!nodeLicense) throw new Error(`Node.js LICENSE not found next to ${targetNode}`);
 sections.unshift(`Node.js ${process.version}\n\n${readFileSync(nodeLicense, 'utf8').trim()}`);
 writeFileSync(join(work, 'THIRD-PARTY-LICENSES.txt'), `Software packed into the LG Dev Manager bridge app\n\n${sections.join(`\n\n${'='.repeat(78)}\n\n`)}\n`);
 
@@ -100,12 +116,12 @@ writeFileSync(
 );
 run(process.execPath, ['--experimental-sea-config', join(work, 'sea-config.json')]);
 
-// 4. A copy of this node binary with the blob injected. macOS needs the signature removed first and an ad-hoc one
+// 4. A copy of the target node binary with the blob injected. macOS needs the signature removed first and an ad-hoc one
 //    after (Apple Silicon refuses to run unsigned code); Windows runs it unsigned.
 const bin = join(out, 'bin');
 mkdirSync(bin, { recursive: true });
 const target = join(bin, exe);
-copyFileSync(process.execPath, target);
+copyFileSync(targetNode, target);
 chmodSync(target, 0o755);
 if (process.platform === 'darwin') run('codesign', ['--remove-signature', target]);
 const postject = join(dirname(require.resolve('postject/package.json')), 'dist', 'cli.js');

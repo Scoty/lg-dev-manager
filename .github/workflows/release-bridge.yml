@@ -39,6 +39,7 @@ jobs:
         run: |
           version=$(node -p "require('./apps/bridge/package.json').version")
           test "$TAG" = "bridge-v$version" || { echo "Tag $TAG doesn't match apps/bridge/package.json version $version"; exit 1; }
+      - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
       # pnpm pack runs prepack (bundles the web app, LICENSE, NOTICE) and resolves workspace: versions.
