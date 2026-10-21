@@ -12,10 +12,8 @@
 # https:// address.
 services:
   lg-dev-manager:
-    # The newest release, fetched again on every `docker compose up`. (To stay on one major version, use :2 instead of
-    # :latest.)
+    # The newest release (`docker compose pull` fetches it). To stay on one major version, use :2 instead of :latest.
     image: ghcr.io/scoty/lg-dev-manager:latest
-    pull_policy: always
     container_name: lg-dev-manager
     # Host networking: the TV scan needs the server's own network, and the bridge must see who connects (with port
     # publishing Docker hides every client's real address). Linux only.

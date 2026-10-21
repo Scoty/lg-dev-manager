@@ -15,10 +15,8 @@
 # protection: use with caution.
 services:
   lg-dev-manager:
-    # The newest release, fetched again every time the project is started or redeployed. (To stay on one major version,
-    # use :2 instead of :latest.)
+    # The newest release (pull the image again to update). To stay on one major version, use :2 instead of :latest.
     image: ghcr.io/scoty/lg-dev-manager:latest
-    pull_policy: always
     container_name: lg-dev-manager
     # Host networking: the TV scan needs the NAS's own network, and the bridge must see who connects.
     network_mode: host
