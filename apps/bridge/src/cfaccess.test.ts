@@ -5,9 +5,9 @@ import { createSign, generateKeyPairSync, type KeyObject } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { PROTOCOL_VERSION } from '@lgdm/protocol';
-import { CfAccess, parseAud, parseTeamDomain, viaCloudflare, type CfAccessConfig } from './cfaccess.js';
+import { CfAccess, parseAllow, parseAud, parseTeamDomain, type CfAccessConfig } from './cfaccess.js';
 import { parseArgs } from './config.js';
-import { parseNetworks } from './lan.js';
+import { parseNetworks, viaCloudflare } from './lan.js';
 import { startServer } from './server.js';
 
 const TEAM = 'https://hometeam.cloudflareaccess.com';
@@ -28,7 +28,9 @@ function sign(key: { kid: string; privateKey: KeyObject }, claims: Record<string
 }
 
 const now = () => Math.floor(Date.now() / 1000);
-const claims = (extra: Record<string, unknown> = {}) => ({ iss: TEAM, aud: [AUD], email: 'me@example.com', iat: now(), exp: now() + 3600, ...extra });
+// What Access puts in an application token for a person (a service token: common_name, empty sub, no email).
+const claims = (extra: Record<string, unknown> = {}) => ({ type: 'app', iss: TEAM, aud: [AUD], email: 'me@example.com', sub: 'a1b2c3', iat: now(), exp: now() + 3600, ...extra });
+const serviceToken = (id: string) => claims({ email: undefined, sub: '', common_name: id });
 
 /** The team's certs endpoint, counting fetches. */
 function certs(keys: object[]) {
@@ -49,7 +51,8 @@ describe('Cloudflare Access tokens', () => {
     const { fetchImpl, calls } = certs([key.jwk]);
     const access = new CfAccess(CONFIG, fetchImpl);
     expect(await access.verify(sign(key, claims()))).toMatchObject({ who: 'me@example.com' });
-    expect((await access.verify(sign(key, claims({ email: undefined, common_name: 'abc123.access' })))).who).toBe('abc123.access');
+    expect((await access.verify(sign(key, serviceToken('abc123.access')))).who).toBe('abc123.access');
+    expect((await access.verify(sign(key, claims({ email: 'Me@Example.com' })))).who).toBe('me@example.com');
     expect(calls.n).toBe(1); // keys are cached
   });
 
@@ -65,6 +68,10 @@ describe('Cloudflare Access tokens', () => {
       [sign(key, claims({ nbf: now() + 3600 })), /not valid yet/],
       [sign(key, claims({ email: 'someone@example.com' })), /isn’t in LGDM_CF_ACCESS_ALLOW/],
       [sign(key, claims({ email: '' })), /no identity/],
+      [sign(key, claims({ type: 'org' })), /not an Access application token/],
+      // A certificate or service token named like an allowed person isn't that person.
+      [sign(key, serviceToken('me@example.com')), /isn’t in LGDM_CF_ACCESS_ALLOW/],
+      [sign(key, claims({ email: undefined, common_name: 'abc123.access' })), /no identity/],
       [sign(key, claims(), { alg: 'HS256' }), /unexpected token type/],
       [sign(key, claims(), { alg: 'none' }), /unexpected token type/],
       [sign({ kid: 'k1', privateKey: other.privateKey }, claims()), /bad signature/],
@@ -105,6 +112,8 @@ describe('Cloudflare Access tokens', () => {
       expect(parseArgs([]).lan?.cfAccess).toEqual({ teamDomain: TEAM, aud: AUD, allow: ['me@example.com'] });
       process.env.LGDM_CF_ACCESS_ALLOW = '';
       expect(() => parseArgs([])).toThrow(/needs LGDM_CF_ACCESS_ALLOW/);
+      process.env.LGDM_CF_ACCESS_ALLOW = 'gmail.com';
+      expect(() => parseArgs([])).toThrow(/not domains or groups/);
       process.env.LGDM_CF_ACCESS_ALLOW = 'me@example.com';
       process.env.LGDM_PUBLIC_URL = 'http://nas.local:5199';
       expect(() => parseArgs([])).toThrow(/Cloudflare hostname/);
@@ -117,10 +126,12 @@ describe('Cloudflare Access tokens', () => {
     }
   });
 
-  it('spots requests through Cloudflare', () => {
-    expect(viaCloudflare({ 'cf-ray': 'x' })).toBe(true);
-    expect(viaCloudflare({ 'cf-access-jwt-assertion': 'x' })).toBe(true);
-    expect(viaCloudflare({ 'x-forwarded-for': '192.168.1.5' })).toBe(false);
+  it('spots requests through Cloudflare by any of its headers', () => {
+    expect(viaCloudflare({ 'cf-ray': 'x' })).toBe('cf-ray');
+    expect(viaCloudflare({ 'cf-warp-tag-id': 'x' })).toBe('cf-warp-tag-id');
+    expect(viaCloudflare({ 'cdn-loop': 'cloudflare; loops=1' })).toBe('cdn-loop');
+    expect(viaCloudflare({ 'x-forwarded-for': '192.168.1.5' })).toBeNull();
+    expect(parseAllow([' Me@Example.com ', 'abc123.access', 'me@example.com'])).toEqual(['me@example.com', 'abc123.access']);
   });
 });
 
@@ -135,7 +146,7 @@ describe('a LAN-mode bridge behind Cloudflare Access', () => {
   beforeAll(async () => {
     const lan = { publicUrls: ['http://nas.test:5199', ORIGIN], extraNetworks: parseNetworks(undefined), cfAccess: CONFIG };
     server = await startServer(
-      { host: '127.0.0.1', port: 0, allowedOrigins: lan.publicUrls, token: TOKEN, dev: false, lan },
+      { host: '127.0.0.1', port: 0, allowedOrigins: ['https://lg.scoty.uk', ...lan.publicUrls], token: TOKEN, dev: false, lan },
       undefined,
       undefined,
       undefined,
@@ -180,6 +191,12 @@ describe('a LAN-mode bridge behind Cloudflare Access', () => {
     expect(await get({ host: 'nas.test:5199' })).toBe(200);
     expect(await get({ host: 'nas.test:5199', 'x-forwarded-for': '203.0.113.7' })).toBe(403);
     await expect(open({ ...viaTunnel(), origin: ORIGIN })).rejects.toThrow(/403/);
+    // The Cloudflare hostname needs Access even if Cloudflare's headers went missing on the way.
+    expect(await get({ host: HOST })).toBe(403);
+    expect(await get({ host: HOST, 'cf-access-jwt-assertion': sign(key, claims()) })).toBe(200);
+    // Let in by Access: only the Cloudflare hostname's own page may connect, not other allowed pages.
+    await expect(open({ ...viaTunnel(sign(key, claims())), origin: 'https://lg.scoty.uk' })).rejects.toThrow(/403/);
+    await expect(open({ ...viaTunnel(sign(key, claims())), origin: 'http://nas.test:5199' })).rejects.toThrow(/403/);
   });
 
   it('pairs through Access with the pairing token, and ends the connection when the Access session does', async () => {

@@ -16,7 +16,7 @@ export interface CfAccessConfig {
   teamDomain: string;
   /** The Access application's audience (AUD) tag. */
   aud: string;
-  /** Emails / service-token client ids allowed (lower-case); empty: whoever the Access policy lets in. */
+  /** Emails / service-token client ids allowed (lower-case, parseAllow). Required: never just "whoever Access lets in". */
   allow: string[];
 }
 
@@ -84,14 +84,26 @@ export class CfAccess {
       if (!aud.includes(this.config.aud)) throw new AccessDenied('issued for another Access application');
       if (typeof claims.exp !== 'number' || claims.exp + leeway < now) throw new AccessDenied('expired');
       if (typeof claims.nbf === 'number' && claims.nbf - leeway > now) throw new AccessDenied('not valid yet');
-      const who = (typeof claims.email === 'string' && claims.email) || (typeof claims.common_name === 'string' && claims.common_name) || '';
+      if (claims.type !== 'app') throw new AccessDenied('not an Access application token');
+      // A person (email), or a service token (common_name = its client id, empty sub, no email) — kept apart, so a
+      // certificate or service token named like an email can't pass for that person.
+      const email = typeof claims.email === 'string' ? claims.email.toLowerCase() : '';
+      const serviceToken = !email && claims.sub === '' && typeof claims.common_name === 'string' ? claims.common_name.toLowerCase() : '';
+      const who = email || serviceToken;
       if (!who) throw new AccessDenied('no identity in the token');
-      if (this.config.allow.length && !this.config.allow.includes(who.toLowerCase())) throw new AccessDenied(`${who} isn’t in LGDM_CF_ACCESS_ALLOW`);
+      const allowed = email ? this.config.allow.includes(email) : serviceToken.endsWith('.access') && this.config.allow.includes(serviceToken);
+      if (!allowed) throw new AccessDenied(`${who} isn’t in LGDM_CF_ACCESS_ALLOW`);
       return { who, expiresAt: claims.exp * 1000 };
     } catch (e) {
       if (e instanceof AccessDenied) throw e;
       throw new AccessDenied('not a valid Cloudflare Access token');
     }
+  }
+
+  /** Read the team's keys at start, so a wrong team name shows up in the log straight away. */
+  async warmUp(): Promise<void> {
+    await this.fetchKeys();
+    if (this.keys.size) console.log(`[bridge] Cloudflare Access: ${this.keys.size} signing key${this.keys.size === 1 ? '' : 's'} from ${this.config.teamDomain}`);
   }
 
   /** The key with this id: from the cache, or after fetching the team's keys again (at most once a minute). */
@@ -111,6 +123,7 @@ export class CfAccess {
       const res = await this.fetchImpl(`${this.config.teamDomain}/cdn-cgi/access/certs`, { signal: AbortSignal.timeout(10_000), redirect: 'error' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       body = (await res.json()) as typeof body;
+      if (!Array.isArray(body?.keys)) throw new Error('no keys in the answer');
     } catch (e) {
       console.warn(`[bridge] couldn't read the Cloudflare Access keys from ${this.config.teamDomain}: ${(e as Error).message}`);
       return; // keep the keys we had
@@ -128,8 +141,16 @@ export class CfAccess {
   }
 }
 
-/** Whether a request came through Cloudflare (then it needs an Access token). */
-export function viaCloudflare(headers: import('node:http').IncomingHttpHeaders): boolean {
-  if (['cf-connecting-ip', 'cf-ray', 'cf-ipcountry', 'true-client-ip', 'cf-access-jwt-assertion'].some((h) => headers[h] !== undefined)) return true;
-  return typeof headers['cdn-loop'] === 'string' && /cloudflare/i.test(headers['cdn-loop']);
+/**
+ * LGDM_CF_ACCESS_ALLOW entries: emails (people) or service-token client ids (`….access`). Anything else is refused
+ * rather than silently matching nothing.
+ */
+export function parseAllow(values: string[]): string[] {
+  const allow = [...new Set(values.map((v) => v.trim().toLowerCase()).filter(Boolean))];
+  for (const v of allow) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) && !/^[a-z0-9]+\.access$/.test(v)) {
+      throw new Error(`LGDM_CF_ACCESS_ALLOW ${v}: list email addresses (you@gmail.com) or service-token client ids (….access), not domains or groups.`);
+    }
+  }
+  return allow;
 }

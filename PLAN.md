@@ -74,7 +74,11 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 carry a valid Access JWT (`Cf-Access-Jwt-Assertion`: RS256 with the team's keys, this application's audience, not
 expired, an allowed email or service-token client id; `apps/bridge/src/cfaccess.ts`). Everything else from Cloudflare is
 still refused, so a hostname without Access or a Bypass policy fails closed. The tunnel client must be on the LAN;
-pairing attempts are limited per Access identity; WebSockets close when the Access token expires. The bridge has no
+pairing attempts are limited per Access identity; a request for the Cloudflare hostname (the https public URL) needs
+the token even without Cloudflare headers, only that hostname's page may open a WebSocket through Access, and each such
+WebSocket closes after an hour or when the token expires. Allow entries are emails or service-token ids (`….access`),
+matched only against `email` or (no email, empty `sub`) `common_name`. The log prints no pairing link for the
+Cloudflare hostname. The bridge has no
 accounts of its own, so the docs present it as "use with caution" (owner request, 21 Oct 2026).
 
 **LAN mode (2.0, opt-in; the Docker image).** `--listen 0.0.0.0 --public-url http://nas.local:5199` (env `LGDM_LISTEN`,

@@ -117,16 +117,25 @@ function expand(v6: string): string[] {
 }
 
 /**
+ * Whether a request came through Cloudflare, and the header that says so (or null): any `cf-*` header (cf-ray,
+ * cf-connecting-ip, cf-visitor, cf-access-jwt-assertion, cf-warp-tag-id…), True-Client-IP, or a CDN-Loop naming
+ * Cloudflare. One list for refusing such requests and for asking them for a Cloudflare Access token (cfaccess.ts).
+ */
+export function viaCloudflare(headers: IncomingHttpHeaders): string | null {
+  for (const h of Object.keys(headers)) if (h.startsWith('cf-') || h === 'true-client-ip') return h;
+  if (typeof headers['cdn-loop'] === 'string' && /cloudflare/i.test(headers['cdn-loop'])) return 'cdn-loop';
+  return null;
+}
+
+/**
  * Why a request looks like it came from the internet through a proxy or tunnel (Cloudflare Tunnel, a reverse proxy
  * on the router), or null. Any Cloudflare header counts; a forwarding header counts when it names an address that
  * isn't on the local network. A reverse proxy on the LAN (Caddy, Traefik, Nginx Proxy Manager) is fine: it forwards
  * local addresses.
  */
 export function forwardedProblem(headers: IncomingHttpHeaders, extra?: BlockList): string | null {
-  for (const h of ['cf-connecting-ip', 'cf-ray', 'cf-ipcountry', 'true-client-ip']) {
-    if (headers[h] !== undefined) return `it came through Cloudflare (${h})`;
-  }
-  if (typeof headers['cdn-loop'] === 'string' && /cloudflare/i.test(headers['cdn-loop'])) return 'it came through Cloudflare (cdn-loop)';
+  const cf = viaCloudflare(headers);
+  if (cf) return `it came through Cloudflare (${cf})`;
   const named: string[] = [];
   const list = (v: string | string[] | undefined) => (Array.isArray(v) ? v.join(',') : (v ?? ''));
   for (const part of list(headers['x-forwarded-for']).split(',')) if (part.trim()) named.push(part.trim());

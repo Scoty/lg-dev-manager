@@ -12,7 +12,8 @@
 - ☁️ **From outside, through Cloudflare Access** (advanced, opt-in — use with caution): a LAN-mode bridge behind a
   Cloudflare Tunnel lets in requests that passed Cloudflare Access (Google with two-step verification, a one-time PIN,
   the WARP client or a service token). The bridge checks Access's signed token itself — team, application, expiry and
-  an allow list of emails — so a hostname without Access or a too-broad policy gets nothing. It has no login of its
+  an allow list of emails or service tokens — so a hostname without Access or a too-broad policy gets nothing, and
+  connections through it are re-checked at least hourly. It has no login of its
   own: Access is the only one. `LGDM_CF_ACCESS_TEAM`, `LGDM_CF_ACCESS_AUD`, `LGDM_CF_ACCESS_ALLOW`.
 - 🐳 **Docker image** `ghcr.io/scoty/lg-dev-manager` (amd64, arm64) and a `compose.yaml`: the bridge and the web app
   on a home server, in LAN mode, as a non-root user on a read-only filesystem with a health check. `docker compose

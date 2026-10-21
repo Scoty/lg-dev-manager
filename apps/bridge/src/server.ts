@@ -12,8 +12,14 @@ import { RepoClient } from './repo/repo.js';
 import { RepoRegistry } from './repo/registry.js';
 import { LitefinClient } from './litefin/litefin.js';
 import { ShellSessions } from './shell/shells.js';
-import { forwardedProblem, isLanClient, limiterKey, PairingLimiter } from './lan.js';
-import { CfAccess, viaCloudflare, type AccessIdentity } from './cfaccess.js';
+import { forwardedProblem, isLanClient, limiterKey, PairingLimiter, viaCloudflare } from './lan.js';
+import { CfAccess, type AccessIdentity } from './cfaccess.js';
+
+/**
+ * A connection let in by Cloudflare Access lasts at most this long (or until the Access token expires): revoking
+ * someone in Access stops new requests at Cloudflare's edge, and the page reconnects through it, checked again.
+ */
+export const ACCESS_CONNECTION_MS = 60 * 60_000;
 import { takePairRedirect } from './pairing.js';
 import { BridgeStore } from './store/store.js';
 import { STORE_CHANGED_EVENT } from '@lgdm/protocol';
@@ -89,8 +95,14 @@ export function startServer(
    * clientProblem, plus Cloudflare Access (cfaccess.ts) when it's set up: a request through Cloudflare then needs a valid
    * Access token instead of being refused — still only from a tunnel client on the local network or this computer.
    */
+  // The https addresses in LAN mode with Cloudflare Access are the Cloudflare hostnames: a request for one needs an
+  // Access token even without Cloudflare's headers (a Worker that rebuilds requests, a header Cloudflare drops).
+  const accessOrigins = access ? (lan?.publicUrls ?? []).filter((u) => u.startsWith('https://')) : [];
+  const accessHosts = accessOrigins.map((u) => new URL(u).host.toLowerCase());
+  if (access) void access.warmUp();
   const checkClient = async (req: import('node:http').IncomingMessage): Promise<{ problem: string | null; access?: AccessIdentity }> => {
-    if (!access || !lan || !viaCloudflare(req.headers)) return { problem: clientProblem(req) };
+    const needsAccess = !!access && !!lan && (!!viaCloudflare(req.headers) || accessHosts.includes((req.headers.host ?? '').toLowerCase()));
+    if (!access || !lan || !needsAccess) return { problem: clientProblem(req) };
     if (!isLanClient(req.socket.remoteAddress, lan.extraNetworks)) {
       return { problem: `${req.socket.remoteAddress ?? 'the client'} isn't on your local network (Cloudflare Tunnel's cloudflared must run there).` };
     }
@@ -106,10 +118,13 @@ export function startServer(
   const refusedLog = throttledWarn();
 
   const http = createServer((req, res) => {
-    void checkClient(req).then(
-      ({ problem }) => respond(req, res, problem),
-      () => res.writeHead(500).end(),
-    );
+    // A failure answers this request, never ends the process.
+    checkClient(req)
+      .then(({ problem }) => respond(req, res, problem))
+      .catch(() => {
+        if (!res.headersSent) res.writeHead(500);
+        res.end();
+      });
   });
   const respond = (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, problem: string | null) => {
     if (problem) {
@@ -159,14 +174,13 @@ export function startServer(
 
   http.on('upgrade', (req, socket, head) => {
     socket.on('error', () => socket.destroy());
-    void checkClient(req).then(
-      ({ problem, access: who }) => {
+    checkClient(req)
+      .then(({ problem, access: who }) => {
         if (socket.destroyed) return;
         if (who) accessOf.set(req, who);
         upgrade(req, socket, head, problem);
-      },
-      () => socket.destroy(),
-    );
+      })
+      .catch(() => socket.destroy());
   });
   const upgrade = (req: import('node:http').IncomingMessage, socket: import('node:stream').Duplex, head: Buffer, problem: string | null) => {
     const origin = (req.headers.origin ?? '').replace(/\/$/, '');
@@ -177,7 +191,10 @@ export function startServer(
       refusedLog(`refused a connection: ${problem}`);
       return;
     }
-    if (path !== RPC_PATH || !hostAllowed(req.headers.host, listeningPort(), publicHosts) || !config.allowedOrigins.includes(origin)) {
+    // Let in by Cloudflare Access: only the Cloudflare hostname's own page may connect (not lg.scoty.uk or the LAN
+    // addresses, which could share a site — and the Access cookie — with it).
+    const origins = accessOf.has(req) ? accessOrigins : config.allowedOrigins;
+    if (path !== RPC_PATH || !hostAllowed(req.headers.host, listeningPort(), publicHosts) || !origins.includes(origin)) {
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
       socket.destroy();
       if (path === RPC_PATH) warnRejected(origin);
@@ -197,7 +214,7 @@ export function startServer(
     const who = accessOf.get(req);
     const key = who ? `access:${who.who.toLowerCase()}` : limiterKey(client);
     if (who) {
-      const expiry = setTimeout(() => ws.close(4401, 'Cloudflare Access session ended'), Math.min(Math.max(0, who.expiresAt - Date.now()), 2 ** 31 - 1));
+      const expiry = setTimeout(() => ws.close(4401, 'Cloudflare Access: sign in again'), Math.max(0, Math.min(who.expiresAt - Date.now(), ACCESS_CONNECTION_MS)));
       ws.once('close', () => clearTimeout(expiry));
     }
     // One pairing attempt at a time per connection, and a wrong one ends it: frames that arrive together can't each

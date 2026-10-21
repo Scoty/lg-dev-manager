@@ -68,7 +68,11 @@ async function main() {
     console.log(`  Open           ${config.lan.publicUrls.join('  or  ')}`);
     console.log(`  Pairing token  ${config.token}`);
     console.log('  Pair a browser by opening (once per browser, keep these links to yourself):');
-    for (const u of config.lan.publicUrls) console.log(`                 ${pairLink(u, config.token)}`);
+    // Not for a Cloudflare Access hostname: Access's sign-in redirects would carry the token through Cloudflare's and
+    // the identity provider's pages (and usually lose it). Sign in there first, then paste the token.
+    const viaAccess = (u: string) => !!config.lan?.cfAccess && u.startsWith('https://');
+    for (const u of config.lan.publicUrls) if (!viaAccess(u)) console.log(`                 ${pairLink(u, config.token)}`);
+    for (const u of config.lan.publicUrls) if (viaAccess(u)) console.log(`                 ${u}: sign in with Cloudflare, then paste the token on the Bridge page`);
     console.log(`  Allowed origins ${config.allowedOrigins.join(', ')}`);
     if (config.lan.cfAccess) {
       console.log(`  Cloudflare     Access team ${config.lan.cfAccess.teamDomain}, only for ${config.lan.cfAccess.allow.join(', ')}`);

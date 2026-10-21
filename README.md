@@ -195,15 +195,19 @@ The bridge doesn't rely on Cloudflare's settings alone. Without the settings bel
 through Cloudflare. With them, every request through Cloudflare must carry the token Access signs for the person it let
 in: for your team, for this application, not expired, and for one of the people in `LGDM_CF_ACCESS_ALLOW`. So a
 hostname without an Access application, a "Bypass" or "Everyone" policy, or a sign-in by someone not on your list gets
-nothing. When the Access session ends, the bridge closes the connection.
+nothing — and a request for the Cloudflare hostname needs that token even if it arrives without Cloudflare's headers.
+Only that hostname's own page may connect through Access, and each connection lasts at most an hour (or until the Access
+session ends); the page then reconnects through Cloudflare, which checks your sign-in again.
 
 1. **Access application.** In Cloudflare Zero Trust → **Access → Applications**, add a **Self-hosted** application for
    a hostname such as `tv.example.com`. Give it an **Allow** policy that includes only your own email addresses (or
    your service token) — not "Everyone" or a whole email domain — with a login that has two-factor (e.g. Google with
-   2-step verification), and a short session (24 hours or less). Copy the application's **Audience (AUD) tag**.
+   2-step verification), and a short session (24 hours or less). Under the application's cookie settings, turn on
+   **HTTP Only**, **Binding Cookie** and **SameSite: Strict**. Copy the application's **Audience (AUD) tag**.
 2. **Tunnel.** Add a public hostname for `tv.example.com` to your tunnel, with the service
    `http://localhost:5199` (cloudflared on the same server, with host networking) or `http://192.0.2.10:5199` (the
-   server's IP).
+   server's IP). In the hostname's additional application settings, also turn on **Access → Protect with Access**
+   (cloudflared's `access: required`) with the same team and audience tag, so cloudflared checks the sign-in too.
 3. **Settings.** Add the hostname to `LGDM_PUBLIC_URL` and the Access settings to the container's environment:
 
    ```yaml
@@ -211,20 +215,28 @@ nothing. When the Access session ends, the bridge closes the connection.
          LGDM_PUBLIC_URL: http://nasname.local:5199,http://192.0.2.10:5199,https://tv.example.com
          LGDM_CF_ACCESS_TEAM: yourteam              # from yourteam.cloudflareaccess.com
          LGDM_CF_ACCESS_AUD: <the application's audience tag>
-         LGDM_CF_ACCESS_ALLOW: you@gmail.com        # emails / service-token client ids, comma-separated
+         LGDM_CF_ACCESS_ALLOW: you@gmail.com        # emails and/or service-token client ids (….access), comma-separated
    ```
 
-4. **Pair.** Open `https://tv.example.com` and sign in with Cloudflare. Then paste the pairing token on the **Bridge**
-   page, or open the pairing link for `https://tv.example.com` from the log (signing in first: the sign-in can drop the
-   token from the link).
+4. **Pair.** Open `https://tv.example.com`, sign in with Cloudflare, and paste the pairing token on the **Bridge** page.
+   The log has no pairing link for this address on purpose: Cloudflare's sign-in would carry the token through its own
+   and your identity provider's pages.
 
 Before you rely on it:
 
-- **Cloudflare sees the traffic.** It decrypts it at its edge, so it can see the pairing token and — when TVs are kept
-  in the browser — the TV passwords and keys sent with each request. With the Docker image's default (TVs stored on the
-  server), a TV's login only travels when you add it or change it.
+- **Cloudflare sees the traffic.** It decrypts it at its edge, so it can see the pairing token, what you type in the
+  terminal and — when TVs are kept in the browser — the TV passwords and keys sent with each request. With the Docker
+  image's default (TVs stored on the server), a TV's login only travels when you add it or change it.
 - **Your Cloudflare sign-in is now the key to your TVs.** Protect that account with two-factor, sign out on shared
-  devices, and revoke sessions in Zero Trust if a device is lost. Prefer SSH keys over passwords for your TVs.
+  devices, and revoke sessions in Zero Trust if a device is lost (a stolen session works until it expires). Prefer SSH
+  keys over passwords for your TVs.
+- **So is your Cloudflare account.** Whoever controls your Zero Trust settings can add a sign-in method that claims any
+  email: protect the Cloudflare account itself with strong two-factor.
+- **It reaches more than your TVs.** The bridge can connect to devices on your home network (that's how it finds and
+  adds TVs), so getting past Access and the token is a way into your network, not just your TVs.
+- **WARP private networks count as your local network.** If you route your home network through Cloudflare WARP
+  (private network routing, WARP Connector), devices on it are let in like ones at home, without the Access check or
+  `LGDM_CF_ACCESS_ALLOW`.
 - **Keep the pairing token to yourself.** To change it, stop the container, delete `bridge.json` from its data folder
   and start it again (every browser has to pair again).
 - **Tunnel only.** Don't also forward the port on your router.

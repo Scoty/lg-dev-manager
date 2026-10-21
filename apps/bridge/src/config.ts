@@ -1,4 +1,4 @@
-import { parseAud, parseTeamDomain, type CfAccessConfig } from './cfaccess.js';
+import { parseAllow, parseAud, parseTeamDomain, type CfAccessConfig } from './cfaccess.js';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -166,7 +166,7 @@ export function parseArgs(argv: string[]): BridgeConfig {
     // bridge only takes these.
     if (!cfAllow.length) throw new Error('Cloudflare Access needs LGDM_CF_ACCESS_ALLOW: the emails (and service-token client ids) that may use the bridge, comma-separated.');
     if (!publicUrls.some((u) => u.startsWith('https://'))) throw new Error('Cloudflare Access needs the Cloudflare hostname in LGDM_PUBLIC_URL, e.g. https://tv.example.com.');
-    cfAccess = { teamDomain: parseTeamDomain(cfTeam), aud: parseAud(cfAud), allow: [...new Set(cfAllow)] };
+    cfAccess = { teamDomain: parseTeamDomain(cfTeam), aud: parseAud(cfAud), allow: parseAllow(cfAllow) };
   }
   const token = loadOrCreateToken(argv.includes('--reset-token'));
   // Shared on the network, the token is what stands between the LAN and the TVs: one someone picked must be long and
