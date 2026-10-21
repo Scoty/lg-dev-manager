@@ -23,6 +23,8 @@ interface OpState {
   /** For `repo`: "Installing" or "Updating". */
   verb?: string;
   subject: string;
+  /** For `repo`: where the IPK came from ("the Homebrew repository", a custom repository's name, Litefin's releases). */
+  from?: string;
   phase: Phase;
   percent?: number;
   text?: string;
@@ -200,25 +202,27 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
     }
     const verb = opts.update ? 'Updating' : channel === 'beta' ? 'Installing the beta of' : 'Installing';
     const target = toTarget(device);
-    return runWebInstall(verb, pkg.title, (opId) => client.call('apps.installFromRepo', { device: target, id: pkg.id, channel, opId, ...repoParam(source) }, 20 * 60_000));
+    const from = source.custom ? source.custom.name : 'the Homebrew repository';
+    return runWebInstall(verb, pkg.title, from, (opId) => client.call('apps.installFromRepo', { device: target, id: pkg.id, channel, opId, ...repoParam(source) }, 20 * 60_000));
   };
 
   /** Install one build of a Litefin release from GitHub (M8). */
   const installLitefin = async (tag: string, variant: string, subject: string) => {
     if (!device || !client || running) return false;
     const target = toTarget(device);
-    return runWebInstall('Installing', subject, (opId) => client.call('litefin.install', { device: target, tag, variant, opId }, 20 * 60_000));
+    return runWebInstall('Installing', subject, 'Litefin’s GitHub releases', (opId) => client.call('litefin.install', { device: target, tag, variant, opId }, 20 * 60_000));
   };
 
   /** An install the bridge downloads from the web (Homebrew repo, Litefin), with the progress dialog. */
   const runWebInstall = async (
     verb: string,
     subject: string,
+    from: string,
     run: (opId: string) => Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel' }>,
   ) => {
     if (!device || !client) return false;
     const opId = newOpId();
-    setOp({ kind: 'repo', verb, subject, phase: 'copy', text: 'Starting…' });
+    setOp({ kind: 'repo', verb, subject, from, phase: 'copy', text: 'Starting…' });
     const off = onOpProgress(client, opId, (p) => {
       if (p.stage === 'cleanup') return;
       const phase = phaseOf(p.stage);
@@ -362,8 +366,10 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
                     : 'Installed'
               }
             >
-              {op.done.via === 'hbchannel' ? 'Installed by Homebrew Channel on ' : 'Installed on '}
-              {device?.name}.
+              {/* Where it came from, not how the TV installed it (rooted TVs use Homebrew Channel's installer for every
+                  source, which read as if the app came from the Homebrew repository). */}
+              Installed on {device?.name}
+              {op.from ? ` from ${op.from}` : ''}.
             </Alert>
           )}
           {op.error !== undefined && (

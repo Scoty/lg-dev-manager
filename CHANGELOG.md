@@ -21,6 +21,8 @@
   into text fields on iPhone, and TVs are listed as cards. Elsewhere the phone notice points to Docker.
 - Copy buttons, the terminal and screenshots also work on pages served over plain HTTP.
 - The bridge stops at once on SIGTERM (`docker stop`).
+- Fixed: after an install, the dialog said “Installed by Homebrew Channel” on rooted TVs, even for apps from a custom
+  repository or Litefin. It now says where the app came from.
 
 ## 1.0.5 — 2026-10-20
 

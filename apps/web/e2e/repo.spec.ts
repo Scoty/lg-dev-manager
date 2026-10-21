@@ -83,7 +83,7 @@ test('rooted: update badges on the Installed page, Homebrew Channel updates itse
   // Homebrew Channel 0.7.2 is installed; the repository has 0.7.3.
   await expect(page.getByText('v0.7.3 available')).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Update Homebrew Channel to 0.7.3' }).click();
-  await expect(page.getByText('Installed by Homebrew Channel on Repo Root.')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('Installed on Repo Root from the Homebrew repository.')).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Done' }).click();
   await expect(page.getByText('v0.7.3 available')).toHaveCount(0);
 
