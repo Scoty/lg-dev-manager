@@ -1,6 +1,6 @@
 {
   "name": "lg-dev-manager-bridge",
-  "version": "1.0.5",
+  "version": "2.0.0",
   "description": "Bridge for LG Dev Manager: lets the web app (the local page it serves, or lg.scoty.uk) manage LG webOS TVs over SSH, on your computer or a home server",
   "license": "Apache-2.0",
   "author": "Scoty (https://github.com/Scoty)",

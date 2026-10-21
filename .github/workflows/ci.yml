@@ -83,9 +83,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - uses: docker/setup-buildx-action@v4
+      # The image's Node.js is the one in .nvmrc (the Dockerfile's default is only for building by hand).
+      - id: node
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v7
         with:
           context: .
+          build-args: NODE_VERSION=${{ steps.node.outputs.version }}
           load: true
           tags: lg-dev-manager:ci
           cache-from: type=gha

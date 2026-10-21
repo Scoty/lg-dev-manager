@@ -47,11 +47,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
+      # The image's Node.js is the one in .nvmrc (the Dockerfile's default is only for building by hand).
+      - id: node
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
       # Tested before anything is pushed: the amd64 image, run as compose runs it (see ci.yml's docker job).
       - name: Build for the test
         uses: docker/build-push-action@v7
         with:
           context: .
+          build-args: NODE_VERSION=${{ steps.node.outputs.version }}
           load: true
           tags: lg-dev-manager:test
           cache-from: type=gha
@@ -69,7 +73,7 @@ jobs:
             type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }}
             type=semver,pattern={{major}},value=${{ steps.version.outputs.version }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(steps.version.outputs.version, '-') }}
           labels: |
             org.opencontainers.image.title=LG Dev Manager
             org.opencontainers.image.description=Manage LG webOS TVs from your browser — the bridge and web app for a home server
@@ -83,6 +87,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          build-args: NODE_VERSION=${{ steps.node.outputs.version }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 const [version, tag] = process.argv.slice(2);
 if (!version || !tag) throw new Error('usage: release-notes.mjs <version> <tag>');
 const changelog = readFileSync(fileURLToPath(new URL('../../../CHANGELOG.md', import.meta.url)), 'utf8');
-const start = changelog.search(new RegExp(`^## ${version.replaceAll('.', '\\.')}\\b.*$`, 'm'));
+// "## 2.0.0 — 2026-10-21", not "## 2.0.0-rc.1": the version is followed by a space or the end of the line.
+const start = changelog.search(new RegExp(`^## ${version.replaceAll('.', '\\.')}(?=\\s|$).*$`, 'm'));
 if (start < 0) throw new Error(`CHANGELOG.md has no "## ${version}" section`);
 const rest = changelog.slice(start).split('\n').slice(1).join('\n');
 const next = rest.search(/^## /m);

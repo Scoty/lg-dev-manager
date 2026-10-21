@@ -163,6 +163,8 @@ update, pull the image again and recreate the project (in Dockhand or Portainer:
 > proxy's `https://` address as `LGDM_PUBLIC_URL`.
 
 It uses host networking (`network_mode: host`), so the TV scan sees your network and the bridge sees who connects.
+Behind a reverse proxy, every browser arrives from the proxy's address, so they share one limit on wrong pairing tokens:
+a few wrong tries from any of them make all of them wait a while (up to 15 minutes).
 https://lg.scoty.uk can't use a bridge on another machine (browsers don't let an https page connect to it), so use the
 page the container serves. Settings, all optional except the first:
 
@@ -208,7 +210,9 @@ session ends); the page then reconnects through Cloudflare, which checks your si
    `http://localhost:5199` (cloudflared on the same server, with host networking) or `http://192.0.2.10:5199` (the
    server's IP). In the hostname's additional application settings, also turn on **Access → Protect with Access**
    (cloudflared's `access: required`) with the same team and audience tag, so cloudflared checks the sign-in too.
-3. **Settings.** Add the hostname to `LGDM_PUBLIC_URL` and the Access settings to the container's environment:
+3. **Settings.** Add the hostname to `LGDM_PUBLIC_URL` and the Access settings to the container's environment. With
+   Access on, every `https://` address in `LGDM_PUBLIC_URL` counts as a Cloudflare hostname and needs an Access
+   sign-in, so don't also list an HTTPS reverse proxy on your network there:
 
    ```yaml
        environment:

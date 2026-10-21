@@ -103,5 +103,6 @@ jobs:
             gh release edit "$TAG" --title "LG Dev Manager $version" --notes-file notes.md
             gh release upload "$TAG" dist/* --clobber
           else
-            gh release create "$TAG" dist/* --title "LG Dev Manager $version" --notes-file notes.md --verify-tag --latest
+            case "$version" in *-*) latest=--prerelease ;; *) latest=--latest ;; esac
+            gh release create "$TAG" dist/* --title "LG Dev Manager $version" --notes-file notes.md --verify-tag "$latest"
           fi

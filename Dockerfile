@@ -46,5 +46,5 @@ USER node
 VOLUME /data
 EXPOSE 5199
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.LGDM_PORT || 5199}/healthz`).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+  CMD ["node", "-e", "const l = process.env.LGDM_LISTEN || '0.0.0.0'; const h = l === '0.0.0.0' || l === '::' ? '127.0.0.1' : l.includes(':') ? `[${l}]` : l; fetch(`http://${h}:${process.env.LGDM_PORT || 5199}/healthz`).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 ENTRYPOINT ["node", "/app/node_modules/lg-dev-manager-bridge/dist/cli.js"]

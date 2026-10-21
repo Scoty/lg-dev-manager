@@ -6,8 +6,14 @@
 // forwarded from the internet, pairs and reports LAN mode / docker, reaches the mock TV on 127.0.0.1:9922 (start it
 // first: pnpm --filter @lgdm/mock-tv start), serves the web app, stops at once and keeps its token across restarts.
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import WebSocket from 'ws';
+
+// The protocol version this checkout speaks (packages/protocol needn't be built for this script).
+const PROTOCOL_VERSION = Number(
+  /export const PROTOCOL_VERSION = (\d+)/.exec(readFileSync(new URL('../../../packages/protocol/src/methods.ts', import.meta.url), 'utf8'))?.[1],
+);
 
 const [image, publicUrl, allowedNetworks] = process.argv.slice(2);
 if (!image || !publicUrl) throw new Error('usage: docker-smoke.mjs <image> <public url>');
@@ -68,7 +74,7 @@ async function rpc(token) {
       });
       ws.send(JSON.stringify({ id: my, method, params }));
     });
-  const hello = await call('system.hello', { token, protocolVersion: 8, client: 'docker-smoke' });
+  const hello = await call('system.hello', { token, protocolVersion: PROTOCOL_VERSION, client: 'docker-smoke' });
   return { hello, call, close: () => ws.close() };
 }
 

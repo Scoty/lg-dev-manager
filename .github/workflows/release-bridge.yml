@@ -55,4 +55,8 @@ jobs:
       # npm publish authenticates with the workflow's OIDC identity.
       - name: Publish
         working-directory: apps/bridge
-        run: npm publish ./lg-dev-manager-bridge-*.tgz --access public --provenance
+        # A prerelease (2.1.0-rc.1) goes to the "next" tag, so `npx lg-dev-manager-bridge@latest` stays on the release.
+        run: |
+          version=$(node -p "require('./package.json').version")
+          case "$version" in *-*) tag=next ;; *) tag=latest ;; esac
+          npm publish ./lg-dev-manager-bridge-*.tgz --access public --provenance --tag "$tag"

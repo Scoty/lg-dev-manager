@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 — unreleased
+## 2.0.0 — 2026-10-21
 
 - 🔗 **Pairing links.** The bridge prints a link that pairs a browser with one click (`…/#/pair?token=…`); the app
   opens lg.scoty.uk ready to pair. The token stays in the browser (it's after `#`), is removed from the address bar,

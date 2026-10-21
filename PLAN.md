@@ -433,4 +433,6 @@ Local builds use the code's own version.
    `ghcr.io/scoty/lg-dev-manager:X.Y.Z`, `X.Y`, `X` and `latest` with provenance and an SBOM. CI's `docker` job runs the
    same build and test on every PR. **One-time:** after the first push, make the package public (GitHub → Packages →
    lg-dev-manager → Package settings → Change visibility). The image sets `LGDM_DISTRIBUTION=docker`,
-   `LGDM_STATE_DIR=/data` (the token, in a volume) and `LGDM_LISTEN=0.0.0.0`; compose adds `LGDM_PUBLIC_URL`.
+   `LGDM_STATE_DIR=/data` (the token and the stored TVs, in a volume), `LGDM_LISTEN=0.0.0.0`, `LGDM_STORE=1` and
+   `LGDM_PORT=5199`; compose adds `LGDM_PUBLIC_URL`. The image's Node.js is `.nvmrc`'s (build-arg `NODE_VERSION`), and
+   `latest` moves only for releases, not prereleases (which go to npm's `next` tag and a GitHub prerelease).
