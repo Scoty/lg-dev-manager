@@ -8,7 +8,8 @@
 - 🏠 **LAN mode** (for running the bridge on a home server or NAS, as the Docker image does): `--listen` and
   `--public-url` share the bridge with browsers on your network, which open the page it serves. Off unless asked for.
   Only devices on your local network get in, nothing forwarded from the internet (e.g. a Cloudflare Tunnel), pairing
-  attempts are rate-limited per device, and the page warns that plain HTTP isn't encrypted.
+  attempts are rate-limited per device, and the page warns that plain HTTP isn't encrypted. Only the bridge's own page
+  (at the addresses you set) may connect: lg.scoty.uk isn't allowed in this mode, as it can't reach another machine.
 - ☁️ **From outside, through Cloudflare Access** (advanced, opt-in — use with caution): a LAN-mode bridge behind a
   Cloudflare Tunnel lets in requests that passed Cloudflare Access (Google with two-step verification, a one-time PIN,
   the WARP client or a service token). The bridge checks Access's signed token itself — team, application, expiry and

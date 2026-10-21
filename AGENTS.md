@@ -25,8 +25,9 @@ It has two parts (see `PLAN.md` §1 for why):
    `packages/protocol`, implemented in the bridge. No generic "open socket to host:port" RPC — ever.
 2. **Bridge security stays on.** Bind `127.0.0.1` by default, Origin allowlist, pairing token required,
    Host header checked. **LAN mode** (2.0, for the Docker image) is the one exception and only ever opt-in
-   (`--listen` + `--public-url`, `apps/bridge/src/lan.ts`): then only the configured public addresses are accepted, only
-   clients on the local network, nothing forwarded from the internet, and wrong tokens are rate-limited. Inside LAN mode,
+   (`--listen` + `--public-url`, `apps/bridge/src/lan.ts`): then only the configured public addresses are accepted (as hosts and origins — not lg.scoty.uk,
+   which can't reach another machine anyway; `--allow-origin` adds it), only clients on the local network, nothing
+   forwarded from the internet, and wrong tokens are rate-limited. Inside LAN mode,
    **Cloudflare Access mode** (`LGDM_CF_ACCESS_TEAM` + `_AUD` + `_ALLOW`, `apps/bridge/src/cfaccess.ts`) is the only way
    in from the internet: a request through Cloudflare needs a valid Access JWT (team keys, audience, expiry, an allowed
    email / service token), checked by the bridge itself so a Cloudflare misconfiguration fails closed. The Vite dev origins are accepted only with `--dev` (`pnpm dev:bridge`).

@@ -178,7 +178,10 @@ export function parseArgs(argv: string[]): BridgeConfig {
   return {
     host: lanMode ? listen : '127.0.0.1',
     port,
-    allowedOrigins: [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...(dev ? DEV_ALLOWED_ORIGINS : []), ...self, ...publicUrls, ...extra])],
+    // lg.scoty.uk only for a bridge on this computer: shared on the network (LAN mode, Docker), its own page at the
+    // public address is the way in — an https site can't open ws:// to another machine anyway, so allowing it would
+    // only matter for a browser on the server itself. --allow-origin adds it back if wanted.
+    allowedOrigins: [...new Set([...(lanMode ? [] : DEFAULT_ALLOWED_ORIGINS), ...(dev ? DEV_ALLOWED_ORIGINS : []), ...self, ...publicUrls, ...extra])],
     token,
     webRoot: argv.includes('--no-ui') ? undefined : (get('web-root') ?? process.env.LGDM_WEB_ROOT ?? bundledUi()),
     repoUrl: process.env.LGDM_REPO_URL,

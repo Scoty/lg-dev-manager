@@ -125,6 +125,10 @@ describe('LAN mode settings', () => {
       expect(c.host).toBe('0.0.0.0');
       expect(c.lan?.publicUrls).toEqual(['http://nas.local:5199', 'http://192.0.2.20:5199']);
       expect(c.allowedOrigins).toContain('http://nas.local:5199');
+      // Shared on the network, the bridge's own page is the way in: not lg.scoty.uk (unless added).
+      expect(c.allowedOrigins).not.toContain('https://lg.scoty.uk');
+      expect(parseArgs(['--listen', '0.0.0.0', '--public-url', 'http://nas.local:5199', '--allow-origin', 'https://lg.scoty.uk']).allowedOrigins).toContain('https://lg.scoty.uk');
+      expect(parseArgs([]).allowedOrigins).toContain('https://lg.scoty.uk'); // on this computer: as before
     });
     for (const weak of ['short', 'aaaaaaaaaaaaaaaaaaaa', 'abababababababababab']) {
       env({ LGDM_TOKEN: weak, LGDM_LISTEN: '0.0.0.0', LGDM_PUBLIC_URL: 'http://nas.local:5199' }, () => {

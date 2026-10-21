@@ -166,8 +166,8 @@ It uses host networking (`network_mode: host`), so the TV scan sees your network
 Behind a reverse proxy, every browser arrives from the proxy's address, so they share one limit on wrong pairing tokens:
 a few wrong tries from any of them make all of them wait a while (up to 15 minutes), and at most 8 of them can be
 waiting to pair at the same moment (the same goes for the devices of one IPv6 network).
-https://lg.scoty.uk can't use a bridge on another machine (browsers don't let an https page connect to it), so use the
-page the container serves. Settings, all optional except the first:
+https://lg.scoty.uk can't use a bridge on another machine (browsers don't let an https page connect to it), so the
+bridge doesn't accept it in this mode: use the page the container serves. Settings, all optional except the first:
 
 | Variable | |
 |---|---|
