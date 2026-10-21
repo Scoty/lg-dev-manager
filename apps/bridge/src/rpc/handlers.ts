@@ -317,7 +317,9 @@ export const handlers: HandlerMap = {
   'store.repos.set': async ({ repos }, _s, ctx) => (await storeOf(ctx).setRepos(repos), {}),
   'store.shots.list': ({ deviceId }, _s, ctx) => ({ shots: storeOf(ctx).listShots(deviceId) }),
   'store.shots.get': ({ id }, _s, ctx) => storeOf(ctx).getShot(id),
-  'store.shots.add': async ({ deviceId, method, at, base64 }, _s, ctx) => ({ shot: await storeOf(ctx).addShot(deviceId, method, base64, at) }),
+  'store.shots.add': async ({ deviceId, method, at, base64, keepExisting }, _s, ctx) => ({
+    shot: await storeOf(ctx).addShot(deviceId, method, base64, at, keepExisting),
+  }),
   'store.shots.remove': async ({ ids }, _s, ctx) => (await storeOf(ctx).removeShots(ids), {}),
   'cmd.cancel': ({ opId }, session) => {
     const run = session.streams.get(opId);

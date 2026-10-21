@@ -124,6 +124,9 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
         const problem = bridgeUrlProblem(s.url);
         if (problem) throw new BridgeError('bad_url', problem);
         client?.close();
+        // close() doesn't report the old connection closing: let go of its storage now, so nothing reads from a closed
+        // client (or from the old bridge) until the new one says what it stores.
+        setStorageBridge(null);
         saveSettings(s);
         setSettings(s);
         await connect(s);

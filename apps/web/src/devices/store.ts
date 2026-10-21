@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { CustomRepo, loadCustomRepos, MAX_CUSTOM_REPOS, mergeCustomRepos } from '../repos/store';
-import { DeviceAuth, LoginSummary, type DeviceTarget, type StoredDevice, type StoredDeviceInput } from '@lgdm/protocol';
-import { StorageOffline, storageClient, storageListeners, storageMode } from '../storage/backend';
+import { DeviceAuth, LoginSummary, STORE_LIMITS, type DeviceTarget, type StoredDevice, type StoredDeviceInput } from '@lgdm/protocol';
+import { storageClient, storageListeners, storageMode } from '../storage/backend';
 import { hostProblem, isValidUsername } from './validate';
 import { randomId } from '../lib/secureContext';
 
@@ -229,9 +229,6 @@ async function bridgeSave(d: SavedDevice): Promise<SavedDevice> {
   return fromStored(device);
 }
 
-/** Thrown by the lists when they're kept on the bridge and it's away: useDevices then waits ("loading"). */
-export { StorageOffline };
-
 // ---- Dispatch: this browser, or the bridge ----
 
 export async function listDevices(): Promise<SavedDevice[]> {
@@ -265,6 +262,9 @@ export async function addDevice(input: NewDevice): Promise<SavedDevice> {
 }
 
 export async function updateDevice(id: string, patch: Partial<NewDevice>): Promise<SavedDevice> {
+  // On the bridge, start from the TV as it is there now (another browser may have changed it), not this page's copy:
+  // only the fields in `patch` change.
+  if (storageMode() === 'bridge') bridgeCache = null;
   const current = await getDevice(id);
   if (!current) throw new Error('Device not found');
   // On the bridge, no `auth` in the patch keeps the stored login.
@@ -353,6 +353,12 @@ export function newCustomReposIn(json: unknown): CustomRepo[] {
   return parsed.data.customRepos.filter((r) => !known.has(r.url));
 }
 
+/** The ids of the TVs in a backup (to say which saved ones it would replace). */
+export function deviceIdsIn(json: unknown): string[] {
+  const parsed = ExportFile.safeParse(json);
+  return parsed.success ? parsed.data.devices.map((d) => d.id) : [];
+}
+
 /**
  * Import a backup. Devices with an id that already exists are replaced. Returns how many were imported.
  * All or nothing: one bad device rejects the whole file with a BackupError. Its custom repositories are added only
@@ -363,6 +369,9 @@ export async function importDevices(json: unknown, opts: { customRepos?: boolean
   if (!parsed.success) throw new BackupError(describeBackupProblem(parsed.error, json));
   const file = parsed.data;
   if (storageMode() === 'bridge') {
+    if (file.devices.length > STORE_LIMITS.devices) {
+      throw new BackupError(`The bridge keeps up to ${STORE_LIMITS.devices} TVs, and this backup has ${file.devices.length}.`);
+    }
     await storageClient().call('store.devices.import', { devices: file.devices.map((d) => ({ ...toStoredInput(d), createdAt: d.createdAt, updatedAt: d.updatedAt })) });
     bridgeCache = null;
   } else {
@@ -375,7 +384,7 @@ export async function importDevices(json: unknown, opts: { customRepos?: boolean
     });
   }
   if (!getActiveDeviceId() && file.devices[0]) setActiveDeviceId(file.devices[0].id);
-  if (file.customRepos && opts.customRepos) mergeCustomRepos(file.customRepos);
+  if (file.customRepos && opts.customRepos) await mergeCustomRepos(file.customRepos);
   notify();
   return file.devices.length;
 }
@@ -385,23 +394,24 @@ export async function importDevices(json: unknown, opts: { customRepos?: boolean
  * them from this browser. For a page whose bridge stores them (storage/backend.ts). Returns how many TVs moved.
  */
 export async function moveBrowserDataToBridge(
-  moveShots: (deviceIds: string[]) => Promise<number>,
+  moveShots: (deviceIds: string[]) => Promise<Map<string, number>>,
   moveRepos: () => Promise<void>,
 ): Promise<{ tvs: number; shotsLeft: number }> {
   // Repositories first: the one step that can be refused for being too many, before anything else moves.
   await moveRepos();
   const local = (await listBrowserDevices()).filter((d) => d.auth);
-  let shotsLeft = 0;
+  let left = new Map<string, number>();
   if (local.length) {
     await storageClient().call('store.devices.import', { devices: local.map((d) => ({ ...toStoredInput(d), createdAt: d.createdAt, updatedAt: d.updatedAt })) });
     bridgeCache = null;
-    shotsLeft = await moveShots(local.map((d) => d.id));
+    left = await moveShots(local.map((d) => d.id));
   }
-  await tx('readwrite', (s) => s.clear());
-  // Screenshots the bridge didn't take stay in this browser rather than be lost.
-  if (!shotsLeft) await clearShots().catch(() => {});
+  // A TV whose screenshots didn't all fit stays in this browser too, with them, so they're still shown here (the
+  // Devices page offers to move it again) rather than left without a TV.
+  for (const d of local) if (!left.has(d.id)) await tx('readwrite', (s) => s.delete(d.id));
+  if (!left.size) await clearShots().catch(() => {});
   notify();
-  return { tvs: local.length, shotsLeft };
+  return { tvs: local.length, shotsLeft: [...left.values()].reduce((a, b) => a + b, 0) };
 }
 
 /** Remove every saved device, their screenshots and the active selection from this browser. */

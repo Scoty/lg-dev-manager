@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { SHOTS_STORE, db, req, shotListeners } from '../../devices/store';
 import { randomId } from '../../lib/secureContext';
+import { BridgeError } from '../../bridge/client';
+import { StoreErrorCodes } from '@lgdm/protocol';
 import { storageClient, storageListeners, storageMode } from '../../storage/backend';
 
 /**
@@ -25,11 +27,15 @@ const isShot = (v: unknown): v is Shot => {
 const notify = () => shotListeners.forEach((fn) => fn());
 
 storageListeners.add((change) => {
+  if (change.what === 'mode') bridgeBlobs.clear();
   if (change.what === 'shots' || change.what === 'mode') notify();
 });
 
-/** Images already fetched from the bridge, by screenshot id (they never change). */
-const bridgeBlobs = new Map<string, Blob>();
+/**
+ * Images already fetched from the bridge, by screenshot id (they never change) — for the TV shown last only, so a phone
+ * doesn't end up holding every TV's screenshots.
+ */
+const bridgeBlobs = new Map<string, { deviceId: string; blob: Blob }>();
 
 function toBlob(base64: string, mime: string): Blob {
   const bin = atob(base64);
@@ -50,17 +56,23 @@ export async function listShots(deviceId: string): Promise<Shot[]> {
   if (storageMode() === 'bridge') {
     const client = storageClient();
     const { shots } = await client.call('store.shots.list', { deviceId });
-    return Promise.all(
-      shots.map(async (s) => {
-        let blob = bridgeBlobs.get(s.id);
+    const listed = new Set(shots.map((s) => s.id));
+    for (const [id, cached] of bridgeBlobs) if (cached.deviceId !== deviceId || !listed.has(id)) bridgeBlobs.delete(id);
+    // One that was deleted meanwhile (by another browser) is left out, not the whole list.
+    const loaded = await Promise.allSettled(
+      shots.map(async (s): Promise<Shot> => {
+        let blob = bridgeBlobs.get(s.id)?.blob;
         if (!blob) {
           const { base64, mime } = await client.call('store.shots.get', { id: s.id }, 60_000);
           blob = toBlob(base64, mime);
-          bridgeBlobs.set(s.id, blob);
+          bridgeBlobs.set(s.id, { deviceId, blob });
         }
         return { id: s.id, deviceId: s.deviceId, at: s.at, method: s.method, blob };
       }),
     );
+    const failed = loaded.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failed && loaded.every((r) => r.status === 'rejected')) throw failed.reason; // the bridge went away, say
+    return loaded.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
   }
   return listBrowserShots(deviceId);
 }
@@ -75,7 +87,7 @@ async function listBrowserShots(deviceId: string): Promise<Shot[]> {
 export async function addShot(deviceId: string, blob: Blob, method: Shot['method']): Promise<Shot> {
   if (storageMode() === 'bridge') {
     const { shot } = await storageClient().call('store.shots.add', { deviceId, method, base64: await toBase64(blob) }, 60_000);
-    bridgeBlobs.set(shot.id, blob);
+    bridgeBlobs.set(shot.id, { deviceId, blob });
     notify();
     return { id: shot.id, deviceId, at: shot.at, method, blob };
   }
@@ -108,17 +120,22 @@ export async function deleteShots(ids: readonly string[]): Promise<void> {
  * Move this browser's screenshots of these TVs to the bridge (moving the TVs there; storage/backend.ts). Each one is
  * removed from this browser once the bridge has it. Returns how many stayed (the bridge refused them, or went away).
  */
-export async function moveBrowserShotsToBridge(deviceIds: string[]): Promise<number> {
+export async function moveBrowserShotsToBridge(deviceIds: string[]): Promise<Map<string, number>> {
   const client = storageClient();
-  let left = 0;
+  const left = new Map<string, number>();
   for (const deviceId of deviceIds) {
-    for (const s of await listBrowserShots(deviceId)) {
+    const shots = await listBrowserShots(deviceId);
+    for (const [i, s] of shots.entries()) {
       try {
-        await client.call('store.shots.add', { deviceId, method: s.method, at: s.at, base64: await toBase64(s.blob) }, 60_000);
+        // keepExisting: the bridge refuses when it's full instead of dropping older screenshots (anyone's) for these.
+        await client.call('store.shots.add', { deviceId, method: s.method, at: s.at, base64: await toBase64(s.blob), keepExisting: true }, 60_000);
         const d = await db();
         await req(d.transaction(SHOTS_STORE, 'readwrite').objectStore(SHOTS_STORE).delete(s.id));
-      } catch {
-        left++;
+      } catch (e) {
+        // Full: the rest of this TV's won't fit either.
+        const full = e instanceof BridgeError && e.code === StoreErrorCodes.Full;
+        left.set(deviceId, (left.get(deviceId) ?? 0) + (full ? shots.length - i : 1));
+        if (full) break;
       }
     }
   }

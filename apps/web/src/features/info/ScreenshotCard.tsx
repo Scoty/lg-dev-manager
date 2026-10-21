@@ -235,7 +235,7 @@ export function ScreenshotCard({ device, className }: { device: SavedDevice; cla
                 <span>{chosen.length ? `${chosen.length} selected` : 'Select all'}</span>
               </label>
               <span className="muted">
-                {count(list.length, 'screenshot', 'screenshots')} · {fmtBytes(total)}, kept {onBridge ? 'on the bridge' : 'in this browser'}
+                {count(list.length, 'screenshot', 'screenshots')} · {fmtBytes(total)} · {onBridge ? 'Kept on the bridge' : 'Kept in this browser'}
               </span>
               <span className="spacer" />
               <button type="button" className="btn btn--sm btn--ghost" onClick={() => download(chosen.length ? chosen : list)}>
@@ -253,7 +253,8 @@ export function ScreenshotCard({ device, className }: { device: SavedDevice; cla
             <div className="screenshot screenshot--empty">
               <Icon name="image" />
               <span>
-                “Everything” is what’s on screen; “Video only” and “UI only” capture one layer. Screenshots are kept {onBridge ? 'on the bridge' : 'in this browser'}, not on the TV.
+                “Everything” is what’s on screen; “Video only” and “UI only” capture one layer.{' '}
+                {onBridge ? 'Screenshots are kept on the bridge, not on the TV.' : 'Screenshots are kept in this browser, not on the TV.'}
               </span>
             </div>
           )

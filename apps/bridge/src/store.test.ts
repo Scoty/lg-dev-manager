@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import ssh2 from 'ssh2';
 import { makeIconPng, startMockTv, type MockTv } from '@lgdm/mock-tv';
+import { STORE_LIMITS } from '@lgdm/protocol';
 import { startServer } from './server.js';
 import { connect } from './testing/rpcClient.js';
 import { SshPool } from './ssh/pool.js';
@@ -94,6 +95,18 @@ describe('the bridge’s storage', () => {
     await expect(store.addShot('nope', 'DISPLAY', png)).rejects.toThrow(/isn’t saved/);
     await store.removeDevice('tv-1');
     expect(() => store.getShot(shot.id)).toThrow(/isn’t on the bridge/);
+  });
+
+  it('moving screenshots in never drops older ones to make room', async () => {
+    const store = fresh();
+    await store.saveDevice(tvRecord(tv));
+    const png = makeIconPng([10, 20, 30], 4).toString('base64');
+    for (let i = 0; i < STORE_LIMITS.shotsPerDevice; i++) await store.addShot('tv-1', 'DISPLAY', png, i);
+    await expect(store.addShot('tv-1', 'DISPLAY', png, 1000, true)).rejects.toMatchObject({ code: 'store_full' });
+    expect(store.listShots('tv-1')[0]!.at).toBe(0); // the oldest is still there
+    await store.addShot('tv-1', 'DISPLAY', png, 1001); // a new screenshot: the oldest goes
+    expect(store.listShots('tv-1')).toHaveLength(STORE_LIMITS.shotsPerDevice);
+    expect(store.listShots('tv-1')[0]!.at).toBe(1);
   });
 
   it('keeps the custom repositories list', async () => {

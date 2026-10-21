@@ -49,7 +49,7 @@ describe('TVs stored on the bridge', () => {
   it('custom repositories are saved to the bridge, not to this browser', async () => {
     const { client, sent } = fakeBridge();
     setStorageBridge(client, true);
-    addCustomRepo({ name: 'Club', url: 'https://club.example/repo.json' });
+    await addCustomRepo({ name: 'Club', url: 'https://club.example/repo.json' });
     expect(loadCustomRepos().map((r) => r.name)).toEqual(['Club']);
     expect(sent.some((s) => s.method === 'store.repos.set' && s.params.repos[0].name === 'Club')).toBe(true);
     expect(localStorage.getItem('lgdm-custom-repos')).toBeNull();

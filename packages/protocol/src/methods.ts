@@ -522,7 +522,14 @@ export const Methods = {
   },
   /** Keep a screenshot (PNG or JPEG, up to STORE_LIMITS.shotBytes). */
   'store.shots.add': {
-    params: z.object({ deviceId: DeviceId, method: ShotMethod, at: z.number().optional(), base64: base64.max(Math.ceil((STORE_LIMITS.shotBytes * 4) / 3) + 4) }),
+    params: z.object({
+      deviceId: DeviceId,
+      method: ShotMethod,
+      at: z.number().optional(),
+      base64: base64.max(Math.ceil((STORE_LIMITS.shotBytes * 4) / 3) + 4),
+      /** Moving a browser's screenshots in: refuse (store_full) rather than drop older ones to make room. */
+      keepExisting: z.boolean().optional(),
+    }),
     result: z.object({ shot: StoredShot }),
   },
   'store.shots.remove': {

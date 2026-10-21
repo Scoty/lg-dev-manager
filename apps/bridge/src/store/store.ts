@@ -220,7 +220,8 @@ export class BridgeStore implements HostKeyPolicy {
     return { mime: s.mime, base64: readFileSync(this.shotPath(s.id, s.mime)).toString('base64') };
   }
 
-  addShot(deviceId: string, method: z.infer<typeof StoredShot>['method'], base64: string, at = Date.now()) {
+  /** `keepExisting`: refuse (store_full) instead of dropping older screenshots to make room — moving a browser's in. */
+  addShot(deviceId: string, method: z.infer<typeof StoredShot>['method'], base64: string, at = Date.now(), keepExisting = false) {
     return this.write(async () => {
       if (!this.devices.some((d) => d.id === deviceId)) throw new RpcError(StoreErrorCodes.NotFound, 'That TV isn’t saved on the bridge.');
       const data = Buffer.from(base64, 'base64');
@@ -237,6 +238,9 @@ export class BridgeStore implements HostKeyPolicy {
         if (drop.has(s.id)) continue;
         drop.add(s.id);
         total -= s.bytes;
+      }
+      if (keepExisting && drop.size) {
+        throw new RpcError(StoreErrorCodes.Full, `The bridge keeps up to ${STORE_LIMITS.shotsPerDevice} screenshots of a TV and ${STORE_LIMITS.shotsTotalBytes / 1024 ** 3} GB in all, and has no room for this one without removing others.`);
       }
       const next = [...this.shots.filter((s) => !drop.has(s.id)), shot];
       try {

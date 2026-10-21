@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { getActiveDeviceId, listDevices, StorageOffline, subscribe, type SavedDevice } from './store';
+import { getActiveDeviceId, listDevices, subscribe, type SavedDevice } from './store';
+import { storageUnavailable } from '../storage/backend';
 
 /** Live list of saved devices plus the active one. */
 export function useDevices() {
@@ -17,7 +18,7 @@ export function useDevices() {
       listDevices()
         .then((d) => current() && setDevices(d))
         // Stored on the bridge, which is away: keep what's shown (or "loading") until it's back.
-        .catch((e: unknown) => current() && setDevices((prev) => (e instanceof StorageOffline ? prev : [])));
+        .catch((e: unknown) => current() && setDevices((prev) => (storageUnavailable(e) ? prev : [])));
     };
     load();
     const off = subscribe(load);

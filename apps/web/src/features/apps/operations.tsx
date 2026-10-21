@@ -141,8 +141,8 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
       update?: boolean;
       incompatible?: IncompatibleReason[] | null;
       /**
-       * An update offered on the Installed page, which only knows the official repository: the TV doesn't record where
-       * an app came from, so ask first — it may replace a build from a custom repository or an IPK file.
+       * Offered on the Installed page, which only knows the official repository: an install over an app that's there
+       * asks first — the TV doesn't record where an app came from, so it may replace a custom repository's or an IPK's.
        */
       confirmOfficial?: boolean;
     } = {},
@@ -168,16 +168,19 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
       });
       if (!ok) return false;
     }
-    if (opts.confirmOfficial && opts.update && !source.custom && pkg.id !== APP_ID_HBCHANNEL) {
-      const installed = apps?.find((a) => a.id === pkg.id);
+    // On the Installed page, an install over an app that's there (an update, or a beta) may replace a build from a
+    // custom repository or an IPK file: ask first. Homebrew Channel only ever comes from the official repository.
+    const installed = apps?.find((a) => a.id === pkg.id);
+    if (opts.confirmOfficial && installed && !source.custom && pkg.id !== APP_ID_HBCHANNEL) {
+      const next = channel === 'beta' ? pkg.manifestBeta?.version : pkg.manifest?.version;
       const ok = await confirm({
-        title: `Update ${pkg.title} from the Homebrew repository?`,
+        title: channel === 'beta' ? `Install the beta of ${pkg.title} from the Homebrew repository?` : `Update ${pkg.title} from the Homebrew repository?`,
         message: (
           <>
             <p style={{ marginTop: 0 }}>
-              This installs the official build of <b>{pkg.title}</b>
-              {pkg.manifest?.version && <> (v{pkg.manifest.version})</>} from the webOS Homebrew repository
-              {installed?.version && <> over v{installed.version}</>}.
+              {next && installed.version
+                ? `This installs the official build of ${pkg.title}, v${next}, from the webOS Homebrew repository over the v${installed.version} on ${device.name}.`
+                : `This installs the official build of ${pkg.title} from the webOS Homebrew repository over the one on ${device.name}.`}
             </p>
             <p style={{ marginBottom: 0 }}>
               If you installed it from a custom repository or an IPK file, this replaces that build with the official one,
@@ -185,7 +188,7 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
             </p>
           </>
         ),
-        confirmText: 'Update',
+        confirmText: channel === 'beta' ? 'Install the beta' : 'Update',
       });
       if (!ok) return false;
     }
@@ -197,7 +200,6 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
         .fetchQuery({ queryKey: ['repo', 'official'], queryFn: () => call('repo.list', {}, 60_000), staleTime: 5 * 60_000 })
         .then((r) => r.packages.find((p) => p.id === pkg.id))
         .catch(() => undefined);
-      const installed = apps?.find((a) => a.id === pkg.id);
       const ok = await confirm({
         title: `Install ${pkg.title} from ${source.custom.name}?`,
         message: (

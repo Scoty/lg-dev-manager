@@ -74,15 +74,18 @@ export function EditDeviceDialog({ device, onClose }: { device: SavedDevice | nu
       if (ready && connectionChanged) {
         call('device.disconnect', { device: toTarget(device) }).catch(() => {});
       }
-      await updateDevice(device.id, {
-        name: name.trim(),
-        description: description.trim() || undefined,
-        host: host.trim(),
-        port,
-        username,
-        mode: username === 'root' ? 'rooted' : 'devmode',
-        auth: newAuth!,
-      });
+      // Only what was changed here: another browser paired with the same bridge may have changed the rest meanwhile.
+      const patch: Parameters<typeof updateDevice>[1] = {};
+      if (name.trim() !== device.name) patch.name = name.trim();
+      if ((description.trim() || undefined) !== device.description) patch.description = description.trim() || undefined;
+      if (host.trim() !== device.host) patch.host = host.trim();
+      if (port !== device.port) patch.port = port;
+      if (username !== device.username) {
+        patch.username = username;
+        patch.mode = username === 'root' ? 'rooted' : 'devmode';
+      }
+      if (auth.kind !== 'keep') patch.auth = newAuth!;
+      await updateDevice(device.id, patch);
       toast({ kind: 'success', title: `Saved ${name.trim()}` });
       onClose();
     } catch (err) {

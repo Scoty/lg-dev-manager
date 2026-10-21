@@ -42,6 +42,14 @@ export class StorageOffline extends BridgeError {
   }
 }
 
+/**
+ * Whether an error means "the storing bridge isn't reachable right now" (lists then wait for it rather than show
+ * nothing): StorageOffline, or a call that failed because the connection went away.
+ */
+export function storageUnavailable(e: unknown): boolean {
+  return e instanceof StorageOffline || (mode === 'bridge' && e instanceof BridgeError && (e.code === 'disconnected' || e.code === 'timeout'));
+}
+
 /** The bridge to read from and write to, in `bridge` mode. */
 export function storageClient(): BridgeClient {
   if (!client) throw new StorageOffline();

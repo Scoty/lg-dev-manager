@@ -17,17 +17,22 @@ export function randomId(): string {
 /** Copy text to the clipboard: the Clipboard API, or the older copy command where that isn't available. */
 export async function copyText(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  // Focus comes back afterwards (the terminal keeps the keyboard after Ctrl+Shift+C).
+  const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const area = document.createElement('textarea');
   area.value = text;
   area.setAttribute('readonly', '');
   area.style.position = 'fixed';
   area.style.opacity = '0';
+  area.style.fontSize = '16px'; // smaller text makes iOS zoom in on focus
   document.body.appendChild(area);
-  area.select();
+  area.focus();
+  area.setSelectionRange(0, text.length); // iOS doesn't select a read-only field with select()
   try {
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- the only copy that works outside secure contexts
     if (!document.execCommand('copy')) throw new Error('Copy was refused.');
   } finally {
     area.remove();
+    focused?.focus();
   }
 }

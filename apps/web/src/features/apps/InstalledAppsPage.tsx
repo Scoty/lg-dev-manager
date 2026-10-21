@@ -324,7 +324,10 @@ function AppRow({
                   className="dd-menu-item"
                   onClick={() => {
                     close();
-                    copyText(app.id).then(() => toast({ kind: 'success', title: 'App id copied', text: app.id }));
+                    copyText(app.id).then(
+                      () => toast({ kind: 'success', title: 'App id copied', text: app.id }),
+                      () => toast({ kind: 'danger', title: 'Couldn’t copy', text: app.id }),
+                    );
                   }}
                 >
                   <Icon name="copy" /> Copy app id
