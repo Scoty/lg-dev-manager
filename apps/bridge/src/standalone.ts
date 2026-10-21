@@ -7,7 +7,7 @@ import type { WebFiles } from './http/static.js';
  * How this bridge was installed, so the site can say how to update it: `app` — the standalone download from the
  * GitHub releases (a Node.js single executable application, scripts/build-app.mjs); `npm` — npx; `source` — a clone.
  */
-export type Distribution = 'app' | 'npm' | 'source' | 'docker';
+type Distribution = 'app' | 'npm' | 'source' | 'docker';
 
 /** Running as the standalone app (Node.js and the bridge packed into one executable)? */
 export function isStandalone(): boolean {
@@ -31,7 +31,7 @@ export function distribution(): Distribution {
 }
 
 /** Name of the asset listing the packed web UI files (written by scripts/build-app.mjs). */
-export const WEB_MANIFEST_ASSET = 'web-manifest.json';
+const WEB_MANIFEST_ASSET = 'web-manifest.json';
 
 /** The web UI packed into the standalone app, or undefined when it has none (or this isn't the app). */
 export function standaloneUi(): WebFiles | undefined {

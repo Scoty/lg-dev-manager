@@ -42,7 +42,8 @@
     "start": "node dist/cli.js",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude src/app.smoke.test.ts",
+    "test:app": "vitest run src/app.smoke.test.ts",
     "prepack": "node scripts/prepack.mjs",
     "postpack": "node scripts/postpack.mjs"
   },

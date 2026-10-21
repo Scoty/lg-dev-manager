@@ -3,7 +3,7 @@ import { KEY_SERVER_PORT, DEVMODE_SSH_PORT, ROOT_SSH_PORT, WEBOS_SSAP_PORTS } fr
 import { looksLikeWebos } from './webos.js';
 
 /** True if a TCP connection to host:port succeeds within the timeout. */
-export function isPortOpen(host: string, port: number, timeoutMs = 10_000): Promise<boolean> {
+function isPortOpen(host: string, port: number, timeoutMs = 10_000): Promise<boolean> {
   return new Promise((resolve) => {
     const sock = connect({ host: host.replace(/^\[|\]$/g, ''), port });
     const done = (ok: boolean) => {

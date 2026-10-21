@@ -19,13 +19,13 @@ import { CfAccess, type AccessIdentity } from './cfaccess.js';
  * A connection let in by Cloudflare Access lasts at most this long (or until the Access token expires): revoking
  * someone in Access stops new requests at Cloudflare's edge, and the page reconnects through it, checked again.
  */
-export const ACCESS_CONNECTION_MS = 60 * 60_000;
+const ACCESS_CONNECTION_MS = 60 * 60_000;
 import { takePairRedirect } from './pairing.js';
 import { BridgeStore } from './store/store.js';
 import { STORE_CHANGED_EVENT } from '@lgdm/protocol';
 import { ErrorCodes } from '@lgdm/protocol';
 
-export const RPC_PATH = '/rpc';
+const RPC_PATH = '/rpc';
 
 /** Unanswered pings before a connection counts as gone (its shells, streams and uploads are then closed). */
 const HEARTBEAT_MS = 30_000;

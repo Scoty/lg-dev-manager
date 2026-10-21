@@ -84,7 +84,7 @@ export const consoleStore = new ConsoleStore();
  * A TV the console can send commands to that isn't saved yet — the one being set up in the add-device wizard,
  * once its login has worked. Takes precedence over the active TV while set.
  */
-export interface ConsoleTarget {
+interface ConsoleTarget {
   name: string;
   host: string;
   port: number;

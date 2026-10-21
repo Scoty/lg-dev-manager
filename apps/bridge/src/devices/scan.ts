@@ -26,7 +26,7 @@ const MAX_NETWORKS = 4;
 /** Interfaces that are virtual / VPN and not where a TV would be. */
 const SKIP_IFACE = /^(docker|br-|veth|vmnet|vboxnet|virbr|tailscale|zt|utun|awdl|llw|lo)/i;
 
-export interface ScanOptions {
+interface ScanOptions {
   timeoutMs?: number;
   ssdp?: boolean;
   /** /24 prefixes to sweep, e.g. "192.168.1". Defaults to this computer's networks. */
@@ -125,7 +125,7 @@ function fetchDescription(hit: SsdpHit): Promise<{ name?: string; modelName?: st
 }
 
 /** The /24 networks this computer is on (skipping loopback, VPN and container interfaces). */
-export function localNetworks(): { prefixes: string[]; self: Set<string> } {
+function localNetworks(): { prefixes: string[]; self: Set<string> } {
   const prefixes: string[] = [];
   const self = new Set<string>();
   for (const [name, addrs] of Object.entries(networkInterfaces())) {

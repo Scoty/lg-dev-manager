@@ -49,7 +49,7 @@ export interface MockState {
   power: { state: string; processing?: string };
 }
 
-export const DEV_APPS_DIR = '/media/developer/apps/usr/palm/applications';
+const DEV_APPS_DIR = '/media/developer/apps/usr/palm/applications';
 
 function crc32(buf: Buffer): number {
   let c = ~0;

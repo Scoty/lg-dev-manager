@@ -3,7 +3,7 @@ import { RpcError } from '../rpc/errors.js';
 import { lunaCall } from '../ssh/luna.js';
 import type { SshRunner } from '../ssh/pool.js';
 import { readFile } from '../ssh/transfer.js';
-import type { HttpTrace } from '../repo/repo.js';
+import type { HttpTrace } from '../net/fetch.js';
 
 /**
  * Developer Mode session (port of src-tauri/src/plugins/devmode.rs and DeviceManagerService.extendDevMode).

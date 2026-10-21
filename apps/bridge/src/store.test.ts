@@ -5,11 +5,10 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import WebSocket from 'ws';
 import ssh2 from 'ssh2';
 import { makeIconPng, startMockTv, type MockTv } from '@lgdm/mock-tv';
-import { PROTOCOL_VERSION } from '@lgdm/protocol';
 import { startServer } from './server.js';
+import { connect } from './testing/rpcClient.js';
 import { SshPool } from './ssh/pool.js';
 import { RepoClient } from './repo/repo.js';
 import { BridgeStore } from './store/store.js';
@@ -117,7 +116,6 @@ describe('a bridge with --store', () => {
   let server: Server;
   let tv: MockTv;
   let dir: string;
-  let port: number;
 
   beforeAll(async () => {
     tv = await startMockTv({ username: 'root', password: PASSWORD });
@@ -127,7 +125,6 @@ describe('a bridge with --store', () => {
       new SshPool(),
       new RepoClient('http://127.0.0.1:1/api'),
     );
-    port = (server.address() as AddressInfo).port;
   });
   afterAll(async () => {
     await new Promise<void>((r) => server.close(() => r()));
@@ -136,29 +133,8 @@ describe('a bridge with --store', () => {
   });
 
   async function client() {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/rpc`, { headers: { Origin: ORIGIN } });
-    await new Promise((r) => ws.once('open', r));
-    const frames: string[] = [];
-    const events: any[] = [];
-    let id = 0;
-    ws.on('message', (raw) => {
-      frames.push(raw.toString());
-      const msg = JSON.parse(raw.toString());
-      if (msg.event) events.push(msg);
-    });
-    const call = (method: string, params?: unknown) =>
-      new Promise<any>((resolve) => {
-        const my = ++id;
-        ws.on('message', function on(raw) {
-          const msg = JSON.parse(raw.toString());
-          if (msg.id !== my) return;
-          ws.off('message', on);
-          resolve(msg);
-        });
-        ws.send(JSON.stringify({ id: my, method, params }));
-      });
-    const hello = await call('system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
-    return { ws, call, frames, events, hello };
+    const c = await connect(server, { origin: ORIGIN, token: TOKEN });
+    return { ...c, events: c.messages };
   }
 
   it('says it stores, shares changes with every paired browser, and runs calls on a stored TV by its id', async () => {
@@ -215,23 +191,8 @@ describe('a stored password', () => {
     await new Promise<void>((r) => trap.listen(0, '127.0.0.1', () => r()));
     const trapPort = (trap.address() as AddressInfo).port;
     const server = await startServer({ host: '127.0.0.1', port: 0, allowedOrigins: [ORIGIN], token: TOKEN, dev: false, storeDir: dir }, new SshPool(), new RepoClient('http://127.0.0.1:1/api'));
-    const ws = new WebSocket(`ws://127.0.0.1:${(server.address() as AddressInfo).port}/rpc`, { headers: { Origin: ORIGIN } });
-    await new Promise((r) => ws.once('open', r));
-    let id = 0;
-    const call = (method: string, params?: unknown) =>
-      new Promise<any>((resolve) => {
-        const my = ++id;
-        ws.on('message', function on(raw) {
-          const msg = JSON.parse(raw.toString());
-          if (msg.id === my) {
-            ws.off('message', on);
-            resolve(msg);
-          }
-        });
-        ws.send(JSON.stringify({ id: my, method, params }));
-      });
+    const { ws, call } = await connect(server, { origin: ORIGIN, token: TOKEN });
     try {
-      await call('system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
       const record = { id: 'tv-p', name: 'Pinned', mode: 'rooted', host: '127.0.0.1', port: tv.sshPort, username: 'root' };
       await call('store.devices.save', { device: { ...record, auth: { kind: 'password', password: PASSWORD } } });
       // The first connection records the TV's host key.
@@ -258,22 +219,7 @@ describe('a stored password', () => {
 describe('a bridge without --store', () => {
   it('refuses stored TVs and storage calls, and doesn’t say it stores', async () => {
     const server = await startServer({ host: '127.0.0.1', port: 0, allowedOrigins: [ORIGIN], token: TOKEN, dev: false }, new SshPool(), new RepoClient('http://127.0.0.1:1/api'));
-    const ws = new WebSocket(`ws://127.0.0.1:${(server.address() as AddressInfo).port}/rpc`, { headers: { Origin: ORIGIN } });
-    await new Promise((r) => ws.once('open', r));
-    let id = 0;
-    const call = (method: string, params?: unknown) =>
-      new Promise<any>((resolve) => {
-        const my = ++id;
-        ws.on('message', function on(raw) {
-          const msg = JSON.parse(raw.toString());
-          if (msg.id === my) {
-            ws.off('message', on);
-            resolve(msg);
-          }
-        });
-        ws.send(JSON.stringify({ id: my, method, params }));
-      });
-    const hello = await call('system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
+    const { ws, call, hello } = await connect(server, { origin: ORIGIN, token: TOKEN });
     expect(hello.result.features).not.toContain('serverStore');
     expect((await call('store.devices.list')).error.code).toBe('store_off');
     expect((await call('cmd.exec', { device: { stored: 'tv-1' }, command: 'id' })).error.code).toBe('store_off');

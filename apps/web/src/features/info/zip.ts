@@ -26,7 +26,7 @@ function dosTime(d: Date): { time: number; date: number } {
   };
 }
 
-export interface ZipEntry {
+interface ZipEntry {
   name: string;
   data: Uint8Array;
   date?: Date;

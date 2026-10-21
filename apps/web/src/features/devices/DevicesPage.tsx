@@ -14,8 +14,10 @@ import { useDevices } from '../../devices/useDevices';
 import { DataPrivacyCard } from './DataPrivacyCard';
 import { EditDeviceDialog } from './EditDeviceDialog';
 import { describeLogin } from './auth';
+import { useStoredOnBridge } from '../../storage/backend';
 
 export function DevicesPage() {
+  const onBridge = useStoredOnBridge();
   const { devices, activeId } = useDevices();
   const { ready, call } = useRpc();
   const { confirm, toast } = useFeedback();
@@ -66,7 +68,7 @@ export function DevicesPage() {
       <PageHeader
         eyebrow="Setup"
         title="Devices"
-        sub="The TVs this browser knows about. The active TV is the one the Apps, Files and Terminal pages work with."
+        sub={`${onBridge ? 'The TVs stored on the bridge, shared by every paired browser.' : 'The TVs this browser knows about.'} The active TV is the one the Apps, Files and Terminal pages work with.`}
         actions={
           <Link to="/devices/new" className="btn btn--primary">
             <Icon name="plus" /> Add a TV
@@ -175,7 +177,7 @@ export function DevicesPage() {
                                       remove(d);
                                     }}
                                   >
-                                    <Icon name="trash" /> Remove from this browser
+                                    <Icon name="trash" /> {onBridge ? 'Remove from the bridge' : 'Remove from this browser'}
                                   </button>
                                 </>
                               )}

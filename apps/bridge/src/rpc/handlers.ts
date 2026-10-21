@@ -36,7 +36,7 @@ import { deviceInfo, generateKey, storageInfo, takeScreenshot } from '../devices
 import { DEFAULT_LGE_URL, devModeStatus, renewDevMode } from '../devices/devmode.js';
 import { tvPower } from '../devices/power.js';
 import { appIcon, hbChannelConfig, installDownloadable, installFromRepo, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
-import type { HttpTrace } from '../repo/repo.js';
+import type { HttpTrace } from '../net/fetch.js';
 import type { RepoRegistry } from '../repo/registry.js';
 import type { LitefinClient } from '../litefin/litefin.js';
 import type { ShellSessions } from '../shell/shells.js';
@@ -129,7 +129,7 @@ type Handler<M extends MethodName> = (
   ctx: Context,
 ) => Promise<ResultOf<M>> | ResultOf<M>;
 
-export type HandlerMap = { [M in MethodName]: Handler<M> };
+type HandlerMap = { [M in MethodName]: Handler<M> };
 
 function tokensMatch(a: string, b: string): boolean {
   const ab = Buffer.from(a);

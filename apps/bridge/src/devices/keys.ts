@@ -6,7 +6,7 @@ const { utils } = ssh2;
 import { DeviceErrorCodes } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
 
-export interface KeyInfo {
+interface KeyInfo {
   fingerprint: string;
   type: string;
 }

@@ -4,14 +4,15 @@ import { Alert } from '../../components/Alert';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Icon } from '../../shell/icons';
 import type { SavedDevice } from '../../devices/store';
-import { fmtSize, INCOMPATIBLE_TEXT, type IncompatibleReason } from './logic';
+import { INCOMPATIBLE_TEXT, type IncompatibleReason } from './logic';
 import { useRepoDescription, useRepoImage } from './queries';
 import { RepoIcon, RepoScreenshot } from './RepoIcon';
 import { SafeHtml } from './SafeHtml';
 import { TV_OFF_HINT } from '../apps/operations';
 import type { RepoAppView } from './useRepoApps';
+import { fmtBytes } from '../../lib/format';
 
-export interface RepoActions {
+interface RepoActions {
   installFromRepo: (pkg: RepoPackage, o?: { channel?: 'stable' | 'beta'; update?: boolean; incompatible?: IncompatibleReason[] | null }) => Promise<boolean>;
   remove: (app: AppInfo) => void;
   launch: (app: AppInfo) => void;
@@ -50,7 +51,7 @@ export function RepoDetails({
             <div className="mono muted repo-details-id">{pkg.id}</div>
             <div className="repo-details-version">
               {m ? <>Version <b>{m.version}</b></> : 'No release'}
-              {m?.ipkSize ? <span className="muted"> · {fmtSize(m.ipkSize)}</span> : null}
+              {m?.ipkSize ? <span className="muted"> · {fmtBytes(m.ipkSize)}</span> : null}
               {installed && (
                 <span className="muted">
                   {' '}

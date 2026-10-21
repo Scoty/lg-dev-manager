@@ -14,7 +14,7 @@ export function levelRank(level: string): number {
 }
 
 /** dmesg says `warn`/`emerg`, syslog `warning`/`err`; map the spellings onto PmLog's. */
-export function normalizeLevel(level: string): LogLevel {
+function normalizeLevel(level: string): LogLevel {
   const l = level.toLowerCase();
   if (l === 'warn') return 'warning';
   if (l === 'error') return 'err';
@@ -150,7 +150,7 @@ export function shortTime(e: Pick<LogEntry, 'time' | 'monotonic'>): string {
 
 // ---------- crash reports ----------
 
-export interface CrashTitle {
+interface CrashTitle {
   title: string;
   summary: string;
   /** File name to save the report under (without extension). */
@@ -205,7 +205,7 @@ const clean = (s: string) => s.replace(/^_+/, '').replace(/[^A-Za-z0-9._-]+/g, '
 
 // ---------- luna bus monitor (ls-monitor -j) ----------
 
-export interface MonitorMessage {
+interface MonitorMessage {
   senderUniqueName?: string;
   destinationUniqueName?: string;
   type: string;
@@ -249,7 +249,7 @@ export interface CallEntry {
   status: 'pending' | 'ok' | 'error' | 'cancelled';
 }
 
-export interface MonitorQuery {
+interface MonitorQuery {
   text: string[];
   sender: string[];
   destination: string[];

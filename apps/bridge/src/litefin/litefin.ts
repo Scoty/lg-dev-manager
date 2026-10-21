@@ -1,7 +1,7 @@
 import { LITEFIN_APP_ID, LITEFIN_RELEASE_COUNT, LitefinErrorCodes, type LitefinAsset, type LitefinRelease } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
 import { bridgeUploadBudget, type UploadBudget } from '../rpc/uploads.js';
-import { downloadIpk, readBody, type HttpTrace, type Progress } from '../repo/repo.js';
+import { downloadIpk, readBody, type HttpTrace, type Progress } from '../net/fetch.js';
 
 /**
  * Litefin's GitHub releases (M8). The Homebrew repository carries one Litefin build per version; its releases have one
@@ -9,7 +9,7 @@ import { downloadIpk, readBody, type HttpTrace, type Progress } from '../repo/re
  * ever downloads files from that list, from the project's own release-download path.
  */
 
-export const DEFAULT_LITEFIN_API = 'https://api.github.com/repos/MoazSalem/litefin';
+const DEFAULT_LITEFIN_API = 'https://api.github.com/repos/MoazSalem/litefin';
 const CACHE_MS = 10 * 60_000;
 /** An install of something not in the list fetches it again at most this often (GitHub allows 60 calls an hour). */
 const MISS_REFRESH_MS = 60_000;

@@ -10,6 +10,8 @@ import { Icon } from '../../shell/icons';
 import { useRpc } from '../../bridge/useRpc';
 import { useBridgeFeature } from '../../bridge/BridgeProvider';
 import { addCustomRepo, MAX_CUSTOM_REPOS, removeCustomRepo, renameCustomRepo, useCustomRepos, type CustomRepo } from '../../repos/store';
+import { count } from '../../lib/format';
+import { useStoredOnBridge } from '../../storage/backend';
 
 /** Whether the address the bridge found is on the site the user typed (no short link or redirect to elsewhere). */
 function sameSite(typed: string, found: string): boolean {
@@ -46,6 +48,7 @@ function checkHint(e: unknown) {
  * Not in the original Dev Manager.
  */
 export function CustomReposPage() {
+  const onBridge = useStoredOnBridge();
   const repos = useCustomRepos();
   const { ready, call } = useRpc();
   const supported = useBridgeFeature(BridgeFeatures.CustomRepos);
@@ -87,7 +90,7 @@ export function CustomReposPage() {
       toast({
         kind: 'success',
         title: `${repo.name} added`,
-        text: `${res.apps} app${res.apps === 1 ? '' : 's'}${res.sample.length ? `, like ${res.sample.join(', ')}` : ''}. It’s under Apps in the sidebar.`,
+        text: `${count(res.apps, 'app')}${res.sample.length ? `, like ${res.sample.join(', ')}` : ''}. It’s under Apps in the sidebar.`,
       });
       setName('');
       setUrl('');
@@ -126,7 +129,8 @@ export function CustomReposPage() {
         sub={
           <>
             Add webOS Homebrew repositories besides the official one — the same addresses Homebrew Channel’s “Add
-            repository” takes. They’re saved in this browser and appear under Apps.
+            repository” takes. They’re saved {onBridge ? 'on the bridge, for every paired browser,' : 'in this browser'} and appear under
+            Apps.
           </>
         }
       />
@@ -193,7 +197,7 @@ export function CustomReposPage() {
           </form>
         </Card>
 
-        <Card eyebrow="Saved in this browser" title="Your repositories" className="col-7">
+        <Card eyebrow={onBridge ? 'Saved on the bridge' : 'Saved in this browser'} title="Your repositories" className="col-7">
           {repos.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon"><Icon name="box" /></div>

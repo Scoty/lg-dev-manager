@@ -51,9 +51,9 @@ function safeUrl(href: string | null, protocols: string[], base?: string): strin
   }
 }
 
-export type ImageRenderer = (src: string, alt: string, key: number) => ReactNode;
+type ImageRenderer = (src: string, alt: string, key: number) => ReactNode;
 
-export function sanitizeToReact(html: string, opts: { baseUrl?: string; renderImage?: ImageRenderer } = {}): ReactNode[] {
+function sanitizeToReact(html: string, opts: { baseUrl?: string; renderImage?: ImageRenderer } = {}): ReactNode[] {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   let budget = MAX_NODES;
   let key = 0;

@@ -12,6 +12,7 @@ import { useRefreshDeviceData, useTvPower } from './queries';
 import { useQueryClient } from '@tanstack/react-query';
 import { INCOMPATIBLE_TEXT, type IncompatibleReason } from '../repo/logic';
 import { repoParam, useRepoSource } from '../repo/source';
+import { fmtBytes } from '../../lib/format';
 
 type Phase = 'send' | 'copy' | 'install';
 
@@ -47,8 +48,6 @@ const PHASES: Record<OpState['kind'], { id: Phase; label: string }[]> = {
 
 const phaseOf = (stage: Exclude<OpProgress['stage'], 'cleanup'>): Phase => (stage === 'upload' || stage === 'verify' ? 'copy' : 'install');
 
-const fmtBytes = (n: number) =>
-  n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`;
 
 function installHint(e: unknown) {
   const { code } = describeError(e);

@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'rea
 import { Modal } from '../../components/Modal';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Icon } from '../../shell/icons';
-import { fmtBytes } from './paths';
+import { fmtBytes } from '../../lib/format';
 
 /** Ask for a file or folder name (CreateDirectoryMessageComponent; also used for rename). */
 export function NameDialog({

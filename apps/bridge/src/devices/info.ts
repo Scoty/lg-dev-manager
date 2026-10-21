@@ -125,7 +125,7 @@ export const SHOT_SWEEP_AGE_MS = 5 * 60_000;
  * capture was interrupted (bridge stopped, connection lost) its file can be left in /tmp, so every screenshot
  * also removes leftovers older than a few minutes. /tmp is in RAM and is emptied when the TV restarts anyway.
  */
-export async function sweepOldShots(pool: SshRunner, device: DeviceTarget): Promise<number> {
+async function sweepOldShots(pool: SshRunner, device: DeviceTarget): Promise<number> {
   const res = await pool.exec(device, 'ls /tmp', { timeoutMs: 20_000, maxOutput: 1024 * 1024 });
   if (res.exitCode !== 0) return 0;
   const cutoff = Date.now() - SHOT_SWEEP_AGE_MS;

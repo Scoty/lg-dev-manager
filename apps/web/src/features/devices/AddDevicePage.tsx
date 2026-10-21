@@ -18,6 +18,7 @@ import { ScanPanel, savedAt, tvLabel } from './ScanPanel';
 import { STEP_LABELS, verifyDevice, type VerifyState, type VerifyStepId } from './verify';
 import { MODE_DEFAULTS, authProblems, emptyAuth, hostProblem, type AuthDraft, type AuthKind, type SetupMode } from './auth';
 import { isValidUsername } from '../../devices/validate';
+import { useStoredOnBridge } from '../../storage/backend';
 
 type Step = 'mode' | 'prepare' | 'details' | 'verify';
 
@@ -107,6 +108,7 @@ function suggestName(existing: string[]): string {
 }
 
 export function AddDevicePage() {
+  const onBridge = useStoredOnBridge();
   const navigate = useNavigate();
   const { ready, call } = useRpc();
   const { devices } = useDevices();
@@ -491,7 +493,7 @@ export function AddDevicePage() {
               {sshOff && <SshOffHint />}
 
               {saved && !verify.info && (
-                <Alert kind="success" title={`${trimmedName} was saved`}>Saved in this browser and set as the active TV.</Alert>
+                <Alert kind="success" title={`${trimmedName} was saved`}>{onBridge ? 'Saved on the bridge' : 'Saved in this browser'} and set as the active TV.</Alert>
               )}
 
               {saved && verify.info && (
@@ -500,7 +502,7 @@ export function AddDevicePage() {
                     <span className="verify-summary-icon"><Icon name="check" strokeWidth={2.6} /></span>
                     <div>
                       <div className="verify-summary-title">{trimmedName} is ready</div>
-                      <div className="muted">Saved in this browser and set as the active TV.</div>
+                      <div className="muted">{onBridge ? 'Saved on the bridge' : 'Saved in this browser'} and set as the active TV.</div>
                     </div>
                   </div>
                   <dl className="kv">

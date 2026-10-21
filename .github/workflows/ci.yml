@@ -34,7 +34,7 @@ jobs:
           mkdir "$RUNNER_TEMP/npx" && cd "$RUNNER_TEMP/npx" && npm init -y >/dev/null
           npm install --no-audit --no-fund "$RUNNER_TEMP"/pkg/lg-dev-manager-bridge-*.tgz
           cd "$GITHUB_WORKSPACE"
-          LGDM_APP="$RUNNER_TEMP/npx/node_modules/lg-dev-manager-bridge/dist/cli.js" pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
+          LGDM_APP="$RUNNER_TEMP/npx/node_modules/lg-dev-manager-bridge/dist/cli.js" pnpm --filter lg-dev-manager-bridge test:app
 
   # The standalone app, built and tested on every OS and CPU it is released for (release-app.yml uses the same
   # runners), so a change that breaks it shows up before a release.
@@ -65,7 +65,7 @@ jobs:
         run: |
           app="$PWD/apps/bridge/release/bin/lg-dev-manager-bridge"
           [ "$RUNNER_OS" = Windows ] && app="$app.exe"
-          LGDM_APP="$app" pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
+          LGDM_APP="$app" pnpm --filter lg-dev-manager-bridge test:app
 
   # The Docker image (Dockerfile, compose.yaml) built and run as compose runs it: host networking, read-only, no
   # capabilities. apps/bridge/scripts/docker-smoke.mjs checks pairing, LAN mode, its refusals and a mock TV.

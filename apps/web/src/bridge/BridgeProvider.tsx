@@ -4,7 +4,7 @@ import { bridgeUrlProblem, loadSettings, saveSettings, type BridgeSettings } fro
 import { BridgeFeatures } from '@lgdm/protocol';
 import { resetStorage, setStorageBridge } from '../storage/backend';
 
-export type BridgeStatus =
+type BridgeStatus =
   | { state: 'unpaired' }
   | { state: 'connecting' }
   | {

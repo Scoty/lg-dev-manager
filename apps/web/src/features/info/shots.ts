@@ -66,7 +66,7 @@ export async function listShots(deviceId: string): Promise<Shot[]> {
 }
 
 /** This browser's own screenshots of one TV — whatever the mode (moving them to the bridge reads these). */
-export async function listBrowserShots(deviceId: string): Promise<Shot[]> {
+async function listBrowserShots(deviceId: string): Promise<Shot[]> {
   const d = await db();
   const all = await req(d.transaction(SHOTS_STORE, 'readonly').objectStore(SHOTS_STORE).index('deviceId').getAll(IDBKeyRange.only(deviceId)));
   return (all as unknown[]).filter(isShot).sort((a, b) => a.at - b.at);
@@ -167,10 +167,4 @@ const slug = (v: string) => v.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$
 export function shotFileName(deviceName: string, shot: Pick<Shot, 'at'>): string {
   const stamp = new Date(shot.at).toISOString().replace(/[:.]/g, '-').slice(0, 19);
   return `${slug(deviceName)}-${stamp}.png`;
-}
-
-export function fmtBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }

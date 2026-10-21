@@ -51,7 +51,7 @@ jobs:
           mkdir "$RUNNER_TEMP/npx" && cd "$RUNNER_TEMP/npx" && npm init -y >/dev/null
           npm install --no-audit --no-fund "$GITHUB_WORKSPACE"/apps/bridge/lg-dev-manager-bridge-*.tgz
           cd "$GITHUB_WORKSPACE"
-          LGDM_APP="$RUNNER_TEMP/npx/node_modules/lg-dev-manager-bridge/dist/cli.js" pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
+          LGDM_APP="$RUNNER_TEMP/npx/node_modules/lg-dev-manager-bridge/dist/cli.js" pnpm --filter lg-dev-manager-bridge test:app
       # npm publish authenticates with the workflow's OIDC identity.
       - name: Publish
         working-directory: apps/bridge

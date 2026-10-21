@@ -17,7 +17,7 @@ import {
   type StoredDevice,
 } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
-import { sniffImage } from '../repo/repo.js';
+import { sniffImage } from '../net/image.js';
 import type { HostKeyPolicy } from '../ssh/pool.js';
 
 /** A stored TV with its login — only ever in this file and in the bridge's memory. */
@@ -38,7 +38,7 @@ const ShotsFile = z.object({ version: z.literal(1), shots: z.array(StoredShot) }
  * What a browser may see of a stored TV: the fields of StoredDevice only (zod drops everything else), so a field added
  * to the record later never reaches a browser by accident.
  */
-export function publicDevice(r: DeviceRecord): StoredDevice {
+function publicDevice(r: DeviceRecord): StoredDevice {
   const login: LoginSummary = r.auth.kind === 'key' ? { kind: 'key', hasPassphrase: !!r.auth.passphrase } : { kind: 'password' };
   return StoredDeviceSchema.parse({ ...r, auth: undefined, hostKey: undefined, login });
 }

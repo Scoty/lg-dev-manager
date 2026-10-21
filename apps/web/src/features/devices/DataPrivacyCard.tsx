@@ -10,6 +10,7 @@ import { useBridge } from '../../bridge/BridgeProvider';
 import { saveBlob } from '../files/transfer';
 import { useDevices } from '../../devices/useDevices';
 import { useFeedback } from '../../components/Feedback';
+import { count } from '../../lib/format';
 
 /** Shows where device settings live and lets the user back them up, move them, or wipe them. */
 export function DataPrivacyCard() {
@@ -47,7 +48,7 @@ function StoredOnBridgeCard() {
   const move = async () => {
     const ok = await confirm({
       title: 'Move this browser’s TVs to the bridge?',
-      message: `${own.tvs} TV${own.tvs === 1 ? '' : 's'} (with their logins and screenshots)${own.repos ? ` and ${own.repos} custom repositor${own.repos === 1 ? 'y' : 'ies'}` : ''} will be copied to the bridge, then removed from this browser. Every browser paired with the bridge will see them. The bridge keeps the logins and never sends them back.`,
+      message: `${count(own.tvs, 'TV')} (with their logins and screenshots)${own.repos ? ` and ${count(own.repos, 'custom repository', 'custom repositories')}` : ''} will be copied to the bridge, then removed from this browser. Every browser paired with the bridge will see them. The bridge keeps the logins and never sends them back.`,
       confirmText: 'Move them',
     });
     if (!ok) return;
@@ -57,8 +58,8 @@ function StoredOnBridgeCard() {
       const { tvs: n, shotsLeft } = await moveBrowserDataToBridge(moveBrowserShotsToBridge, async () => void (await moveBrowserReposToBridge()));
       setMsg(
         shotsLeft
-          ? { kind: 'warning', text: `Moved ${n} TV${n === 1 ? '' : 's'} to the bridge. ${shotsLeft} screenshot${shotsLeft === 1 ? '' : 's'} couldn’t be moved and stayed in this browser.` }
-          : { kind: 'success', text: `Moved ${n} TV${n === 1 ? '' : 's'} to the bridge.` },
+          ? { kind: 'warning', text: `Moved ${count(n, 'TV')} to the bridge. ${count(shotsLeft, 'screenshot')} couldn’t be moved and stayed in this browser.` }
+          : { kind: 'success', text: `Moved ${count(n, 'TV')} to the bridge.` },
       );
     } catch (e) {
       setMsg({ kind: 'danger', text: `Nothing was removed from this browser: ${(e as Error).message}` });
@@ -73,7 +74,7 @@ function StoredOnBridgeCard() {
       const repos = newCustomReposIn(json);
       const withRepos = repos.length > 0 && (await confirm({ title: 'Also add its custom repositories?', message: 'This backup also lists unofficial app repositories. They can contain untested apps or malware — add them only if you trust where the backup came from.', confirmText: 'Add them too', cancelText: 'Only the TVs' }));
       const n = await importDevices(json, { customRepos: withRepos });
-      setMsg({ kind: 'success', text: `Imported ${n} TV${n === 1 ? '' : 's'} to the bridge.` });
+      setMsg({ kind: 'success', text: `Imported ${count(n, 'TV')} to the bridge.` });
     } catch (e) {
       setMsg({ kind: 'danger', text: e instanceof BackupError ? e.message : 'That file is not an LG Dev Manager device backup.' });
     }
@@ -91,7 +92,7 @@ function StoredOnBridgeCard() {
         {(own.tvs > 0 || own.repos > 0) && (
           <Alert
             kind="info"
-            title={`This browser also has ${[own.tvs ? `${own.tvs} TV${own.tvs === 1 ? '' : 's'}` : '', own.repos ? `${own.repos} custom repositor${own.repos === 1 ? 'y' : 'ies'}` : ''].filter(Boolean).join(' and ')} of its own`}
+            title={`This browser also has ${[own.tvs ? `${count(own.tvs, 'TV')}` : '', own.repos ? `${count(own.repos, 'custom repository', 'custom repositories')}` : ''].filter(Boolean).join(' and ')} of its own`}
             action={
               <button type="button" className="btn btn--sm btn--primary" onClick={move} disabled={!connected || busy}>
                 {busy ? 'Moving…' : 'Move to the bridge'}
@@ -171,7 +172,7 @@ function InThisBrowserCard() {
       const n = await importDevices(json, { customRepos: withRepos });
       setMsg({
         kind: 'success',
-        text: `Imported ${n} device${n === 1 ? '' : 's'}${withRepos ? ` and ${repos.length} custom repositor${repos.length === 1 ? 'y' : 'ies'}` : ''}.`,
+        text: `Imported ${count(n, 'device')}${withRepos ? ` and ${count(repos.length, 'custom repository', 'custom repositories')}` : ''}.`,
       });
     } catch (e) {
       setMsg({ kind: 'danger', text: e instanceof BackupError ? e.message : 'That file is not an LG Dev Manager device backup.' });

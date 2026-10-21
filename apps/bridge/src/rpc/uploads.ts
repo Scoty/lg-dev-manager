@@ -47,7 +47,7 @@ interface Upload {
 /** Unfinished uploads one connection may have open at once. */
 export const MAX_PENDING_UPLOADS = 4;
 /** An upload that gets no chunk for this long is dropped, and its share of the budget freed. */
-export const UPLOAD_IDLE_MS = 2 * 60_000;
+const UPLOAD_IDLE_MS = 2 * 60_000;
 
 /**
  * Files sent from the browser, held in memory for one WebSocket connection only. Nothing is written to disk;

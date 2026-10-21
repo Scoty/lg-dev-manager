@@ -45,7 +45,7 @@ const LOOPBACK_LISTEN = new Set(['127.0.0.1', 'localhost', '::1']);
 const stateDir = () => process.env.LGDM_STATE_DIR ?? join(homedir(), '.lg-dev-manager');
 
 /** Loads the persisted pairing token, creating one on first run, so pairing survives restarts. */
-export function loadOrCreateToken(reset = false): string {
+function loadOrCreateToken(reset = false): string {
   if (process.env.LGDM_TOKEN) return process.env.LGDM_TOKEN;
   const dir = stateDir();
   const file = join(dir, 'bridge.json');
@@ -100,7 +100,7 @@ export function bundledUi(): WebUi | undefined {
 }
 
 /** `--allow-origin` values: real http(s) origins only (`null` would let sandboxed frames on any site in). */
-export function parseOrigin(value: string): string {
+function parseOrigin(value: string): string {
   let u: URL;
   try {
     u = new URL(value.trim());

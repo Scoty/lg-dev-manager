@@ -71,7 +71,7 @@ export type NewDevice = Omit<SavedDevice, 'id' | 'createdAt' | 'updatedAt'>;
  * rules as the add / edit forms, so a hand-made backup can't slip in values the forms would refuse
  * (e.g. a user name like "-oProxyCommand=…").
  */
-export const ImportedDevice = SavedDevice.omit({ login: true }).extend({
+const ImportedDevice = SavedDevice.omit({ login: true }).extend({
   auth: DeviceAuth,
   host: z.string().trim().refine((h) => hostProblem(h) === null, 'Not a valid IP address or host name.'),
   username: z.string().refine(isValidUsername, 'Not a valid user name.'),
@@ -156,7 +156,7 @@ async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
 }
 
 /** Delete every screenshot of one TV (index 'deviceId'). */
-export async function deleteDeviceShots(deviceId: string): Promise<void> {
+async function deleteDeviceShots(deviceId: string): Promise<void> {
   const d = await db();
   await new Promise<void>((resolve, reject) => {
     const t = d.transaction(SHOTS_STORE, 'readwrite');
@@ -173,7 +173,7 @@ export async function deleteDeviceShots(deviceId: string): Promise<void> {
   shotListeners.forEach((fn) => fn());
 }
 
-export async function clearShots(): Promise<void> {
+async function clearShots(): Promise<void> {
   const d = await db();
   await req(d.transaction(SHOTS_STORE, 'readwrite').objectStore(SHOTS_STORE).clear());
   shotListeners.forEach((fn) => fn());
@@ -247,7 +247,7 @@ export async function listBrowserDevices(): Promise<SavedDevice[]> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function getDevice(id: string): Promise<SavedDevice | undefined> {
+async function getDevice(id: string): Promise<SavedDevice | undefined> {
   if (storageMode() === 'bridge') return (await bridgeList()).find((d) => d.id === id);
   const d = await tx('readonly', (s) => s.get(id) as IDBRequest<unknown>);
   const r = SavedDevice.safeParse(d);

@@ -13,7 +13,7 @@ import { BridgeError, type BridgeClient } from '../bridge/client';
  * The bridge says which in `system.hello` (feature `serverStore`). The answer is remembered for this site, so a page
  * that stores on the bridge waits for it instead of briefly showing this browser's own (other) list.
  */
-export type StorageMode = 'browser' | 'bridge';
+type StorageMode = 'browser' | 'bridge';
 
 const KEY = 'lgdm-storage';
 
@@ -80,6 +80,11 @@ export function resetStorage() {
     /* storage unavailable */
   }
   tell({ what: 'mode' });
+}
+
+/** Whether the paired bridge keeps the TVs, repositories and screenshots (for wording: "on the bridge" / "in this browser"). */
+export function useStoredOnBridge(): boolean {
+  return useStorageMode() === 'bridge';
 }
 
 /** The storage mode, re-rendering when it changes. */

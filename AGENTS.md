@@ -101,6 +101,11 @@ node apps/bridge/scripts/docker-smoke.mjs lg-dev-manager:dev http://<this machin
   (same idea as the original's message-trace dialog).
 - **Commits:** Conventional Commits (`feat(apps): …`, `fix(bridge): …`). Small, focused PRs per milestone item.
 - **Accessibility:** keyboard reachable, visible focus ring (`--primary-ring`), labelled form fields.
+- **Translations (planned) — keep text translatable:** user-facing text belongs in `apps/web` only. The bridge's errors
+  carry a stable `code` (the UI shows its English `message` for now; translations will key on the code), so never make
+  the UI depend on a message's wording. Sizes, numbers and counted nouns go through `apps/web/src/lib/format.ts`
+  (`fmtBytes`, `fmtNumber`, `count`) — no hand-made plurals (`TV${n === 1 ? '' : 's'}`) or `toFixed` sizes — and a
+  sentence is written whole (pick between full sentences rather than gluing fragments), so it can be translated as one.
 - Keep `PLAN.md`'s checklist up to date when a feature lands.
 
 ## Testing expectations

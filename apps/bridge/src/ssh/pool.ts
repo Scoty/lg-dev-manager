@@ -93,7 +93,7 @@ export interface HostKeyPolicy {
 }
 
 /** OpenSSH's form: SHA256:<base64 without padding>. */
-export function hostKeyFingerprint(key: Buffer): string {
+function hostKeyFingerprint(key: Buffer): string {
   return `SHA256:${createHash('sha256').update(key).digest('base64').replace(/=+$/, '')}`;
 }
 

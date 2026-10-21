@@ -17,8 +17,8 @@ import { useInstalledApps, useStorage } from './queries';
 import { useRepoApps, type RepoAppView } from '../repo/useRepoApps';
 import { RepoDetails } from '../repo/RepoDetails';
 import { copyText } from '../../lib/secureContext';
+import { fmtKilobytes } from '../../lib/format';
 
-const fmtKb = (kb: number) => (kb >= 1024 * 1024 ? `${(kb / 1024 / 1024).toFixed(1)} GB` : `${Math.round(kb / 1024)} MB`);
 
 function StorageBar({ device }: { device: SavedDevice }) {
   const { data } = useStorage(device);
@@ -28,7 +28,7 @@ function StorageBar({ device }: { device: SavedDevice }) {
     <div className="storage-bar" title="Developer partition (/media/developer)">
       <Icon name="disk" />
       <span>
-        <b>{fmtKb(data.available)}</b> free of {fmtKb(data.total)}
+        <b>{fmtKilobytes(data.available)}</b> free of {fmtKilobytes(data.total)}
       </span>
       <div className="progress thin">
         <div className={`progress-fill${pct > 90 ? ' danger' : pct > 75 ? ' warning' : ''}`} style={{ width: `${pct}%` }} />

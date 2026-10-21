@@ -13,7 +13,7 @@ const VITE_DEV_HOSTS = ['localhost:5173', '127.0.0.1:5173'];
 
 type Loc = Pick<Location, 'protocol' | 'host' | 'hostname'>;
 
-export const BRIDGE_URL_HELP = `The bridge runs on this computer, so its address must start with ws://127.0.0.1: or ws://localhost: (default ws://127.0.0.1:${DEFAULT_BRIDGE_PORT}/rpc) — or, on a page a bridge on your network serves, be that page's own address.`;
+const BRIDGE_URL_HELP = `The bridge runs on this computer, so its address must start with ws://127.0.0.1: or ws://localhost: (default ws://127.0.0.1:${DEFAULT_BRIDGE_PORT}/rpc) — or, on a page a bridge on your network serves, be that page's own address.`;
 
 /**
  * Is this page served by a bridge shared on the local network (LAN mode, the Docker image) — e.g.

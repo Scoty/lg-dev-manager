@@ -23,9 +23,9 @@ export interface Stat {
   gid: number;
 }
 
-export const USERS: Record<number, string> = { 0: 'root', 1000: 'prisoner' };
+const USERS: Record<number, string> = { 0: 'root', 1000: 'prisoner' };
 /** A fixed "install time" for files nobody has touched, so listings are stable. */
-export const BASE_MTIME = Date.UTC(2026, 0, 15, 9, 30) / 1000;
+const BASE_MTIME = Date.UTC(2026, 0, 15, 9, 30) / 1000;
 
 const S_IFDIR = 0o040000;
 const S_IFREG = 0o100000;
@@ -39,7 +39,7 @@ function defaultMeta(state: MockState, path: string, dir: boolean): Meta {
   return { mtime: BASE_MTIME, uid: owner, gid: owner, perm };
 }
 
-export function metaOf(state: MockState, path: string): Meta {
+function metaOf(state: MockState, path: string): Meta {
   return state.meta.get(path) ?? defaultMeta(state, path, state.dirs.has(path));
 }
 

@@ -3,7 +3,7 @@ import { AppsErrorCodes, type DeviceTarget } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
 import type { SshRunner } from './pool.js';
 
-export interface Served {
+interface Served {
   /** URL that works from the TV itself, e.g. http://127.0.0.1:41234/app.ipk */
   url: string;
   /** Bytes the TV has read so far. */

@@ -49,7 +49,7 @@ function cssVar(name: string) {
 }
 
 /** xterm colours from the theme's CSS variables (see _tokens.scss → --term-*). */
-export function terminalTheme(): ITheme {
+function terminalTheme(): ITheme {
   const v = (n: string) => cssVar(`--term-${n}`) || undefined;
   return {
     background: cssVar('--bg-card'),
