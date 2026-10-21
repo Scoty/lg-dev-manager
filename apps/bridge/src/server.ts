@@ -24,10 +24,12 @@ import { ErrorCodes } from '@lgdm/protocol';
  */
 const ACCESS_CONNECTION_MS = 60 * 60_000;
 /**
- * Before pairing, a connection may only send small frames (a system.hello is a few hundred bytes) — so nobody can make
- * the bridge read and parse 16 MB messages without the token — and only so many unpaired connections may be open.
+ * Before pairing, a connection may only send a little (a system.hello is a few hundred bytes): past UNPAIRED_BYTES_MAX
+ * read from its socket it is cut off, before the WebSocket layer could buffer a 16 MB message — so nobody can make the
+ * bridge read or parse big messages without the token. And only so many unpaired connections may be open: more are
+ * turned away before the upgrade.
  */
-const UNPAIRED_FRAME_MAX = 8 * 1024;
+const UNPAIRED_BYTES_MAX = 16 * 1024;
 const UNPAIRED_MAX = 64;
 const UNPAIRED_PER_CLIENT_MAX = 8;
 
@@ -141,12 +143,14 @@ export function startServer(
       res.writeHead(403, { 'content-type': 'text/plain' }).end('Refused: the LG Dev Manager bridge only answers on your local network.');
       return;
     }
-    if (!hostAllowed(req.headers.host, listeningPort(), publicHosts)) {
-      res.writeHead(421, { 'content-type': 'text/plain' }).end(lan ? `Wrong host. Open the bridge at ${lan.publicUrls.join(' or ')}.` : 'Wrong host.');
-      return;
-    }
+    // The health check answers at any address the bridge listens on (Docker's HEALTHCHECK uses LGDM_LISTEN's IP): it
+    // only says the bridge is up, so it doesn't need the DNS-rebinding guard below.
     if (req.url === '/healthz') {
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, version: BRIDGE_VERSION }));
+      return;
+    }
+    if (!hostAllowed(req.headers.host, listeningPort(), publicHosts)) {
+      res.writeHead(421, { 'content-type': 'text/plain' }).end(lan ? `Wrong host. Open the bridge at ${lan.publicUrls.join(' or ')}.` : 'Wrong host.');
       return;
     }
     if (config.webRoot) return serveStatic(config.webRoot, req, res);
@@ -204,11 +208,24 @@ export function startServer(
       if (path === RPC_PATH) warnRejected(origin);
       return;
     }
+    // Too many unpaired connections, in all or from this client: turned away before any WebSocket is set up.
+    if (tooManyUnpaired(unpairedKey(req))) {
+      socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   };
+  /** Who a connection's pairing attempts and unpaired place count against: its device, or its Access identity. */
+  const clientOf = (req: import('node:http').IncomingMessage) => (req.socket.remoteAddress ?? '?').replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
+  const unpairedKey = (req: import('node:http').IncomingMessage) => {
+    const who = accessOf.get(req);
+    return who ? `access:${who.who.toLowerCase()}` : limiterKey(clientOf(req));
+  };
+  const tooManyUnpaired = (key: string) => unpairedTotal >= UNPAIRED_MAX || (unpaired.get(key) ?? 0) >= UNPAIRED_PER_CLIENT_MAX;
 
   wss.on('connection', (ws: WebSocket, req: import('node:http').IncomingMessage) => {
-    const client = (req.socket.remoteAddress ?? '?').replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
+    const client = clientOf(req);
     // Pairing attempts are rate-limited in LAN mode, per device (IPv4 address or IPv6 /64) — including ones that
     // arrive from this computer, which a relay (ssh -R, a tunnel client) would look like. Not outside LAN mode: a few
     // stale tabs after a token reset mustn't lock the user out of the bridge on their own computer.
@@ -216,14 +233,22 @@ export function startServer(
     // Through Cloudflare Access every client arrives from cloudflared: rate-limit by who Access let in instead, and
     // end the connection when their Access session does.
     const who = accessOf.get(req);
-    const key = who ? `access:${who.who.toLowerCase()}` : limiterKey(client);
+    const key = unpairedKey(req);
     // A bad frame (too big, invalid UTF-8) ends this connection — without a listener it would end the process.
     ws.on('error', () => ws.terminate());
-    // Unpaired connections, all together and from this client: past the limit, this one is turned away.
-    if (unpairedTotal >= UNPAIRED_MAX || (unpaired.get(key) ?? 0) >= UNPAIRED_PER_CLIENT_MAX) {
-      ws.close(1013, 'too many unpaired connections');
+    // Checked before the upgrade too; this catches connections that raced each other there.
+    if (tooManyUnpaired(key)) {
+      ws.terminate();
       return;
     }
+    // Everything read from the socket until pairing counts: past the limit, cut off at once (not a close handshake,
+    // which would keep reading).
+    let unpairedBytes = 0;
+    const countBytes = (chunk: Buffer) => {
+      unpairedBytes += chunk.length;
+      if (unpairedBytes > UNPAIRED_BYTES_MAX) ws.terminate();
+    };
+    req.socket.on('data', countBytes);
     unpairedTotal++;
     unpaired.set(key, (unpaired.get(key) ?? 0) + 1);
     let counted = true;
@@ -277,13 +302,11 @@ export function startServer(
     }, 10_000);
 
     ws.on('message', async (data, isBinary) => {
-      if (isBinary) return;
-      if (!session.authed && attempting) return; // dropped; the connection closes when the attempt fails
-      const size = Array.isArray(data) ? data.reduce((n, b) => n + b.byteLength, 0) : data.byteLength;
-      if (!session.authed && size > UNPAIRED_FRAME_MAX) {
-        ws.close(1009, 'pair first');
+      if (isBinary) {
+        if (!session.authed) ws.terminate(); // nothing binary is expected, least of all before pairing
         return;
       }
+      if (!session.authed && attempting) return; // dropped; the connection closes when the attempt fails
       // Too many pairing attempts from this device: it waits before it may try again.
       const wait = session.authed || !limited ? 0 : limiter.waitFor(key);
       if (wait) {
@@ -309,6 +332,7 @@ export function startServer(
       if (res && ws.readyState === ws.OPEN) ws.send(JSON.stringify(res));
       if (unauthed && session.authed) {
         uncount();
+        req.socket.off('data', countBytes);
         if (limited) limiter.succeeded(key);
       } else if (unauthed) {
         if (res && 'error' in res && res.error.code === 'unauthorized') refusedLog(`a wrong pairing token from ${client}`);

@@ -87,10 +87,10 @@ try {
   check(logs.includes(`${pub.origin}/#/pair?token=${token}`), 'and a pairing link for the public address');
   check(docker('exec', name, 'node', '-e', 'process.stdout.write(String(process.getuid()))') !== '0', 'it doesn’t run as root');
 
-  check((await get('/healthz')).status === 200, 'it answers at the public address');
+  check((await get('/')).status === 200, 'it answers at the public address');
   const page = await get('/');
   check(page.status === 200 && page.body.includes('<div id="root">'), 'it serves the web app');
-  check((await get('/healthz', { host: 'evil.example' })).status === 421, 'it refuses other host names (DNS rebinding)');
+  check((await get('/', { host: 'evil.example' })).status === 421, 'it refuses other host names (DNS rebinding)');
   check((await get('/healthz', { 'cf-connecting-ip': '192.168.1.5' })).status === 403, 'it refuses a Cloudflare tunnel');
   check((await get('/healthz', { 'x-forwarded-for': '8.8.8.8' })).status === 403, 'it refuses requests forwarded from the internet');
 

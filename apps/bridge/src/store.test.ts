@@ -62,7 +62,10 @@ describe('the bridge’s storage', () => {
     const store = fresh();
     await store.saveDevice(tvRecord(tv));
     const { auth: _a, ...withoutLogin } = tvRecord(tv, { name: 'Bedroom' });
-    expect(await store.saveDevice(withoutLogin)).toMatchObject({ name: 'Bedroom' });
+    expect(await store.saveDevice({ ...withoutLogin, description: 'By the window' })).toMatchObject({ description: 'By the window' });
+    // Saved without a description: it's cleared (not kept, as the login is).
+    expect((await store.saveDevice(withoutLogin)).description).toBeUndefined();
+    expect(store.listDevices()[0]).toMatchObject({ name: 'Bedroom' });
     expect(store.target({ stored: 'tv-1' }).auth).toEqual({ kind: 'password', password: PASSWORD });
     // Another address with the kept password, before the bridge knows the TV's host key: the password again.
     await expect(store.saveDevice({ ...withoutLogin, host: '192.0.2.5' })).rejects.toMatchObject({ code: 'store_login_required' });

@@ -179,7 +179,9 @@ export class SshPool implements SshRunner {
       };
     }
     const ready = new Promise<Client>((resolve, reject) => {
+      let settled = false;
       client.once('ready', () => {
+        settled = true;
         if (pin && !pin.expected && seen) pin.remember(seen);
         // Small request/response traffic: without this, Nagle + delayed ACKs add up to ~200 ms per command
         // (macOS). OpenSSH sets TCP_NODELAY for the same reason.
@@ -187,6 +189,8 @@ export class SshPool implements SshRunner {
         resolve(client);
       });
       client.once('error', (e) => {
+        if (settled) return;
+        settled = true;
         onError?.();
         reject(
           mismatch
@@ -196,6 +200,14 @@ export class SshPool implements SshRunner {
               )
             : mapConnectError(e, t),
         );
+      });
+      // Closed before it was ready, without an error (ssh2 doesn't always send one once the TV has answered): without
+      // this the caller would wait for ever.
+      client.once('close', () => {
+        if (settled) return;
+        settled = true;
+        onError?.();
+        reject(new RpcError(DeviceErrorCodes.Unreachable, `${t.username}@${t.host}:${t.port} closed the connection before the login finished. Try again.`));
       });
       if (t.auth.kind === 'password') {
         const pw = t.auth.password;
@@ -395,7 +407,7 @@ export class SshPool implements SshRunner {
       release();
     };
     try {
-      const ch = await this.execChannel(client, command);
+      const ch = await this.execChannel(client, command, entry);
       ch.stream.on('close', done);
       return {
         stream: ch.stream,
@@ -410,13 +422,15 @@ export class SshPool implements SshRunner {
     }
   }
 
-  private async execChannel(client: Client, command: string): Promise<{ stream: ClientChannel; close: () => void }> {
+  /** `entry`: the pooled connection it runs on, forgotten if that turns out to be gone. */
+  private async execChannel(client: Client, command: string, entry?: Entry): Promise<{ stream: ClientChannel; close: () => void }> {
     const stream = await new Promise<ClientChannel>((resolve, reject) => {
       try {
         client.exec(command, (err, s) =>
           err ? reject(new RpcError(DeviceErrorCodes.CommandFailed, 'The TV did not accept the command.', err.message)) : resolve(s),
         );
       } catch (e) {
+        if (entry) this.forget(entry);
         reject(lostConnection(e));
       }
     });

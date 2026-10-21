@@ -128,6 +128,9 @@ export class BridgeStore implements HostKeyPolicy {
       const record = DeviceRecord.parse({
         ...current,
         ...stripUndefined(input),
+        // A save is the whole TV: no description means it was cleared. Only the login and the TV's info are kept
+        // when left out.
+        description: input.description,
         info: input.info ?? current?.info,
         auth: input.auth ?? current!.auth,
         // A new login starts over: the next connection records the TV's host key again (a reset TV has a new one).

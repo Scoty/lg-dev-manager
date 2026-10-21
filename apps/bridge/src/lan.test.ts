@@ -159,9 +159,9 @@ describe('a bridge in LAN mode', () => {
   });
   afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
-  const get = (headers: Record<string, string>) =>
+  const get = (headers: Record<string, string>, path = '/healthz') =>
     new Promise<number>((resolve, reject) => {
-      const req = httpRequest({ host: '127.0.0.1', port, path: '/healthz', headers }, (res) => {
+      const req = httpRequest({ host: '127.0.0.1', port, path, headers }, (res) => {
         res.resume();
         resolve(res.statusCode ?? 0);
       });
@@ -179,8 +179,10 @@ describe('a bridge in LAN mode', () => {
   it('answers at its public address (and to this computer, for the health check)', async () => {
     expect(await get({ host: 'nas.test:5199' })).toBe(200);
     expect(await get({ host: `127.0.0.1:${port}` })).toBe(200);
-    expect(await get({ host: 'evil.example:5199' })).toBe(421); // DNS rebinding
-    expect(await get({ host: 'nas.test:5200' })).toBe(421);
+    expect(await get({ host: 'evil.example:5199' }, '/')).toBe(421); // DNS rebinding
+    expect(await get({ host: 'nas.test:5200' }, '/')).toBe(421);
+    // The health check answers at any address (Docker probes the one it listens on); it only says it's up.
+    expect(await get({ host: '192.0.2.10:5199' })).toBe(200);
   });
 
   it('refuses anything forwarded from the internet', async () => {

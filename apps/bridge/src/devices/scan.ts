@@ -29,7 +29,7 @@ const MAX_NETWORKS = 4;
  * external switch, that is the real network. `lo` exactly or with a number (lo0), so Windows' "Local Area Connection"
  * isn't skipped.
  */
-export const SKIP_IFACE = /^(docker|br-|veth(?!ernet)|vmnet|vboxnet|virbr|tailscale|zt|utun|awdl|llw|lo\d*$|loopback|virtualbox|vmware)/i;
+export const SKIP_IFACE = /^(docker|br-|veth(?!ernet)|vmnet|vboxnet|virbr|tailscale|zt|utun|awdl|llw|lo\d*$|loopback|virtualbox|vmware|zerotier)/i;
 
 interface ScanOptions {
   timeoutMs?: number;

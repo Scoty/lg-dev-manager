@@ -174,7 +174,12 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
     if (opts.confirmOfficial && installed && !source.custom && pkg.id !== APP_ID_HBCHANNEL) {
       const next = channel === 'beta' ? pkg.manifestBeta?.version : pkg.manifest?.version;
       const ok = await confirm({
-        title: channel === 'beta' ? `Install the beta of ${pkg.title} from the Homebrew repository?` : `Update ${pkg.title} from the Homebrew repository?`,
+        title:
+          channel === 'beta'
+            ? `Install the beta of ${pkg.title} from the Homebrew repository?`
+            : opts.update
+              ? `Update ${pkg.title} from the Homebrew repository?`
+              : `Install ${pkg.title} from the Homebrew repository?`,
         message: (
           <>
             <p style={{ marginTop: 0 }}>
@@ -188,7 +193,7 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
             </p>
           </>
         ),
-        confirmText: channel === 'beta' ? 'Install the beta' : 'Update',
+        confirmText: channel === 'beta' ? 'Install the beta' : opts.update ? 'Update' : 'Install',
       });
       if (!ok) return false;
     }

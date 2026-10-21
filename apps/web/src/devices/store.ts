@@ -399,19 +399,25 @@ export async function moveBrowserDataToBridge(
 ): Promise<{ tvs: number; shotsLeft: number }> {
   // Repositories first: the one step that can be refused for being too many, before anything else moves.
   await moveRepos();
-  const local = (await listBrowserDevices()).filter((d) => d.auth);
-  let left = new Map<string, number>();
-  if (local.length) {
-    await storageClient().call('store.devices.import', { devices: local.map((d) => ({ ...toStoredInput(d), createdAt: d.createdAt, updatedAt: d.updatedAt })) });
+  const browser = await listBrowserDevices();
+  const local = browser.filter((d) => d.auth);
+  // A TV that's on the bridge already (kept here last time because its screenshots didn't all fit) isn't imported
+  // again: that would put this browser's older copy over changes made since, and reset its login.
+  const { devices: stored } = await storageClient().call('store.devices.list');
+  const onBridge = new Set(stored.map((d) => d.id));
+  const fresh = local.filter((d) => !onBridge.has(d.id));
+  if (fresh.length) {
+    await storageClient().call('store.devices.import', { devices: fresh.map((d) => ({ ...toStoredInput(d), createdAt: d.createdAt, updatedAt: d.updatedAt })) });
     bridgeCache = null;
-    left = await moveShots(local.map((d) => d.id));
   }
-  // A TV whose screenshots didn't all fit stays in this browser too, with them, so they're still shown here (the
-  // Devices page offers to move it again) rather than left without a TV.
-  for (const d of local) if (!left.has(d.id)) await tx('readwrite', (s) => s.delete(d.id));
+  const left = local.length ? await moveShots(local.map((d) => d.id)) : new Map<string, number>();
+  // A TV whose screenshots didn't all fit stays in this browser's storage with them (not shown while the bridge
+  // stores the TVs), so the Devices page can offer to move them again rather than leave them without a TV. The rest
+  // go — TVs without a login too, which can't be moved.
+  for (const d of browser) if (!left.has(d.id)) await tx('readwrite', (s) => s.delete(d.id));
   if (!left.size) await clearShots().catch(() => {});
   notify();
-  return { tvs: local.length, shotsLeft: [...left.values()].reduce((a, b) => a + b, 0) };
+  return { tvs: fresh.length, shotsLeft: [...left.values()].reduce((a, b) => a + b, 0) };
 }
 
 /** Remove every saved device, their screenshots and the active selection from this browser. */

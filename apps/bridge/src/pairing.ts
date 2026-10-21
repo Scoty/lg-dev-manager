@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_BRIDGE_PORT } from '@lgdm/protocol';
@@ -22,6 +22,7 @@ export function pairLink(page: string, token: string, port?: number): string {
  * is removed after two minutes, or when the bridge stops.
  */
 export function pairingPage(link: string, ttlMs = 120_000): { path: string; remove: () => void } {
+  removeOldPairingPages(ttlMs);
   const dir = mkdtempSync(join(tmpdir(), 'lgdm-pair-'));
   const path = join(dir, 'pair.html');
   const href = JSON.stringify(link).replace(/</g, '\\u003c');
@@ -39,4 +40,28 @@ export function pairingPage(link: string, ttlMs = 120_000): { path: string; remo
   timer.unref();
   process.once('exit', remove);
   return { path, remove };
+}
+
+/**
+ * Pages left behind by an app that didn't stop cleanly (its window closed on Windows doesn't run exit handlers): this
+ * user's own lgdm-pair-* folders older than the lifetime are removed. Others' can't be read or removed anyway.
+ */
+function removeOldPairingPages(ttlMs: number) {
+  try {
+    const tmp = tmpdir();
+    for (const name of readdirSync(tmp)) {
+      if (!/^lgdm-pair-[A-Za-z0-9]{6}$/.test(name)) continue;
+      const dir = join(tmp, name);
+      try {
+        const st = statSync(dir);
+        if (Date.now() - st.mtimeMs > ttlMs && (typeof process.getuid !== 'function' || st.uid === process.getuid())) {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      } catch {
+        /* gone, or not ours */
+      }
+    }
+  } catch {
+    /* no temporary folder to look in */
+  }
 }

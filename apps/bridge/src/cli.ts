@@ -106,8 +106,9 @@ async function main() {
       let opened = false;
       if (process.platform !== 'linux') {
         try {
-          openInBrowser(pathToFileURL(pairingPage(pairLink(PUBLIC_WEB_ORIGIN, config.token, config.port)).path).href);
-          opened = true;
+          const page = pairingPage(pairLink(PUBLIC_WEB_ORIGIN, config.token, config.port));
+          opened = openInBrowser(pathToFileURL(page.path).href);
+          if (!opened) page.remove(); // a temporary folder it can't open (a network share)
         } catch {
           /* no temporary folder */
         }
@@ -124,6 +125,10 @@ async function main() {
 function startProblem(e: NodeJS.ErrnoException): string {
   if (e.code === 'EADDRINUSE') {
     return `port ${/:(\d+)$/.exec(e.message)?.[1] ?? ''} is already in use. Is the bridge already running in another window? Close that one, or start this one with --port <another port>.`;
+  }
+  if (e.syscall === 'listen' && (e.code === 'EACCES' || e.code === 'EPERM')) {
+    // Ports below 1024 need privileges (the Docker image runs as user 1000); Windows reserves some ranges (Hyper-V).
+    return `it isn't allowed to listen on that port (${e.code}). Start it with --port <another port> (LGDM_PORT), e.g. 5199.`;
   }
   if (e.code === 'EACCES' || e.code === 'EPERM' || e.code === 'EROFS') {
     // Usually the data folder: in Docker, a folder on the server the container's user (1000) can't write.

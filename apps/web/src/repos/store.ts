@@ -69,15 +69,21 @@ async function update<T>(change: (list: CustomRepo[]) => { list: CustomRepo[]; r
     save(list);
     return result;
   }
-  const client = storageClient();
-  const { repos } = await client.call('store.repos.get');
-  const { list, result } = change(parseList(repos));
-  await client.call('store.repos.set', { repos: list });
-  bridgeList = list;
-  cache = null;
-  listeners.forEach((l) => l());
-  return result;
+  // One at a time from this page, so two quick changes (two removals) don't each start from the same list.
+  const run = bridgeQueue.then(async () => {
+    const client = storageClient();
+    const { repos } = await client.call('store.repos.get');
+    const { list, result } = change(parseList(repos));
+    await client.call('store.repos.set', { repos: list });
+    bridgeList = list;
+    cache = null;
+    listeners.forEach((l) => l());
+    return result;
+  });
+  bridgeQueue = run.catch(() => {});
+  return run;
 }
+let bridgeQueue: Promise<unknown> = Promise.resolve();
 
 storageListeners.add((change) => {
   if (change.what !== 'repos' && change.what !== 'mode') return;

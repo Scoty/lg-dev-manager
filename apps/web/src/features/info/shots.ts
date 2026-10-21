@@ -3,7 +3,7 @@ import { SHOTS_STORE, db, req, shotListeners } from '../../devices/store';
 import { randomId } from '../../lib/secureContext';
 import { BridgeError } from '../../bridge/client';
 import { StoreErrorCodes } from '@lgdm/protocol';
-import { storageClient, storageListeners, storageMode } from '../../storage/backend';
+import { storageClient, storageListeners, storageMode, storageUnavailable } from '../../storage/backend';
 
 /**
  * Screenshots live in this browser (IndexedDB, next to the saved TVs) — or on the paired bridge when it stores the
@@ -71,7 +71,8 @@ export async function listShots(deviceId: string): Promise<Shot[]> {
       }),
     );
     const failed = loaded.find((r): r is PromiseRejectedResult => r.status === 'rejected');
-    if (failed && loaded.every((r) => r.status === 'rejected')) throw failed.reason; // the bridge went away, say
+    // The bridge went away mid-list: say so (rather than show none). A screenshot deleted meanwhile is just left out.
+    if (failed && loaded.every((r) => r.status === 'rejected') && storageUnavailable(failed.reason)) throw failed.reason;
     return loaded.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
   }
   return listBrowserShots(deviceId);

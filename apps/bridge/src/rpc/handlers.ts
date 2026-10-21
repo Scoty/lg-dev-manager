@@ -84,6 +84,16 @@ function stoppable(): { run: RunningCommand; stopped: Promise<null> } {
   return { run, stopped };
 }
 
+/**
+ * A channel being opened, unless Stop comes first (the TV slow to connect, or every channel busy): then null at once,
+ * and a channel that arrives later is closed straight away.
+ */
+async function openUnlessStopped(opening: Promise<Channel>, stopped: Promise<null>): Promise<Channel | null> {
+  const ch = await Promise.race([opening, stopped]);
+  if (!ch) opening.then((late) => late.close(), () => {});
+  return ch;
+}
+
 /** The SSH pool as this client sees it: everything it runs shows up in its console (`cmd.log`). */
 const sshFor = (session: Session, ctx: Context, quiet = false) =>
   new LoggedSsh(ctx.pool, (e: CmdLog) => session.emit(CMD_LOG_EVENT, e), quiet);
@@ -228,7 +238,8 @@ export const handlers: HandlerMap = {
     session.streams.set(opId, run);
     try {
       // Not logged as cmd.log: the console already shows the commands the user types, with live output.
-      const ch = await pool.open(device, command);
+      const ch = await openUnlessStopped(pool.open(device, command), stopped);
+      if (!ch) return { exitCode: null, cancelled: true };
       run.ch = ch;
       // One decoder per stream: a character split across two chunks stays whole.
       const decoders = { stdout: new StringDecoder('utf8'), stderr: new StringDecoder('utf8') };
@@ -275,7 +286,8 @@ export const handlers: HandlerMap = {
       const ssh = sshFor(session, ctx);
       if (source === 'syslog') await enableDevLogs(ssh, device);
       if (run.cancelled) return { exitCode: null, stopped: true };
-      const ch = await ssh.open(device, logCommand(source, lines ?? 100));
+      const ch = await openUnlessStopped(ssh.open(device, logCommand(source, lines ?? 100)), stopped);
+      if (!ch) return { exitCode: null, stopped: true };
       run.ch = ch;
       const stderr: Buffer[] = [];
       ch.stream.on('data', (c: Buffer) => batch.push(c));

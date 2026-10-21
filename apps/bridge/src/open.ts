@@ -5,8 +5,8 @@ import { spawn } from 'node:child_process';
  * browser or a desktop just doesn't get the tab. The URL is made by the bridge, never user or web input — and nothing
  * else gets past canOpen.
  */
-export function openInBrowser(url: string): void {
-  if (!canOpen(url)) return;
+export function openInBrowser(url: string): boolean {
+  if (!canOpen(url)) return false;
   const [cmd, args] =
     process.platform === 'darwin'
       ? ['open', [url]]
@@ -17,8 +17,9 @@ export function openInBrowser(url: string): void {
     const child = spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true });
     child.on('error', () => {});
     child.unref();
+    return true;
   } catch {
-    /* no way to open a browser here */
+    return false; // no way to open a browser here
   }
 }
 
