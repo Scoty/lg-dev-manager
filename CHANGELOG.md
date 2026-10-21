@@ -23,6 +23,8 @@
 - The bridge stops at once on SIGTERM (`docker stop`).
 - Fixed: after an install, the dialog said “Installed by Homebrew Channel” on rooted TVs, even for apps from a custom
   repository or Litefin. It now says where the app came from.
+- Update badges on the Installed page say they're the official Homebrew build, and updating from there asks first:
+  the TV doesn't record where an app came from, so it may replace a build from a custom repository or an IPK file.
 
 ## 1.0.5 — 2026-10-20
 

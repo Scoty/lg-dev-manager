@@ -137,7 +137,16 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
    */
   const installFromRepo = async (
     pkg: RepoPackage,
-    opts: { channel?: 'stable' | 'beta'; update?: boolean; incompatible?: IncompatibleReason[] | null } = {},
+    opts: {
+      channel?: 'stable' | 'beta';
+      update?: boolean;
+      incompatible?: IncompatibleReason[] | null;
+      /**
+       * An update offered on the Installed page, which only knows the official repository: the TV doesn't record where
+       * an app came from, so ask first — it may replace a build from a custom repository or an IPK file.
+       */
+      confirmOfficial?: boolean;
+    } = {},
   ) => {
     if (!device || !client || running) return false;
     const channel = opts.channel ?? 'stable';
@@ -157,6 +166,27 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
         ),
         confirmText: 'Install anyway',
         danger: true,
+      });
+      if (!ok) return false;
+    }
+    if (opts.confirmOfficial && opts.update && !source.custom && pkg.id !== APP_ID_HBCHANNEL) {
+      const installed = apps?.find((a) => a.id === pkg.id);
+      const ok = await confirm({
+        title: `Update ${pkg.title} from the Homebrew repository?`,
+        message: (
+          <>
+            <p style={{ marginTop: 0 }}>
+              This installs the official build of <b>{pkg.title}</b>
+              {pkg.manifest?.version && <> (v{pkg.manifest.version})</>} from the webOS Homebrew repository
+              {installed?.version && <> over v{installed.version}</>}.
+            </p>
+            <p style={{ marginBottom: 0 }}>
+              If you installed it from a custom repository or an IPK file, this replaces that build with the official one,
+              and its later updates come from the Homebrew repository. The TV doesn’t record where an app came from.
+            </p>
+          </>
+        ),
+        confirmText: 'Update',
       });
       if (!ok) return false;
     }
