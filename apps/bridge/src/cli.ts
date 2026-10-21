@@ -18,6 +18,9 @@ Usage: lg-dev-manager-bridge [options]
                         the bridge (env LGDM_LISTEN; needs --public-url). Default: this computer only
   --public-url <url>    LAN mode: the address you open the bridge at, e.g. http://nas.local:5199 (repeatable,
                         env LGDM_PUBLIC_URL, comma-separated). Requests for other addresses are refused
+  --cf-access-team <t>  LAN mode behind a Cloudflare Tunnel: let in requests that passed Cloudflare Access for team <t>
+  --cf-access-aud <tag> ... and this Access application (its audience tag); also LGDM_CF_ACCESS_TEAM / _AUD
+  --cf-access-allow <e> ... for these emails / service-token client ids only (repeatable; LGDM_CF_ACCESS_ALLOW)
   --store               Keep the TVs (with their logins), custom repositories and screenshots in the bridge's
                         data folder, shared by every paired browser (env LGDM_STORE=1; on in the Docker image).
                         Browsers never get the logins back
@@ -67,7 +70,13 @@ async function main() {
     console.log('  Pair a browser by opening (once per browser, keep these links to yourself):');
     for (const u of config.lan.publicUrls) console.log(`                 ${pairLink(u, config.token)}`);
     console.log(`  Allowed origins ${config.allowedOrigins.join(', ')}`);
-    console.log('  Only devices on your local network are let in. Never make the bridge reachable from the internet.');
+    if (config.lan.cfAccess) {
+      console.log(`  Cloudflare     Access team ${config.lan.cfAccess.teamDomain}, only for ${config.lan.cfAccess.allow.join(', ')}`);
+      console.log('  Devices on your local network are let in, and requests through Cloudflare with a valid Access login.');
+      console.log('  Cloudflare Access is the only login: keep its policy to your own accounts, with two-factor sign-in.');
+    } else {
+      console.log('  Only devices on your local network are let in. Never make the bridge reachable from the internet.');
+    }
     if (config.lan.publicUrls.some((u) => u.startsWith('http:'))) {
       console.log('  Plain HTTP: TV keys and passwords you use travel unencrypted on your network. Put the bridge');
       console.log('  behind your own HTTPS reverse proxy if you don\'t trust everything on it.\n');

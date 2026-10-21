@@ -155,11 +155,12 @@ update, pull the image again and recreate the project (in Dockhand or Portainer:
 
 ### Keep it on your network
 
-> ⚠️ **Never make it reachable from the internet.** It controls your TVs: don't forward its port on your router, and
-> don't put a Cloudflare Tunnel, a reverse proxy with a public hostname or any other tunnel or relay in front of it — if
-> your server runs cloudflared or Nginx Proxy Manager for other apps, leave this one out. It only answers devices on your
-> local network, and it uses plain HTTP — for encryption, put it behind your own HTTPS reverse proxy on your network and
-> use the proxy's `https://` address as `LGDM_PUBLIC_URL`.
+> ⚠️ **Don't make it reachable from the internet** — the one exception is [Cloudflare Access](#cloudflare-access),
+> below, and only if you set it up as described. It controls your TVs: don't forward its port on your router, and don't
+> put a tunnel, a reverse proxy with a public hostname or any other relay in front of it — if your server runs
+> cloudflared or Nginx Proxy Manager for other apps, leave this one out. It only answers devices on your local network,
+> and it uses plain HTTP — for encryption, put it behind your own HTTPS reverse proxy on your network and use the
+> proxy's `https://` address as `LGDM_PUBLIC_URL`.
 
 It uses host networking (`network_mode: host`), so the TV scan sees your network and the bridge sees who connects.
 https://lg.scoty.uk can't use a bridge on another machine (browsers don't let an https page connect to it), so use the
@@ -172,9 +173,61 @@ page the container serves. Settings, all optional except the first:
 | `LGDM_STORE` | `0` keeps the TVs in each browser instead of on the server |
 | `LGDM_ALLOWED_NETWORKS` | Also let in devices on networks that aren't a private range, e.g. global IPv6 from another subnet: `2001:db8::/56` |
 | `LGDM_TOKEN` | Your own pairing token (16+ characters); otherwise a random one is made and kept in `/data` |
+| `LGDM_CF_ACCESS_TEAM`, `LGDM_CF_ACCESS_AUD`, `LGDM_CF_ACCESS_ALLOW` | Reaching it from outside through Cloudflare Access: [see below](#cloudflare-access) |
 
 The same works without Docker on any computer that stays on:
 `npx lg-dev-manager-bridge@latest --listen 0.0.0.0 --public-url http://nasname.local:5199 --store`.
+
+<a id="cloudflare-access"></a>
+
+### From outside your home: Cloudflare Access (advanced — use with caution)
+
+You can reach the bridge from anywhere through a **Cloudflare Tunnel protected by Cloudflare Access**, so you sign in
+with Cloudflare first — with Google (and its two-step verification), a one-time PIN, the WARP client, or a service
+token's `CF-Access-Client-Id` / `CF-Access-Client-Secret` headers.
+
+> ⚠️ **LG Dev Manager has no login of its own** — no user accounts, passwords or two-factor sign-in. Apart from the
+> pairing token (one shared secret), **Cloudflare Access is the only thing that keeps others away from your TVs**, and
+> whoever gets past it with the token can do anything on them (on a rooted TV, as root). Only set this up if you need
+> it, keep the Access policy to your own accounts, and use it with caution.
+
+The bridge doesn't rely on Cloudflare's settings alone. Without the settings below it refuses everything that comes
+through Cloudflare. With them, every request through Cloudflare must carry the token Access signs for the person it let
+in: for your team, for this application, not expired, and for one of the people in `LGDM_CF_ACCESS_ALLOW`. So a
+hostname without an Access application, a "Bypass" or "Everyone" policy, or a sign-in by someone not on your list gets
+nothing. When the Access session ends, the bridge closes the connection.
+
+1. **Access application.** In Cloudflare Zero Trust → **Access → Applications**, add a **Self-hosted** application for
+   a hostname such as `tv.example.com`. Give it an **Allow** policy that includes only your own email addresses (or
+   your service token) — not "Everyone" or a whole email domain — with a login that has two-factor (e.g. Google with
+   2-step verification), and a short session (24 hours or less). Copy the application's **Audience (AUD) tag**.
+2. **Tunnel.** Add a public hostname for `tv.example.com` to your tunnel, with the service
+   `http://localhost:5199` (cloudflared on the same server, with host networking) or `http://192.0.2.10:5199` (the
+   server's IP).
+3. **Settings.** Add the hostname to `LGDM_PUBLIC_URL` and the Access settings to the container's environment:
+
+   ```yaml
+       environment:
+         LGDM_PUBLIC_URL: http://nasname.local:5199,http://192.0.2.10:5199,https://tv.example.com
+         LGDM_CF_ACCESS_TEAM: yourteam              # from yourteam.cloudflareaccess.com
+         LGDM_CF_ACCESS_AUD: <the application's audience tag>
+         LGDM_CF_ACCESS_ALLOW: you@gmail.com        # emails / service-token client ids, comma-separated
+   ```
+
+4. **Pair.** Open `https://tv.example.com` and sign in with Cloudflare. Then paste the pairing token on the **Bridge**
+   page, or open the pairing link for `https://tv.example.com` from the log (signing in first: the sign-in can drop the
+   token from the link).
+
+Before you rely on it:
+
+- **Cloudflare sees the traffic.** It decrypts it at its edge, so it can see the pairing token and — when TVs are kept
+  in the browser — the TV passwords and keys sent with each request. With the Docker image's default (TVs stored on the
+  server), a TV's login only travels when you add it or change it.
+- **Your Cloudflare sign-in is now the key to your TVs.** Protect that account with two-factor, sign out on shared
+  devices, and revoke sessions in Zero Trust if a device is lost. Prefer SSH keys over passwords for your TVs.
+- **Keep the pairing token to yourself.** To change it, stop the container, delete `bridge.json` from its data folder
+  and start it again (every browser has to pair again).
+- **Tunnel only.** Don't also forward the port on your router.
 
 <a id="how-it-works"></a>
 

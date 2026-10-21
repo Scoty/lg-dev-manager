@@ -8,9 +8,11 @@
 #    from devices on your local network.
 # 4. Start it, open the logs, and open one of the pairing links in each browser that should use it.
 #
-# ⚠️ Never make it reachable from the internet. If the NAS runs cloudflared (Cloudflare Tunnel), Nginx Proxy Manager or
-# another tunnel or relay for other apps, don't give this one a public hostname or forward its port. It controls your
-# TVs.
+# ⚠️ Don't make it reachable from the internet. If the NAS runs cloudflared (Cloudflare Tunnel), Nginx Proxy Manager or
+# another tunnel or relay for other apps, don't give this one a public hostname or forward its port — it controls your
+# TVs. The one exception is a Cloudflare Tunnel hostname protected by Cloudflare Access, with the LGDM_CF_ACCESS_*
+# lines below filled in (README → Cloudflare Access). It has no login of its own, so Access is then its only
+# protection: use with caution.
 services:
   lg-dev-manager:
     image: ghcr.io/scoty/lg-dev-manager:2
@@ -22,6 +24,10 @@ services:
       LGDM_PUBLIC_URL: http://nasname.local:5199,http://192.0.2.10:5199
       # LGDM_PORT: 5199                    # another port, if 5199 is taken on the NAS (change the URLs too)
       # LGDM_STORE: 0                      # keep the TVs in each browser instead of on the NAS
+      # From outside through Cloudflare Access (add https://tv.example.com to LGDM_PUBLIC_URL above):
+      # LGDM_CF_ACCESS_TEAM: yourteam      # from yourteam.cloudflareaccess.com
+      # LGDM_CF_ACCESS_AUD: ...            # the Access application's audience (AUD) tag
+      # LGDM_CF_ACCESS_ALLOW: you@gmail.com   # emails / service-token client ids, comma-separated
     volumes:
       # The pairing token, and your TVs (with their logins), custom repositories and screenshots.
       - /volume1/docker/lg-dev-manager:/data

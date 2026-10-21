@@ -69,6 +69,14 @@ Any website you visit could try to talk to `ws://localhost`. So the bridge:
 3. requires a **pairing token** printed at startup, entered once in the Web UI and kept in browser storage;
 4. never exposes a generic "connect anywhere" socket — only typed SSH/luna operations (luna URIs validated, params shell-quoted).
 
+**Cloudflare Access mode (2.0, opt-in inside LAN mode).** `LGDM_CF_ACCESS_TEAM`, `LGDM_CF_ACCESS_AUD` and
+`LGDM_CF_ACCESS_ALLOW` (all required, plus an https public URL) let requests through a Cloudflare Tunnel in when they
+carry a valid Access JWT (`Cf-Access-Jwt-Assertion`: RS256 with the team's keys, this application's audience, not
+expired, an allowed email or service-token client id; `apps/bridge/src/cfaccess.ts`). Everything else from Cloudflare is
+still refused, so a hostname without Access or a Bypass policy fails closed. The tunnel client must be on the LAN;
+pairing attempts are limited per Access identity; WebSockets close when the Access token expires. The bridge has no
+accounts of its own, so the docs present it as "use with caution" (owner request, 21 Oct 2026).
+
 **LAN mode (2.0, opt-in; the Docker image).** `--listen 0.0.0.0 --public-url http://nas.local:5199` (env `LGDM_LISTEN`,
 `LGDM_PUBLIC_URL`) shares the bridge with browsers on the local network, which use the page it serves. Then:
 - only the public URLs (and localhost, for the health check) pass the Host and Origin checks;

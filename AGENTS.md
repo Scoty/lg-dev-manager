@@ -26,7 +26,10 @@ It has two parts (see `PLAN.md` §1 for why):
 2. **Bridge security stays on.** Bind `127.0.0.1` by default, Origin allowlist, pairing token required,
    Host header checked. **LAN mode** (2.0, for the Docker image) is the one exception and only ever opt-in
    (`--listen` + `--public-url`, `apps/bridge/src/lan.ts`): then only the configured public addresses are accepted, only
-   clients on the local network, nothing forwarded from the internet, and wrong tokens are rate-limited. The Vite dev origins are accepted only with `--dev` (`pnpm dev:bridge`).
+   clients on the local network, nothing forwarded from the internet, and wrong tokens are rate-limited. Inside LAN mode,
+   **Cloudflare Access mode** (`LGDM_CF_ACCESS_TEAM` + `_AUD` + `_ALLOW`, `apps/bridge/src/cfaccess.ts`) is the only way
+   in from the internet: a request through Cloudflare needs a valid Access JWT (team keys, audience, expiry, an allowed
+   email / service token), checked by the bridge itself so a Cloudflare misconfiguration fails closed. The Vite dev origins are accepted only with `--dev` (`pnpm dev:bridge`).
    Don't add flags that disable these without an explicit, documented reason. Anything a web page can send the
    bridge (frames, URLs, uploads) must fail that request, never the process — see PLAN.md §10.
 3. **User settings live in the browser — or, opt-in, on the bridge.** By default saved TVs (names, addresses, keys,

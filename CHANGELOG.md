@@ -9,6 +9,11 @@
   `--public-url` share the bridge with browsers on your network, which open the page it serves. Off unless asked for.
   Only devices on your local network get in, nothing forwarded from the internet (e.g. a Cloudflare Tunnel), pairing
   attempts are rate-limited per device, and the page warns that plain HTTP isn't encrypted.
+- ☁️ **From outside, through Cloudflare Access** (advanced, opt-in — use with caution): a LAN-mode bridge behind a
+  Cloudflare Tunnel lets in requests that passed Cloudflare Access (Google with two-step verification, a one-time PIN,
+  the WARP client or a service token). The bridge checks Access's signed token itself — team, application, expiry and
+  an allow list of emails — so a hostname without Access or a too-broad policy gets nothing. It has no login of its
+  own: Access is the only one. `LGDM_CF_ACCESS_TEAM`, `LGDM_CF_ACCESS_AUD`, `LGDM_CF_ACCESS_ALLOW`.
 - 🐳 **Docker image** `ghcr.io/scoty/lg-dev-manager` (amd64, arm64) and a `compose.yaml`: the bridge and the web app
   on a home server, in LAN mode, as a non-root user on a read-only filesystem with a health check. `docker compose
   up -d`, open the pairing link from the logs, done. The update notice says to `docker compose pull`.

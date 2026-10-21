@@ -12,6 +12,8 @@ export interface LanConfig {
   publicUrls: string[];
   /** Networks allowed besides the private ranges (LGDM_ALLOWED_NETWORKS), e.g. a global IPv6 /56 at home. */
   extraNetworks: BlockList;
+  /** Cloudflare Access in front (cfaccess.ts): requests through Cloudflare are let in with a valid Access token only. */
+  cfAccess?: import('./cfaccess.js').CfAccessConfig;
 }
 
 /** `LGDM_ALLOWED_NETWORKS`: comma-separated CIDRs (192.0.2.0/24, 2001:db8::/56). */

@@ -1,3 +1,4 @@
+import { parseAud, parseTeamDomain, type CfAccessConfig } from './cfaccess.js';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -153,6 +154,20 @@ export function parseArgs(argv: string[]): BridgeConfig {
     );
   }
   if (!lanMode && publicUrls.length) throw new Error('--public-url only applies with --listen (LAN mode).');
+  // Cloudflare Access (cfaccess.ts): opt-in, for reaching a LAN-mode bridge from outside through a Cloudflare Tunnel.
+  const cfTeam = get('cf-access-team') ?? process.env.LGDM_CF_ACCESS_TEAM;
+  const cfAud = get('cf-access-aud') ?? process.env.LGDM_CF_ACCESS_AUD;
+  const cfAllow = [...all('cf-access-allow'), ...(process.env.LGDM_CF_ACCESS_ALLOW?.split(',') ?? [])].map((v) => v.trim().toLowerCase()).filter(Boolean);
+  let cfAccess: CfAccessConfig | undefined;
+  if (cfTeam || cfAud || cfAllow.length) {
+    if (!lanMode) throw new Error('Cloudflare Access (LGDM_CF_ACCESS_*) only applies to a bridge shared on your network (--listen, LAN mode).');
+    if (!cfTeam || !cfAud) throw new Error('Cloudflare Access needs both LGDM_CF_ACCESS_TEAM (your team name) and LGDM_CF_ACCESS_AUD (the application’s audience tag).');
+    // Defence in depth: even if the Access policy lets in more people than meant (Everyone, a whole email domain), the
+    // bridge only takes these.
+    if (!cfAllow.length) throw new Error('Cloudflare Access needs LGDM_CF_ACCESS_ALLOW: the emails (and service-token client ids) that may use the bridge, comma-separated.');
+    if (!publicUrls.some((u) => u.startsWith('https://'))) throw new Error('Cloudflare Access needs the Cloudflare hostname in LGDM_PUBLIC_URL, e.g. https://tv.example.com.');
+    cfAccess = { teamDomain: parseTeamDomain(cfTeam), aud: parseAud(cfAud), allow: [...new Set(cfAllow)] };
+  }
   const token = loadOrCreateToken(argv.includes('--reset-token'));
   // Shared on the network, the token is what stands between the LAN and the TVs: one someone picked must be long and
   // not a repeated pattern (the generated one is 22 random characters).
@@ -171,6 +186,6 @@ export function parseArgs(argv: string[]): BridgeConfig {
     litefinUrl: process.env.LGDM_LITEFIN_URL,
     dev,
     storeDir: argv.includes('--store') || /^(1|true|yes|on)$/i.test(process.env.LGDM_STORE ?? '') ? stateDir() : undefined,
-    lan: lanMode ? { publicUrls: [...new Set(publicUrls)], extraNetworks: parseNetworks(process.env.LGDM_ALLOWED_NETWORKS) } : undefined,
+    lan: lanMode ? { publicUrls: [...new Set(publicUrls)], extraNetworks: parseNetworks(process.env.LGDM_ALLOWED_NETWORKS), cfAccess } : undefined,
   };
 }

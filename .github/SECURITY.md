@@ -22,7 +22,10 @@ put users at risk right now are fixed and disclosed sooner.
   listener, reaching hosts other than your TVs, reading files on your computer, or crashing it remotely. In LAN mode
   (the bridge shared on your network, e.g. in Docker): getting in from outside your local network, or around the
   host, origin and rate-limit checks. Someone on your own network reading plain-HTTP traffic is a known limit (use an
-  HTTPS reverse proxy). With bridge storage (`--store`, on in Docker): getting a stored TV login back out of the bridge
+  HTTPS reverse proxy). With Cloudflare Access mode (`LGDM_CF_ACCESS_*`): getting in through Cloudflare without a
+  valid Access token for an allowed person. Known limits there: the bridge has no login of its own, so Access (and the
+  pairing token) is all that protects it; Cloudflare sees the decrypted traffic; a stolen Access session works until it
+  expires. With bridge storage (`--store`, on in Docker): getting a stored TV login back out of the bridge
   (including having it send a stored password to another SSH server), or reading its data folder without access to
   the server. Known limits: a paired browser is fully trusted — it can run any command on your TVs, and on a rooted TV
   it could replace the TV's own SSH server with one that records the password, so prefer key logins; the data folder
