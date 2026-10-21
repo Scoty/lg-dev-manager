@@ -11,9 +11,11 @@ browse the Homebrew repo, manage files, open a shell, read logs, renew the Dev M
 
 It has two parts (see `PLAN.md` §1 for why):
 
-- `apps/web` — static React UI, hosted at **https://lg.scoty.uk** (GitHub Pages), styled after **Adminator 2026**.
-  It is the only place user settings are stored.
-- `apps/bridge` — small, **stateless** Node service that owns all SSH/SFTP/TCP traffic to the TV.
+- `apps/web` — static React UI, hosted at **https://lg.scoty.uk** (GitHub Pages) and served by every bridge as the
+  local page, styled after **Adminator 2026**. User settings are stored here, unless the bridge stores them (rule 3).
+- `apps/bridge` — small Node service that owns all SSH/SFTP/TCP traffic to the TV. Stateless about devices by default;
+  runs on the user's computer (the app, npx, a clone) or, from 2.0, on a NAS or home server as the Docker image
+  (`Dockerfile`, `compose.yaml`, `examples/ugreen-nas/compose.yaml`) in LAN mode with bridge storage.
 - `tools/mock-tv` — fake webOS TV (SSH + luna-send + key server) for tests and UI development.
 - `packages/protocol` — the shared, typed contract between the two. **Change it first, then both sides.**
 

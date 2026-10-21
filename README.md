@@ -5,8 +5,10 @@ webOS Homebrew repository or from an IPK file, update them, install any build of
 in one click, browse the TV's files, open a shell, take screenshots, renew the Dev Mode session and dig into logs and
 the luna bus.
 
-**Open it:** run the bridge on your computer (one download or one command, below), then open https://lg.scoty.uk or
-the local page the bridge serves at http://localhost:5199 — the same app either way.
+**Open it:** run the bridge — on your computer (one download or one command), or once on a NAS or home server with
+Docker for every computer, phone and tablet on your network — then open the page it serves: http://localhost:5199 on
+your computer, or the server's address. With the bridge on your computer, https://lg.scoty.uk works too; it's the same
+app either way.
 
 A web rebuild of [webosbrew/dev-manager-desktop](https://github.com/webosbrew/dev-manager-desktop), styled after
 [Adminator](https://github.com/puikinsh/adminator-admin-dashboard).
@@ -25,14 +27,15 @@ A web rebuild of [webosbrew/dev-manager-desktop](https://github.com/webosbrew/de
 
 ## Get started
 
-The app needs a small helper on your computer, **the bridge** (why: [How it works](#how-it-works)). There are three
-ways to run it. It's the same bridge every time, so pick whichever suits you:
+The app needs a small helper, **the bridge** (why: [How it works](#how-it-works)). It's the same bridge every time, so
+pick whichever way suits you:
 
-| | Needs | How |
-|---|---|---|
-| **The app** | nothing | Download it from the [latest release](https://github.com/Scoty/lg-dev-manager/releases/latest) and open it |
-| **npx** | Node.js 22.12+ | `npx lg-dev-manager-bridge@latest` in a terminal |
-| **From the source code** | Node.js 22.12+ | [Clone, build and run](#run-from-source) |
+| | Runs on | Needs | How |
+|---|---|---|---|
+| **The app** | your computer | nothing | Download it from the [latest release](https://github.com/Scoty/lg-dev-manager/releases/latest) and open it |
+| **npx** | your computer | Node.js 22.12+ | `npx lg-dev-manager-bridge@latest` in a terminal |
+| **Docker** | a NAS or home server, for your whole network (phones and tablets too) | Docker (Linux) | [`docker compose up -d`](#docker) |
+| **From the source code** | your computer | Node.js 22.12+ | [Clone, build and run](#run-from-source) |
 
 ### Option 1: the app — no Node.js needed
 
@@ -46,8 +49,8 @@ One file with everything inside. Download the one for your computer from the
 | Mac with Intel | `…-macos-x64.dmg` |
 | Linux (x64 / ARM64) | `…-linux-x64.tar.gz` / `…-linux-arm64.tar.gz` — `tar -xzf …`, then `./lg-dev-manager-bridge` |
 
-A window opens with the **pairing token**, and https://lg.scoty.uk opens in your browser (or use the local page,
-http://localhost:5199). Keep the window open while you use the app; closing it stops the bridge.
+A window opens with the **pairing token** and the app's addresses, and the app opens https://lg.scoty.uk in your
+browser, ready to pair with one click. Keep the window open while you use the app; closing it stops the bridge.
 
 > **The first time:** the app isn't signed by Apple or Microsoft (that costs a yearly fee), so your computer asks
 > before running it. **Windows**: "Windows protected your PC" → **More info** → **Run anyway**. **macOS**: "Apple
@@ -64,54 +67,114 @@ yours. In a terminal:
 npx lg-dev-manager-bridge@latest
 ```
 
-It prints a **pairing token** and both addresses of the app. Keep the terminal open while you use the app (Ctrl+C
-stops it).
+It prints a **pairing token**, a pairing link and both addresses of the app. Keep the terminal open while you use the
+app (Ctrl+C stops it).
 
-### Then, whichever way you chose
+### Then, with the app or npx
 
-1. Open **https://lg.scoty.uk** or the local page the bridge serves at **http://localhost:5199** — they are the
-   same app. On the **Bridge** page, paste the token.
+1. Open the local page the bridge serves, **http://localhost:5199** — or **https://lg.scoty.uk**, the same app. On the
+   **Bridge** page, paste the token (or open the pairing link the bridge printed).
 2. On **Devices → Add a TV**, pick your TV from the scan. Rooted TVs log in as root (Homebrew Channel's SSH server);
    other TVs use the Developer Mode app and its passphrase.
 
 On macOS, the first time the bridge looks for your TV, the system asks whether your terminal may find devices on the
 local network — choose **Allow**. Phones and tablets can't run the bridge; to use the app on them, run the bridge on a
-home server ([Docker](#docker)) and open the page it serves.
+NAS or home server ([Docker](#docker)) and open the page it serves.
 
-Which page to use is up to you. **lg.scoty.uk** always has the latest version and needs nothing installed besides the
-bridge. **http://localhost:5199** is served from your computer by the bridge itself, so it works offline and even when
-the website can't be reached, and it always matches your bridge's version. Each keeps its own list of TVs (browsers store them per site); use **Export backup** / **Import backup** on
-the Devices page to move them.
+Which page to use is up to you:
+
+1. **http://localhost:5199**, the local page, is served from your computer by the bridge itself. It always matches
+   your bridge's version, and it works offline and even when the website can't be reached.
+2. **https://lg.scoty.uk** always has the latest version of the app and needs nothing installed besides the bridge.
+
+Each keeps its own list of TVs (browsers store them per site); use **Export backup** / **Import backup** on the Devices
+page to move them, or start the bridge with [`--store`](#run-from-source) to keep them on the bridge for every page.
 
 <a id="docker"></a>
 
-## Run it on a home server (Docker)
+## Run it on a NAS or home server (Docker)
 
-Prefer to run it once on a NAS or home server and use it from any computer on your network? Use the Docker image
-(Linux, amd64 or arm64). Save [`compose.yaml`](compose.yaml) on the server, set `LGDM_PUBLIC_URL` in it to the address
-you'll open (e.g. `http://nas.local:5199` or the server's IP), then:
+Run the bridge once on a NAS or home server and use LG Dev Manager from every computer, phone and tablet on your
+network — nothing to install anywhere else. The Docker image (`ghcr.io/scoty/lg-dev-manager`, Linux on amd64 or arm64)
+serves the app itself, at the address you give it, and keeps your TVs for everyone:
+
+- **One list of TVs for every browser.** The container stores your TVs — with their logins — the custom repositories
+  and the screenshots in `/data`, so every browser and phone you pair sees the same ones, and changes show up
+  everywhere at once. A TV's password or key goes to the bridge once and is never sent back to any browser, and the
+  bridge only sends it to that TV (it checks the TV's SSH host key first). TVs you saved in a browser before can be
+  moved there from the Devices page.
+- **Paired with a link.** The container's log shows a pairing link for each address; open it in each browser that
+  should use it and click **Pair**.
+- **Phones and tablets** get pages that fit their screen and a terminal with the keys a phone keyboard lacks.
+
+### Any Linux server
+
+Save [`compose.yaml`](compose.yaml) on the server, set `LGDM_PUBLIC_URL` in it to the address (or addresses,
+comma-separated) you'll open it at, then:
 
 ```bash
 docker compose up -d
-docker compose logs lg-dev-manager    # shows the pairing link
+docker compose logs lg-dev-manager    # shows the pairing links
 ```
 
-Open the pairing link in each browser that should use it — phones and tablets included — and click **Pair**. The page is served by the container
-itself, at the address you set. The container stores your TVs — and their logins, custom repositories and
-screenshots — in `/data`, so every browser and phone you pair sees the same ones; a TV's password or key goes to the
-bridge once and is never sent back to any browser. TVs you saved in a browser before can be moved there from the
-Devices page. To update:
-`docker compose pull && docker compose up -d`.
+To update: `docker compose pull && docker compose up -d`. Your pairing and TVs stay as they are.
 
-> ⚠️ **Keep it on your local network.** It controls your TVs: never forward its port on your router or put a Cloudflare
-> Tunnel (or any tunnel or relay) in front of it. It only answers devices on your local network, and it uses plain
-> HTTP — for encryption, put it behind your own HTTPS reverse proxy and use the proxy's `https://` address as
-> `LGDM_PUBLIC_URL`.
+### Example: a Ugreen NAS
+
+On a Ugreen NAS (UGOS Pro, e.g. the DXP2800), with the address you open it at being either the NAS's name or its IP:
+
+1. In the **Files** app, create the folder `lg-dev-manager` in the `docker` shared folder (`/volume1/docker/lg-dev-manager`).
+2. In the **Docker** app, open **Project → Create** (or create a stack in Dockhand or Portainer) and paste
+   [`examples/ugreen-nas/compose.yaml`](examples/ugreen-nas/compose.yaml):
+
+   ```yaml
+   services:
+     lg-dev-manager:
+       image: ghcr.io/scoty/lg-dev-manager:2
+       container_name: lg-dev-manager
+       network_mode: host
+       environment:
+         # The addresses you open it at, separated by commas: the NAS's name and its IP address.
+         LGDM_PUBLIC_URL: http://nasname.local:5199,http://192.0.2.10:5199
+       volumes:
+         - /volume1/docker/lg-dev-manager:/data
+       restart: unless-stopped
+       read_only: true
+       cap_drop: [ALL]
+       security_opt: [no-new-privileges:true]
+   ```
+
+3. Replace `nasname.local` and `192.0.2.10` with your NAS's name and IP address (your router's list of devices shows
+   both; a fixed IP for the NAS helps).
+4. Start it and open its log: it shows a pairing link for each address, e.g.
+   `http://nasname.local:5199/#/pair?token=…`. Open one in each browser that should use the app.
+
+If the log says the bridge can't write to `/data`, the folder isn't writable by the container's user (1000): over SSH,
+`sudo chown 1000:1000 /volume1/docker/lg-dev-manager`, or set `user:` to your own ids (the example file explains). To
+update, pull the image again and recreate the project (in Dockhand or Portainer: pull and redeploy the stack).
+
+### Keep it on your network
+
+> ⚠️ **Never make it reachable from the internet.** It controls your TVs: don't forward its port on your router, and
+> don't put a Cloudflare Tunnel, a reverse proxy with a public hostname or any other tunnel or relay in front of it — if
+> your server runs cloudflared or Nginx Proxy Manager for other apps, leave this one out. It only answers devices on your
+> local network, and it uses plain HTTP — for encryption, put it behind your own HTTPS reverse proxy on your network and
+> use the proxy's `https://` address as `LGDM_PUBLIC_URL`.
 
 It uses host networking (`network_mode: host`), so the TV scan sees your network and the bridge sees who connects.
-Devices on a network that isn't a private range (e.g. global IPv6 from another subnet) can be let in with
-`LGDM_ALLOWED_NETWORKS`. The same works without Docker: `npx lg-dev-manager-bridge@latest --listen 0.0.0.0
---public-url http://nas.local:5199`.
+https://lg.scoty.uk can't use a bridge on another machine (browsers don't let an https page connect to it), so use the
+page the container serves. Settings, all optional except the first:
+
+| Variable | |
+|---|---|
+| `LGDM_PUBLIC_URL` | The addresses you open it at, comma-separated, e.g. `http://nasname.local:5199,http://192.0.2.10:5199`. Requests for any other address are refused |
+| `LGDM_PORT` | Another port than 5199 |
+| `LGDM_STORE` | `0` keeps the TVs in each browser instead of on the server |
+| `LGDM_ALLOWED_NETWORKS` | Also let in devices on networks that aren't a private range, e.g. global IPv6 from another subnet: `2001:db8::/56` |
+| `LGDM_TOKEN` | Your own pairing token (16+ characters); otherwise a random one is made and kept in `/data` |
+
+The same works without Docker on any computer that stays on:
+`npx lg-dev-manager-bridge@latest --listen 0.0.0.0 --public-url http://nasname.local:5199 --store`.
 
 <a id="how-it-works"></a>
 
@@ -120,29 +183,30 @@ Devices on a network that isn't a private range (e.g. global IPv6 from another s
 Browsers can't open SSH connections, so the app comes in two parts:
 
 ```
- Browser (lg.scoty.uk or localhost:5199)        Your computer                      Your TV
- ┌──────────────────────────────────┐   WebSocket   ┌────────────────────┐   SSH / SFTP   ┌──────────────┐
- │ Web app — your TVs, keys and     │ ────────────▶ │ Bridge             │ ─────────────▶ │ webOS        │
- │ passwords are stored only here   │  127.0.0.1    │ (app or npx)       │                │ (port 22 or  │
- └──────────────────────────────────┘  + token      └────────────────────┘                │  9922)       │
-                                                                                          └──────────────┘
+ Browser                                         Your computer or a server         Your TV
+ ┌──────────────────────────────────┐ WebSocket ┌────────────────────┐ SSH / SFTP ┌──────────────┐
+ │ Web app: localhost:5199,         │ ────────▶ │ Bridge             │ ─────────▶ │ webOS        │
+ │ lg.scoty.uk or a server          │  + token  │ (app, npx, Docker) │            │ (port 22 or  │
+ └──────────────────────────────────┘           └────────────────────┘            │  9922)       │
+                                                                                  └──────────────┘
 ```
 
-- **The web app** is a static site, served at lg.scoty.uk and by the bridge as the local page. Saved TVs — names,
+- **The web app** is a static site, served by the bridge as the local page and at lg.scoty.uk. Saved TVs — names,
   addresses, keys and passwords — live in your browser's storage. They are never sent to the website; each request
   sends them to your own bridge, and only to it. (A bridge started with `--store`, like the Docker image, keeps them
   instead, for every browser paired with it, and never sends the logins back. It remembers each stored TV's SSH host
   key and sends a stored login only to the TV that has it.)
-- **The bridge** is a small Node.js program that does the SSH, SFTP and HTTP work the browser can't. It listens on
-  `127.0.0.1` only (nothing else on your network can reach it), accepts only the app's own pages, needs the pairing
-  token, and keeps nothing on disk except that token. It offers fixed operations — list apps, install, read a log —
-  never a general "connect anywhere" tunnel.
+- **The bridge** is a small Node.js program that does the SSH, SFTP and HTTP work the browser can't. On your computer
+  it listens on `127.0.0.1` only (nothing else on your network can reach it); in Docker (LAN mode) it answers only
+  devices on your local network, at the addresses you set. Either way it accepts only the app's own pages and needs the
+  pairing token. It keeps nothing on disk but that token — and, with `--store`, your TVs, repositories and screenshots.
+  It offers fixed operations — list apps, install, read a log — never a general "connect anywhere" tunnel.
 - **Homebrew repository and Litefin releases** are fetched by the bridge, so the site itself talks to no one but your
   bridge. Downloads are checked against their published SHA-256 whenever one is published.
 
 The bridge tells the site its version; when a newer one is out, the app says so and how to update: download the
-new app from the [releases](https://github.com/Scoty/lg-dev-manager/releases/latest), or run
-`npx lg-dev-manager-bridge@latest` again. Your pairing and TVs stay as they are.
+new app from the [releases](https://github.com/Scoty/lg-dev-manager/releases/latest), run
+`npx lg-dev-manager-bridge@latest` again, or pull the new Docker image. Your pairing and TVs stay as they are.
 
 ## What it does
 
@@ -174,8 +238,9 @@ under **Apps**, with search, details and install.
 > ⚠️ **Unofficial repositories can contain untested apps or malware.** Nobody reviews them — not LG, not the webOS
 > Homebrew team — and on a rooted TV an app can do anything. Only add repositories from people you trust.
 
-Custom repositories are saved in your browser (and in **Export backup** — importing a backup asks before adding the
-repositories in it), like your TVs. For safety:
+Custom repositories are kept like your TVs: in your browser (and in **Export backup** — importing a backup asks before
+adding the repositories in it), or on the bridge for every paired browser when it stores them (`--store`, Docker). For
+safety:
 
 - the bridge fetches everything a custom repository points to — its list, manifests, icons, IPKs and every redirect —
   over **https** from the public internet only, never from your computer or local network;
@@ -209,7 +274,7 @@ downloading the right IPK by hand and installing it through the desktop webOS De
 
 ## Run the bridge from the source code
 
-The third way: run it from a clone. It's the same bridge, and it serves the local page (http://localhost:5199) too:
+Or run it from a clone. It's the same bridge, and it serves the local page (http://localhost:5199) too:
 
 ```bash
 git clone https://github.com/Scoty/lg-dev-manager.git
@@ -229,7 +294,7 @@ Bridge options (`--help`; with the app, run it from a terminal: `lg-dev-manager-
 |---|---|
 | `--port <n>` | Port to listen on (default 5199) |
 | `--listen <address>` | Share it on your network, e.g. `0.0.0.0` (needs `--public-url`; [see Docker](#docker)) |
-| `--public-url <url>` | The address you open a shared bridge at, e.g. `http://nas.local:5199` |
+| `--public-url <url>` | The address you open a shared bridge at, e.g. `http://nasname.local:5199` (repeat it for more) |
 | `--store` | Keep the TVs (with their logins), custom repositories and screenshots on the bridge, shared by every paired browser (on in Docker) |
 | `--no-ui` | Don't serve the local page |
 | `--allow-origin <url>` | Also accept another origin, e.g. a self-hosted copy of the web app |

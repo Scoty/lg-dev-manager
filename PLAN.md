@@ -5,8 +5,9 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS).
 
 > **Status:** v1.0.0 released (M10) — full parity with the desktop app (§3), the Litefin repo (M8) and a pre-release
-> security review (§10). The site at lg.scoty.uk deploys from `main` after CI passes; the bridge is on npm.
-> M9 (phones) is skipped for now: phones and tablets get a notice to use a computer instead.
+> security review (§10). The site at lg.scoty.uk deploys from `main` after CI passes; the bridge is on npm and as an app
+> per OS. **2.0** (in testing) adds the Docker image for a NAS or home server: LAN mode with pairing links, phones and
+> tablets through it (M9), and bridge storage (`--store`) — plan in the project doc `docker-2.0.0-plan.md`.
 
 ---
 
@@ -27,17 +28,20 @@ plus raw TCP to the Dev Mode **key server on port 9991**. A web page cannot open
 ```
 ┌──────────────────────────┐   WebSocket (JSON-RPC)   ┌───────────────────┐   SSH / SFTP   ┌────────┐
 │ Web UI (lg.scoty.uk)     │ ───────────────────────▶ │ Bridge (tiny,     │ ─────────────▶ │ LG TV  │
-│ React + TS, Adminator UI │ ◀─────────────────────── │ Node, this PC)    │ ◀───────────── │ webOS  │
+│ React + TS, Adminator UI │ ◀─────────────────────── │ Node, PC or NAS)  │ ◀───────────── │ webOS  │
 └──────────────────────────┘   events, streams        └───────────────────┘   :9991 keysrv └────────┘
 ```
 
-- **Web UI** — everything you see. Static files on GitHub Pages at `lg.scoty.uk`. Also keeps **all settings**
-  (saved TVs, keys, passwords, bridge pairing) in the browser — see *Where settings live* below.
+- **Web UI** — everything you see. Static files on GitHub Pages at `lg.scoty.uk`, also served by every bridge. Keeps
+  the settings (saved TVs, keys, passwords, bridge pairing) in the browser — unless the bridge stores the TVs
+  (`--store`, the Docker image); see *Where settings live* below.
 - **Bridge** — a small headless service (~1 process, no UI) that holds the SSH connections and does the
   network calls the browser can't. It is the replacement for the Rust half of the Tauri app.
-  It is **stateless about devices**: it gets connection details with each call and keeps them in memory only
-  while an SSH connection is pooled (idle connections close after 2 minutes).
-  Distributed as a terminal command: `npx lg-dev-manager-bridge` (needs Node 22+). No desktop app, installer or binary downloads (owner decision).
+  By default it is **stateless about devices**: it gets connection details with each call and keeps them in memory only
+  while an SSH connection is pooled (idle connections close after 2 minutes). With `--store` (2.0) it keeps them itself.
+  Four ways to run it: the standalone app per OS (no Node.js), `npx lg-dev-manager-bridge` (Node 22.12+), `pnpm bridge`
+  from a clone, and (2.0) the Docker image `ghcr.io/scoty/lg-dev-manager` on a NAS or home server, in LAN mode for the
+  whole network. No installers or tray app (owner decision).
 - The bridge can **also serve the Web UI itself** (`http://localhost:5199`), so the app works fully
   offline and without the public site at all.
 
@@ -239,7 +243,7 @@ lg-dev-manager/
 Scope is **full parity before release** (v1.0 at M10). The site at **lg.scoty.uk** is already public as a *preview*:
 every push to `main` deploys it, and it shows which features are still to come.
 
-**Browsers:** lg.scoty.uk talking to the bridge on the same computer (`ws://127.0.0.1`) works in Chrome, Edge and Firefox. Where a browser blocks that, open the bridge-served copy at `http://localhost:5199` instead.
+**Browsers:** lg.scoty.uk talking to the bridge on the same computer (`ws://127.0.0.1`) works in Chrome, Edge and Firefox. Where a browser blocks that, open the bridge-served copy at `http://localhost:5199` instead — the docs suggest the local page first. A bridge on another machine (Docker, LAN mode) is used only through the page it serves: an https page can't open `ws://` to another host.
 
 ### Hosting setup (lg.scoty.uk)
 1. Repo **Settings → Pages → Source: GitHub Actions** (the `Deploy web UI` workflow publishes `apps/web/dist`).
@@ -302,11 +306,12 @@ Legacy, newer ones run Modern best, and sometimes an older version is wanted.
 
 ---
 
-## 9. M9 — Phones (research) — skipped for now
+## 9. M9 — Phones (research)
 
-**Status (Oct 2026):** skipped by the owner. Instead, `apps/web/src/shell/PhoneNotice.tsx` shows phone and tablet users
-a warning on every page (dismissible for the session; always shown on the Bridge page) that explains the risk and asks
-them to use a computer. The notes below are kept in case this is picked up again.
+**Status:** skipped in Oct 2026, then done in 2.0 with option 3 below: the bridge runs on a NAS or home server (the
+Docker image, LAN mode) and phones and tablets use the page it serves. Elsewhere (lg.scoty.uk, a local page),
+`apps/web/src/shell/PhoneNotice.tsx` still tells phone and tablet users that a phone can't run the bridge and points to
+Docker. The research notes below are kept for the record.
 
 **The problem.** A phone's browser can open lg.scoty.uk, but it still needs a bridge to speak SSH to the TV, and today
 the bridge is a Node program (`npx`) on the same computer as the browser. Phones can't run that normally.

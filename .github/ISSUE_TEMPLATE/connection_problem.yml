@@ -9,27 +9,32 @@ body:
         Most connection problems have one of a few causes. Please check these first — it's often the quickest fix:
 
         **Bridge**
-        - The bridge is running and its window is still open (closing it stops the bridge).
+        - The bridge is running and its window is still open (closing it stops the bridge). In Docker: the container
+          is running (`docker compose ps`).
         - The pairing token on the **Bridge** page is the one the bridge printed. After `--reset-token`, paste the new one.
         - Only one bridge is running: a second one on the same port says the port is already in use.
         - The app from the release: on first start, allow it — Windows: *More info → Run anyway*; macOS: *System
           Settings → Privacy & Security → Open Anyway*.
         - **macOS**: the bridge (or Terminal) is allowed to find devices on your local network — *System Settings →
           Privacy & Security → Local Network*.
-        - The page is https://lg.scoty.uk or http://localhost:5199. Any other address needs `--allow-origin`.
+        - The page is http://localhost:5199 or https://lg.scoty.uk. Any other address needs `--allow-origin`.
+        - **Docker / LAN mode**: you open exactly an address listed in `LGDM_PUBLIC_URL` (others are refused), from a
+          device on your local network, with the page the container serves (lg.scoty.uk can't use a bridge on another
+          machine). The container uses `network_mode: host`, and `/data` is writable by the container's user.
         - Your browser or an extension isn't blocking `ws://127.0.0.1:5199` (some privacy extensions and
           corporate policies do).
 
         **TV**
-        - The TV is on, and on the same network as this computer (not a guest Wi-Fi), with no VPN in between.
+        - The TV is on, and on the same network as the computer or server running the bridge (not a guest Wi-Fi), with
+          no VPN in between.
         - **Rooted**: SSH is turned on in Homebrew Channel → Settings, and the root password or key is right.
         - **Developer Mode**: the Developer Mode app is open on the TV, *Key Server* is on, the session hasn't
           expired, and the passphrase matches the one the app shows.
         - The TV's IP address hasn't changed (a fixed address in your router helps).
 
         > [!CAUTION]
-        > **Never paste your pairing token, TV passwords, private keys or Dev Mode passphrases.** You may replace
-        > your TV's IP address with `192.0.2.10`.
+        > **Never paste your pairing token or pairing links, TV passwords, private keys or Dev Mode passphrases.** You
+        > may replace your TV's IP address with `192.0.2.10`.
 
   - type: dropdown
     id: stage
@@ -73,6 +78,7 @@ body:
       options:
         - The app from the GitHub release (no Node.js)
         - npx lg-dev-manager-bridge
+        - Docker on a NAS or home server (ghcr.io/scoty/lg-dev-manager)
         - From the source code (pnpm bridge)
     validations:
       required: true
@@ -82,8 +88,9 @@ body:
     attributes:
       label: Which page do you use?
       options:
-        - https://lg.scoty.uk
         - The local page from the bridge (http://localhost:5199)
+        - https://lg.scoty.uk
+        - The page a bridge on my network serves (Docker / LAN mode, e.g. http://nasname.local:5199)
         - Another address (with --allow-origin)
     validations:
       required: true
@@ -110,7 +117,7 @@ body:
       label: Network
       description: How the computer and the TV are connected. Mention VPNs, firewalls, mesh Wi-Fi, guest networks or several network cards.
       placeholder: |
-        Computer: Wi-Fi, same router as the TV
+        Computer (or NAS): Wi-Fi, same router as the TV
         TV: Ethernet
         VPN: none / Firewall: Windows Defender
 
@@ -143,7 +150,7 @@ body:
     id: bridge-output
     attributes:
       label: Bridge output
-      description: Everything the bridge printed in its terminal window. **Remove the "Pairing token" line.**
+      description: Everything the bridge printed in its terminal window, or `docker compose logs lg-dev-manager`. **Remove the "Pairing token" line and the pairing links.**
       render: shell
 
   - type: textarea

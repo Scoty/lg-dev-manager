@@ -11,7 +11,8 @@ body:
 
         > [!CAUTION]
         > **Never paste your pairing token, TV passwords, private keys or Dev Mode passphrases.** The bridge prints
-        > the pairing token when it starts: delete that line from anything you paste. You may also replace your TV's
+        > the pairing token and pairing links (`…#/pair?token=…`) when it starts: delete those lines from anything you
+        > paste. You may also replace your TV's
         > IP address with `192.0.2.10`.
         >
         > Found a **security problem**? Please don't open an issue: see the [security policy](https://github.com/Scoty/lg-dev-manager/security/policy).
@@ -90,8 +91,9 @@ body:
     attributes:
       label: Which page do you use?
       options:
-        - https://lg.scoty.uk
         - The local page from the bridge (http://localhost:5199)
+        - https://lg.scoty.uk
+        - The page a bridge on my network serves (Docker / LAN mode, e.g. http://nasname.local:5199)
         - A development server (pnpm dev)
     validations:
       required: true
@@ -103,6 +105,7 @@ body:
       options:
         - The app from the GitHub release (no Node.js)
         - npx lg-dev-manager-bridge
+        - Docker on a NAS or home server (ghcr.io/scoty/lg-dev-manager)
         - From the source code (pnpm bridge)
     validations:
       required: true
@@ -127,6 +130,7 @@ body:
         - macOS — Intel
         - Linux (x64)
         - Linux (ARM64)
+        - A NAS or home server (Docker)
         - Other
     validations:
       required: true
@@ -204,8 +208,8 @@ body:
     attributes:
       label: Bridge output
       description: |
-        Everything the bridge printed in its terminal window (lines starting with `[bridge]`).
-        **Remove the "Pairing token" line.**
+        Everything the bridge printed in its terminal window, or `docker compose logs lg-dev-manager` (lines starting
+        with `[bridge]`). **Remove the "Pairing token" line and the pairing links.**
       render: shell
 
   - type: textarea

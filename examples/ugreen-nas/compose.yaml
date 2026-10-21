@@ -1,0 +1,35 @@
+# LG Dev Manager on a Ugreen NAS (UGOS Pro — DXP2800, DXP4800 and similar models).
+#
+# 1. In the Files app, create the folder lg-dev-manager in the docker shared folder (on the NAS it is
+#    /volume1/docker/lg-dev-manager; with another shared folder, change the path under volumes:).
+# 2. In the Docker app, open Project → Create (or create a stack in Dockhand or Portainer) and paste this file.
+# 3. Change the two addresses in LGDM_PUBLIC_URL to your NAS's name and IP address (your router's list of devices
+#    shows both; a fixed IP for the NAS in the router helps). Only requests for these addresses are answered, and only
+#    from devices on your local network.
+# 4. Start it, open the logs, and open one of the pairing links in each browser that should use it.
+#
+# ⚠️ Never make it reachable from the internet. If the NAS runs cloudflared (Cloudflare Tunnel), Nginx Proxy Manager or
+# another tunnel or relay for other apps, don't give this one a public hostname or forward its port. It controls your
+# TVs.
+services:
+  lg-dev-manager:
+    image: ghcr.io/scoty/lg-dev-manager:2
+    container_name: lg-dev-manager
+    # Host networking: the TV scan needs the NAS's own network, and the bridge must see who connects.
+    network_mode: host
+    environment:
+      # The addresses you open it at, separated by commas: the NAS's name and its IP address.
+      LGDM_PUBLIC_URL: http://nasname.local:5199,http://192.0.2.10:5199
+      # LGDM_PORT: 5199                    # another port, if 5199 is taken on the NAS (change the URLs too)
+      # LGDM_STORE: 0                      # keep the TVs in each browser instead of on the NAS
+    volumes:
+      # The pairing token, and your TVs (with their logins), custom repositories and screenshots.
+      - /volume1/docker/lg-dev-manager:/data
+    # The container runs as user 1000. If the logs say it can't write to /data, either give the folder to that user
+    # (over SSH: sudo chown 1000:1000 /volume1/docker/lg-dev-manager) or run it as your own user: `id` over SSH shows
+    # your ids, then uncomment the next line with them.
+    # user: "1000:1000"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]

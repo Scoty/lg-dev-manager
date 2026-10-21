@@ -74,7 +74,8 @@ async function main() {
     } else console.log('');
   } else {
     console.log(`  Listening on   http://${config.host}:${config.port} (this computer only)`);
-    console.log(`  Open           ${PUBLIC_WEB_ORIGIN}${config.webRoot ? `  or the local page ${local}/` : ''}`);
+    // The local page first: it matches this bridge's version and works offline. lg.scoty.uk is the same app.
+    console.log(`  Open           ${config.webRoot ? `${local}/  (the local page)  or  ${PUBLIC_WEB_ORIGIN}` : PUBLIC_WEB_ORIGIN}`);
     console.log(`  Pairing token  ${config.token}`);
     if (config.webRoot) console.log(`  Pair link      ${pairLink(local, config.token)}`);
     console.log(`  Allowed origins ${config.allowedOrigins.join(', ')}\n`);

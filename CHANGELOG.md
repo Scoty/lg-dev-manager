@@ -5,7 +5,7 @@
 - 🔗 **Pairing links.** The bridge prints a link that pairs a browser with one click (`…/#/pair?token=…`); the app
   opens lg.scoty.uk ready to pair. The token stays in the browser (it's after `#`), is removed from the address bar,
   and is checked with the bridge before it's saved.
-- 🏠 **LAN mode** (for running the bridge on a home server or NAS; the Docker image is next): `--listen` and
+- 🏠 **LAN mode** (for running the bridge on a home server or NAS, as the Docker image does): `--listen` and
   `--public-url` share the bridge with browsers on your network, which open the page it serves. Off unless asked for.
   Only devices on your local network get in, nothing forwarded from the internet (e.g. a Cloudflare Tunnel), pairing
   attempts are rate-limited per device, and the page warns that plain HTTP isn't encrypted.
@@ -21,6 +21,9 @@
   into text fields on iPhone, and TVs are listed as cards. Elsewhere the phone notice points to Docker.
 - Copy buttons, the terminal and screenshots also work on pages served over plain HTTP.
 - The bridge stops at once on SIGTERM (`docker stop`).
+- README: running it on a NAS or home server, with an example for Ugreen NAS
+  (`examples/ugreen-nas/compose.yaml`); the local page is suggested first, lg.scoty.uk second. The bridge prints them
+  in that order too.
 - Fixed: after an install, the dialog said “Installed by Homebrew Channel” on rooted TVs, even for apps from a custom
   repository or Litefin. It now says where the app came from.
 - Update badges on the Installed page say they're the official Homebrew build, and updating from there asks first:
