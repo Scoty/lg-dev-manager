@@ -61,6 +61,8 @@ export function startServer(
   const lan = config.lan;
   // Storage (--store): every paired browser hears about each change, so they all show the same TVs.
   const store = config.storeDir ? new BridgeStore(config.storeDir) : undefined;
+  // A stored TV's login is only sent to a TV with the host key it had (ssh/pool.ts).
+  if (store) pool.hostKeys = store;
   const sessions = new Set<Session>();
   if (store) store.onChange = (change) => sessions.forEach((s) => s.authed && s.emit(STORE_CHANGED_EVENT, change));
   const publicHosts = (lan?.publicUrls ?? []).map((u) => new URL(u).host.toLowerCase());

@@ -15,7 +15,7 @@
 - 🗄️ **TVs stored on the bridge** (`--store`, on in the Docker image): the TVs with their logins, the custom
   repositories and the screenshots live in the bridge's data folder, so every browser and phone paired with it sees
   the same ones, and changes show up everywhere at once. A TV's password or key goes to the bridge once and is never
-  sent back to a browser. TVs saved in a browser before can be moved there in one click (Devices page).
+  sent back to a browser, and the bridge sends it only to that TV (it checks the TV's SSH host key first). TVs saved in a browser before can be moved there in one click (Devices page).
 - 📱 **Phones and tablets**, through a bridge on your network: every page fits a phone screen, the terminal has a bar
   with the keys a phone keyboard lacks (Esc, Tab, Ctrl+C/D/Z/L/R, arrows, `| ~ / -`), bigger touch targets, no zooming
   into text fields on iPhone, and TVs are listed as cards. Elsewhere the phone notice points to Docker.

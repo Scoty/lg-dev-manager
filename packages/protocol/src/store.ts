@@ -59,15 +59,10 @@ export const StoredDeviceInput = z.object({ ...deviceFields, auth: DeviceAuth.op
 export type StoredDeviceInput = z.infer<typeof StoredDeviceInput>;
 
 /**
- * A stored TV named in a call (in place of a full DeviceTarget, under `device`). `host` / `port` / `username` override
- * the stored ones — editing a TV checks the new address with the stored login before saving it.
+ * A stored TV named in a call (in place of a full DeviceTarget, under `device`). Only the id: the bridge uses the stored
+ * address and login as they are, so a browser can never send a stored login to another address.
  */
-export const StoredDeviceRef = z.object({
-  stored: DeviceId,
-  host: HostName.optional(),
-  port: z.number().int().min(1).max(65535).optional(),
-  username: UserName.optional(),
-});
+export const StoredDeviceRef = z.object({ stored: DeviceId }).strict();
 export type StoredDeviceRef = z.infer<typeof StoredDeviceRef>;
 
 /** A custom repository (Setup → Custom repos), as the browser keeps it. */
@@ -99,7 +94,10 @@ export const STORE_LIMITS = {
   customRepos: 20,
   /** Per TV. The oldest go first when a new one would pass it. */
   shotsPerDevice: 100,
-  shotBytes: 12 * 1024 * 1024,
+  /** One screenshot (a 4K PNG is 3–8 MB). Its base64 has to fit in one 16 MiB message. */
+  shotBytes: 11 * 1024 * 1024,
+  /** All screenshots together. The oldest (of any TV) go first when a new one would pass it. */
+  shotsTotalBytes: 1024 * 1024 * 1024,
 } as const;
 
 /** Sent to every paired browser when something stored changes, so they all show the same. */
@@ -114,6 +112,8 @@ export const StoreErrorCodes = {
   /** The bridge doesn't store anything (started without --store). */
   Off: 'store_off',
   NotFound: 'store_not_found',
+  /** Changing a stored TV's address or user name with its kept password, before the bridge knows the TV's host key. */
+  LoginRequired: 'store_login_required',
   Full: 'store_full',
   /** The data folder couldn't be written (permissions, disk full). */
   WriteFailed: 'store_write_failed',

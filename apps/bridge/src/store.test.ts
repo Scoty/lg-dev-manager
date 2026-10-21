@@ -1,10 +1,12 @@
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+import { generateKeyPairSync } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
+import ssh2 from 'ssh2';
 import { makeIconPng, startMockTv, type MockTv } from '@lgdm/mock-tv';
 import { PROTOCOL_VERSION } from '@lgdm/protocol';
 import { startServer } from './server.js';
@@ -56,13 +58,26 @@ describe('the bridge’s storage', () => {
     expect(new BridgeStore(dir).target({ stored: 'tv-1' })).toEqual({ host: tv.host, port: tv.sshPort, username: 'root', auth: { kind: 'password', password: PASSWORD } });
   });
 
-  it('keeps the stored login when a TV is edited without one, and a reference can override the address', async () => {
+  it('keeps the stored login when a TV is edited without one, but a password only moves to a new address with the TV’s host key', async () => {
     const store = fresh();
     await store.saveDevice(tvRecord(tv));
-    const { auth: _a, ...withoutLogin } = tvRecord(tv, { name: 'Bedroom', host: '192.0.2.5' });
-    expect(await store.saveDevice(withoutLogin)).toMatchObject({ name: 'Bedroom', host: '192.0.2.5' });
+    const { auth: _a, ...withoutLogin } = tvRecord(tv, { name: 'Bedroom' });
+    expect(await store.saveDevice(withoutLogin)).toMatchObject({ name: 'Bedroom' });
     expect(store.target({ stored: 'tv-1' }).auth).toEqual({ kind: 'password', password: PASSWORD });
-    expect(store.target({ stored: 'tv-1', host: '192.0.2.9', port: 22 })).toMatchObject({ host: '192.0.2.9', port: 22 });
+    // Another address with the kept password, before the bridge knows the TV's host key: the password again.
+    await expect(store.saveDevice({ ...withoutLogin, host: '192.0.2.5' })).rejects.toMatchObject({ code: 'store_login_required' });
+    expect(await store.saveDevice({ ...withoutLogin, host: '192.0.2.5', auth: { kind: 'password', password: PASSWORD } })).toMatchObject({ host: '192.0.2.5' });
+    // Known host key: the TV may move (DHCP); the key is checked before the password is sent.
+    store.forTarget(store.target({ stored: 'tv-1' }))!.remember('SHA256:abc');
+    await expect.poll(() => store.forTarget(store.target({ stored: 'tv-1' }))?.expected).toBe('SHA256:abc');
+    expect(await store.saveDevice({ ...withoutLogin, host: '192.0.2.6' })).toMatchObject({ host: '192.0.2.6' });
+    expect(store.forTarget(store.target({ stored: 'tv-1' }))?.expected).toBe('SHA256:abc');
+    expect(JSON.stringify(store.listDevices())).not.toContain('SHA256');
+    // A new login starts over.
+    await store.saveDevice({ ...withoutLogin, host: '192.0.2.6', auth: { kind: 'password', password: 'other-pass' } });
+    expect(store.forTarget(store.target({ stored: 'tv-1' }))?.expected).toBeUndefined();
+    // A reference is the id only: no address of the browser's choosing.
+    expect(() => store.target({ stored: 'tv-1', host: '192.0.2.9' })).toThrow(/Not a stored TV/);
     await expect(store.saveDevice({ ...withoutLogin, id: 'new-tv' })).rejects.toThrow(/needs its login/);
     expect(() => store.target({ stored: 'nope' })).toThrow(/isn’t saved/);
     await store.removeDevice('tv-1');
@@ -160,6 +175,8 @@ describe('a bridge with --store', () => {
     expect(res.result.stdout).toBe('stored\n');
     expect([...a.frames, ...b.frames].join('\n')).not.toContain(PASSWORD);
     expect((await b.call('cmd.exec', { device: { stored: 'gone' }, command: 'id' })).error.code).toBe('store_not_found');
+    // No address of the browser's choosing for a stored login.
+    expect((await b.call('cmd.exec', { device: { stored: 'tv-1', host: '192.0.2.9', port: 22 }, command: 'id' })).error.code).toBe('bad_request');
     a.ws.close();
     b.ws.close();
   });
@@ -178,6 +195,63 @@ describe('a bridge with --store', () => {
     expect((await c.call('store.repos.get')).result.repos).toEqual([repo]);
     expect(c.frames.join('\n')).not.toContain('PRIVATE KEY');
     c.ws.close();
+  });
+});
+
+describe('a stored password', () => {
+  it('never goes to another SSH server, even when the TV is moved to its address', async () => {
+    const tv = await startMockTv({ username: 'root', password: PASSWORD });
+    const dir = mkdtempSync(join(tmpdir(), 'lgdm-store-pin-'));
+    // Something else on the network that would like the password.
+    const heard: string[] = [];
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs1', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+    const trap = new ssh2.Server({ hostKeys: [privateKey] }, (client) => {
+      client.on('authentication', (ctx) => {
+        if (ctx.method === 'password') heard.push(ctx.password);
+        ctx.reject(['password', 'keyboard-interactive']);
+      });
+      client.on('error', () => {});
+    });
+    await new Promise<void>((r) => trap.listen(0, '127.0.0.1', () => r()));
+    const trapPort = (trap.address() as AddressInfo).port;
+    const server = await startServer({ host: '127.0.0.1', port: 0, allowedOrigins: [ORIGIN], token: TOKEN, dev: false, storeDir: dir }, new SshPool(), new RepoClient('http://127.0.0.1:1/api'));
+    const ws = new WebSocket(`ws://127.0.0.1:${(server.address() as AddressInfo).port}/rpc`, { headers: { Origin: ORIGIN } });
+    await new Promise((r) => ws.once('open', r));
+    let id = 0;
+    const call = (method: string, params?: unknown) =>
+      new Promise<any>((resolve) => {
+        const my = ++id;
+        ws.on('message', function on(raw) {
+          const msg = JSON.parse(raw.toString());
+          if (msg.id === my) {
+            ws.off('message', on);
+            resolve(msg);
+          }
+        });
+        ws.send(JSON.stringify({ id: my, method, params }));
+      });
+    try {
+      await call('system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
+      const record = { id: 'tv-p', name: 'Pinned', mode: 'rooted', host: '127.0.0.1', port: tv.sshPort, username: 'root' };
+      await call('store.devices.save', { device: { ...record, auth: { kind: 'password', password: PASSWORD } } });
+      // The first connection records the TV's host key.
+      expect((await call('cmd.exec', { device: { stored: 'tv-p' }, command: 'echo hi' })).result.stdout).toBe('hi\n');
+      await expect.poll(() => readFileSync(join(dir, 'devices.json'), 'utf8')).toContain('SHA256:');
+      // Moved to the other server's address (the Edit TV dialog, kept login): the host key doesn't match, no login sent.
+      expect((await call('store.devices.save', { device: { ...record, port: trapPort } })).result).toBeDefined();
+      const res = await call('cmd.exec', { device: { stored: 'tv-p' }, command: 'id' });
+      expect(res.error.code).toBe('ssh_host_key_changed');
+      // A browser that has the password and sends it itself is checked the same way.
+      const direct = await call('cmd.exec', { device: { ...record, port: trapPort, auth: { kind: 'password', password: PASSWORD } }, command: 'id' });
+      expect(direct.error.code).toBe('ssh_host_key_changed');
+      expect(heard).toEqual([]);
+    } finally {
+      ws.close();
+      await new Promise<void>((r) => server.close(() => r()));
+      trap.close();
+      await tv.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

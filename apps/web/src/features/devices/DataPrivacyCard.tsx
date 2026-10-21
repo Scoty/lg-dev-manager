@@ -26,7 +26,7 @@ function StoredOnBridgeCard() {
   const { confirm } = useFeedback();
   const [own, setOwn] = useState<{ tvs: number; repos: number }>({ tvs: 0, repos: 0 });
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'success' | 'danger'; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ kind: 'success' | 'warning' | 'danger'; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const connected = status.state === 'connected';
 
@@ -54,8 +54,12 @@ function StoredOnBridgeCard() {
     setBusy(true);
     setMsg(null);
     try {
-      const n = await moveBrowserDataToBridge(moveBrowserShotsToBridge, async () => void (await moveBrowserReposToBridge()));
-      setMsg({ kind: 'success', text: `Moved ${n} TV${n === 1 ? '' : 's'} to the bridge.` });
+      const { tvs: n, shotsLeft } = await moveBrowserDataToBridge(moveBrowserShotsToBridge, async () => void (await moveBrowserReposToBridge()));
+      setMsg(
+        shotsLeft
+          ? { kind: 'warning', text: `Moved ${n} TV${n === 1 ? '' : 's'} to the bridge. ${shotsLeft} screenshot${shotsLeft === 1 ? '' : 's'} couldn’t be moved and stayed in this browser.` }
+          : { kind: 'success', text: `Moved ${n} TV${n === 1 ? '' : 's'} to the bridge.` },
+      );
     } catch (e) {
       setMsg({ kind: 'danger', text: `Nothing was removed from this browser: ${(e as Error).message}` });
     } finally {

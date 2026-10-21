@@ -33,7 +33,10 @@ It has two parts (see `PLAN.md` §1 for why):
    **bridge storage** (2.0, `--store` / `LGDM_STORE=1`, on in the Docker image; `apps/bridge/src/store/store.ts`): the
    bridge keeps the TVs with their logins, the custom repositories and the screenshots in its data folder (files 0600,
    folder 0700) for every paired browser — and **never sends a stored login back** to any browser (they get
-   `StoredDevice` with a `login` summary and name TVs by `{ stored: id }`). Either way nothing is ever sent to the
+   `StoredDevice` with a `login` summary and name TVs by `{ stored: id }` — the id only, never an address to override;
+   `publicDevice` builds their copy from `StoredDevice`'s fields only). A stored login goes only to the TV with the SSH
+   host key the bridge recorded for it (`HostKeyPolicy` in `ssh/pool.ts`); moving a password TV to a new address
+   without that key needs the password again. Either way nothing is ever sent to the
    website or any third party, device details go **only to the paired bridge**, and the bridge must **never log or
    echo** keys/passwords — not in logs, error messages or `detail`.
    Keep the production Content-Security-Policy strict (no third-party/inline scripts, no new `connect-src` hosts

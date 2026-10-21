@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import {
+  DeviceTarget,
   ErrorCodes,
   Methods,
   RpcRequest,
@@ -6,22 +8,40 @@ import {
   type MethodName,
   type RpcResponse,
   StoreErrorCodes,
+  StoredDeviceRef,
 } from '@lgdm/protocol';
 import { RpcError } from './errors.js';
 import { handlers, type Context, type Session } from './handlers.js';
 
 const isMethod = (m: string): m is MethodName => Object.hasOwn(Methods, m);
 
+/** Methods whose `device` is a TV to connect to (a DeviceTarget): only these take a stored TV ({ stored: id }). */
+const TAKES_TARGET = new Set(
+  (Object.keys(Methods) as MethodName[]).filter((m) => {
+    const schema = Methods[m].params as unknown;
+    if (!(schema instanceof z.ZodObject)) return false;
+    let device = (schema.shape as Record<string, unknown>).device;
+    if (device instanceof z.ZodOptional) device = device.unwrap();
+    return device === DeviceTarget;
+  }),
+);
+
+/** Stands in for a stored TV while the call's parameters are checked: the login is put in only afterwards. */
+const PLACEHOLDER: DeviceTarget = { host: '192.0.2.1', port: 22, username: 'root', auth: { kind: 'password', password: 'x' } };
+
 /**
- * A call may name a TV the bridge stores ({ stored: id }, store.ts in the protocol) instead of carrying its login: put
- * the full target in its place before the call is checked and run. Without storage (no --store) that's refused.
+ * A call may name a TV the bridge stores ({ stored: id }, store.ts in the protocol) instead of carrying its login. The
+ * parameters are checked with a placeholder in its place, and the stored address and login go in only after that, so
+ * an error about the parameters can never quote them. Without storage (no --store) a stored TV is refused.
  */
-function resolveStoredDevice(params: unknown, ctx: Context): unknown {
-  if (!params || typeof params !== 'object') return params;
+function storedRef(method: MethodName, params: unknown, ctx: Context): StoredDeviceRef | undefined {
+  if (!TAKES_TARGET.has(method) || !params || typeof params !== 'object') return undefined;
   const device = (params as { device?: unknown }).device;
-  if (!device || typeof device !== 'object' || !('stored' in device)) return params;
+  if (!device || typeof device !== 'object' || !('stored' in device)) return undefined;
   if (!ctx.store) throw new RpcError(StoreErrorCodes.Off, 'This bridge doesn’t store TVs (start it with --store).');
-  return { ...params, device: ctx.store.target(device) };
+  const ref = StoredDeviceRef.safeParse(device);
+  if (!ref.success) throw new RpcError(ErrorCodes.BadRequest, 'Not a stored TV reference.');
+  return ref.data;
 }
 
 /** Parses one incoming frame and produces the response frame. Never throws. */
@@ -41,10 +61,14 @@ export async function dispatch(raw: string, session: Session, ctx: Context): Pro
     if (!session.authed && !UNAUTHENTICATED_METHODS.includes(method)) {
       throw new RpcError(ErrorCodes.Unauthorized, 'Not paired. Send system.hello first.');
     }
-    const parsed = Methods[method].params.safeParse(resolveStoredDevice(req.data.params, ctx));
+    // After the pairing check: an unpaired browser learns nothing about what's stored.
+    const stored = storedRef(method, req.data.params, ctx);
+    const params = stored ? { ...(req.data.params as object), device: PLACEHOLDER } : req.data.params;
+    const parsed = Methods[method].params.safeParse(params);
     if (!parsed.success) {
       throw new RpcError(ErrorCodes.BadRequest, `Invalid parameters for ${method}`, parsed.error.message);
     }
+    if (stored) (parsed.data as { device: DeviceTarget }).device = ctx.store!.target(stored);
     const handler = handlers[method] as (p: unknown, s: Session, c: Context) => unknown;
     const result = await handler(parsed.data, session, ctx);
     return { id, result };

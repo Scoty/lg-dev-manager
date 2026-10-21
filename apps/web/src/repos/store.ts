@@ -118,7 +118,10 @@ export async function moveBrowserReposToBridge(): Promise<number> {
   if (!mine.length) return 0;
   const { repos } = await storageClient().call('store.repos.get');
   const known = new Set(repos.map((r) => r.url));
-  const merged = [...repos, ...mine.filter((r) => !known.has(r.url))].slice(0, MAX_CUSTOM_REPOS);
+  const merged = [...repos, ...mine.filter((r) => !known.has(r.url))];
+  if (merged.length > MAX_CUSTOM_REPOS) {
+    throw new Error(`The bridge keeps up to ${MAX_CUSTOM_REPOS} custom repositories, and this would make ${merged.length}. Remove some in Custom repos first.`);
+  }
   await storageClient().call('store.repos.set', { repos: merged });
   try {
     localStorage.removeItem(KEY);

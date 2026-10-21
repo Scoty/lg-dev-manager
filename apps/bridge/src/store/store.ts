@@ -1,12 +1,13 @@
 import { randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import {
   DeviceAuth,
   STORE_LIMITS,
   StoreErrorCodes,
   StoredCustomRepo,
+  StoredDevice as StoredDeviceSchema,
   StoredDeviceInput,
   StoredDeviceRef,
   StoredShot,
@@ -17,20 +18,35 @@ import {
 } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
 import { sniffImage } from '../repo/repo.js';
+import type { HostKeyPolicy } from '../ssh/pool.js';
 
 /** A stored TV with its login — only ever in this file and in the bridge's memory. */
-const DeviceRecord = StoredDeviceInput.extend({ auth: DeviceAuth, createdAt: z.number(), updatedAt: z.number() });
+const DeviceRecord = StoredDeviceInput.extend({
+  auth: DeviceAuth,
+  /** The TV's SSH host key (SHA256 fingerprint), recorded on the first connection with this login; then required. */
+  hostKey: z.string().max(100).optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
 type DeviceRecord = z.infer<typeof DeviceRecord>;
 
 const DevicesFile = z.object({ version: z.literal(1), devices: z.array(DeviceRecord) });
 const ReposFile = z.object({ version: z.literal(1), repos: z.array(StoredCustomRepo) });
 const ShotsFile = z.object({ version: z.literal(1), shots: z.array(StoredShot) });
 
-/** What a browser may see of a stored TV: everything but the password or key. */
+/**
+ * What a browser may see of a stored TV: the fields of StoredDevice only (zod drops everything else), so a field added
+ * to the record later never reaches a browser by accident.
+ */
 export function publicDevice(r: DeviceRecord): StoredDevice {
   const login: LoginSummary = r.auth.kind === 'key' ? { kind: 'key', hasPassphrase: !!r.auth.passphrase } : { kind: 'password' };
-  const { auth: _secret, ...rest } = r;
-  return { ...rest, login };
+  return StoredDeviceSchema.parse({ ...r, auth: undefined, hostKey: undefined, login });
+}
+
+/** The same login (whatever the key order). */
+function sameLogin(a: DeviceTarget['auth'], b: DeviceTarget['auth']): boolean {
+  if (a.kind === 'password') return b.kind === 'password' && a.password === b.password;
+  return b.kind === 'key' && a.privateKey === b.privateKey && (a.passphrase ?? '') === (b.passphrase ?? '');
 }
 
 /**
@@ -41,7 +57,7 @@ export function publicDevice(r: DeviceRecord): StoredDevice {
  * Logins go in and never come back out: `publicDevice` is all a browser gets, and `target` hands the full login only
  * to the call that connects to the TV.
  */
-export class BridgeStore {
+export class BridgeStore implements HostKeyPolicy {
   private devices: DeviceRecord[];
   private repos: z.infer<typeof StoredCustomRepo>[];
   private shots: z.infer<typeof StoredShot>[];
@@ -67,13 +83,34 @@ export class BridgeStore {
     return [...this.devices].sort((a, b) => a.name.localeCompare(b.name)).map(publicDevice);
   }
 
-  /** The full target for a call that names a stored TV ({ stored: id }, with optional overrides). */
+  /** The full target for a call that names a stored TV ({ stored: id }): its stored address and login, as they are. */
   target(ref: unknown): DeviceTarget {
     const r = StoredDeviceRef.safeParse(ref);
     if (!r.success) throw new RpcError('bad_request', 'Not a stored TV reference.');
     const d = this.devices.find((x) => x.id === r.data.stored);
     if (!d) throw new RpcError(StoreErrorCodes.NotFound, 'That TV isn’t saved on the bridge any more. Reload the page.');
-    return { host: r.data.host ?? d.host, port: r.data.port ?? d.port, username: r.data.username ?? d.username, auth: d.auth };
+    return { host: d.host, port: d.port, username: d.username, auth: d.auth };
+  }
+
+  /**
+   * HostKeyPolicy (ssh/pool.ts): a connection with a stored TV's address and login must meet that TV's host key —
+   * also when a browser sends the login itself. The first one records it.
+   */
+  forTarget(t: DeviceTarget) {
+    const d = this.devices.find((x) => x.host === t.host && x.port === t.port && x.username === t.username && sameLogin(x.auth, t.auth));
+    if (!d) return undefined;
+    return {
+      expected: d.hostKey,
+      remember: (fingerprint: string) => {
+        void this.write(async () => {
+          const current = this.devices.find((x) => x.id === d.id);
+          if (!current || current.hostKey || current.host !== t.host || current.port !== t.port || !sameLogin(current.auth, t.auth)) return;
+          const next = this.devices.map((x) => (x.id === d.id ? { ...x, hostKey: fingerprint } : x));
+          this.persist('devices.json', { version: 1, devices: next });
+          this.devices = next;
+        }).catch(() => {});
+      },
+    };
   }
 
   saveDevice(input: z.infer<typeof StoredDeviceInput>): Promise<StoredDevice> {
@@ -82,11 +119,19 @@ export class BridgeStore {
       const current = this.devices.find((d) => d.id === input.id);
       if (!current && !input.auth) throw new RpcError('bad_request', 'A new TV needs its login.');
       if (!current && this.devices.length >= STORE_LIMITS.devices) throw new RpcError(StoreErrorCodes.Full, `The bridge keeps up to ${STORE_LIMITS.devices} TVs.`);
+      // A stored password goes only where it was entered for: moving a TV to another address with the kept password
+      // needs its host key (the new address must be the same TV), else the password again.
+      const moved = !!current && (current.host !== input.host || current.port !== input.port || current.username !== input.username);
+      if (current && !input.auth && moved && current.auth.kind === 'password' && !current.hostKey) {
+        throw new RpcError(StoreErrorCodes.LoginRequired, 'Enter the TV’s password again to change its address or user name.');
+      }
       const record = DeviceRecord.parse({
         ...current,
         ...stripUndefined(input),
         info: input.info ?? current?.info,
         auth: input.auth ?? current!.auth,
+        // A new login starts over: the next connection records the TV's host key again (a reset TV has a new one).
+        hostKey: input.auth ? undefined : current?.hostKey,
         createdAt: current?.createdAt ?? now,
         updatedAt: now,
       });
@@ -101,7 +146,7 @@ export class BridgeStore {
   setDeviceInfo(id: string, info: DeviceRecord['info']): Promise<void> {
     return this.write(async () => {
       const current = this.devices.find((d) => d.id === id);
-      if (!current) return;
+      if (!current || JSON.stringify(current.info) === JSON.stringify(info)) return;
       const next = this.devices.map((d) => (d.id === id ? { ...d, info } : d));
       this.persist('devices.json', { version: 1, devices: next });
       this.devices = next;
@@ -147,7 +192,16 @@ export class BridgeStore {
 
   setRepos(repos: z.infer<typeof StoredCustomRepo>[]): Promise<void> {
     return this.write(async () => {
-      const unique = repos.filter((r, i) => repos.findIndex((x) => x.url === r.url || x.id === r.id) === i).slice(0, STORE_LIMITS.customRepos);
+      // Same address: kept once. Same id for another address (two browsers' lists): a new id.
+      const ids = new Set<string>();
+      const unique = repos
+        .filter((r, i) => repos.findIndex((x) => x.url === r.url) === i)
+        .map((r) => {
+          const id = ids.has(r.id) ? randomBytes(9).toString('hex') : r.id;
+          ids.add(id);
+          return id === r.id ? r : { ...r, id };
+        })
+        .slice(0, STORE_LIMITS.customRepos);
       this.persist('repos.json', { version: 1, repos: unique });
       this.repos = unique;
       this.onChange({ what: 'repos' });
@@ -174,12 +228,25 @@ export class BridgeStore {
       const mime = sniffImage(data);
       if (mime !== 'image/png' && mime !== 'image/jpeg') throw new RpcError('bad_request', 'Only PNG and JPEG screenshots can be kept.');
       const shot = StoredShot.parse({ id: randomBytes(12).toString('base64url'), deviceId, at, method, mime, bytes: data.length });
-      atomicWrite(this.shotPath(shot.id, mime), data);
-      // Over the limit for this TV: the oldest go.
+      // Over the limit for this TV, or for all of them together: the oldest go.
       const mine = this.listShots(deviceId);
-      const drop = mine.slice(0, Math.max(0, mine.length + 1 - STORE_LIMITS.shotsPerDevice)).map((s) => s.id);
-      const next = [...this.shots.filter((s) => !drop.includes(s.id)), shot];
-      this.persist('screenshots.json', { version: 1, shots: next });
+      const drop = new Set(mine.slice(0, Math.max(0, mine.length + 1 - STORE_LIMITS.shotsPerDevice)).map((s) => s.id));
+      let total = data.length + this.shots.reduce((n, s) => n + (drop.has(s.id) ? 0 : s.bytes), 0);
+      for (const s of [...this.shots].sort((a, b) => a.at - b.at)) {
+        if (total <= STORE_LIMITS.shotsTotalBytes) break;
+        if (drop.has(s.id)) continue;
+        drop.add(s.id);
+        total -= s.bytes;
+      }
+      const next = [...this.shots.filter((s) => !drop.has(s.id)), shot];
+      try {
+        atomicWrite(this.shotPath(shot.id, mime), data);
+        this.persist('screenshots.json', { version: 1, shots: next });
+      } catch (e) {
+        this.unlinkShot(shot.id);
+        if (e instanceof RpcError) throw e;
+        throw new RpcError(StoreErrorCodes.WriteFailed, `The bridge couldn’t save to its data folder (${this.dir}). Check that it can write there.`, (e as Error).message);
+      }
       this.shots = next;
       for (const id of drop) this.unlinkShot(id);
       this.onChange({ what: 'shots', deviceId });
@@ -240,17 +307,48 @@ export class BridgeStore {
   }
 }
 
+/** Write to a new temporary file (0600), flush it to disk, rename it into place, then flush the folder. */
 function atomicWrite(path: string, data: Buffer) {
   const tmp = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
-  writeFileSync(tmp, data, { mode: 0o600 });
+  const fd = openSync(tmp, 'wx', 0o600);
+  try {
+    for (let off = 0; off < data.length; ) off += writeSync(fd, data, off);
+    fsyncSync(fd);
+  } catch (e) {
+    closeSync(fd);
+    rmSync(tmp, { force: true });
+    throw e;
+  }
+  closeSync(fd);
   renameSync(tmp, path);
+  if (process.platform !== 'win32') {
+    try {
+      const dir = openSync(dirname(path), 'r');
+      try {
+        fsyncSync(dir);
+      } finally {
+        closeSync(dir);
+      }
+    } catch {
+      /* some filesystems can't flush a folder */
+    }
+  }
 }
 
+/** Readable by this user only. Says so when that can't be done (a folder owned by another user, a mount without permissions). */
 function tighten(path: string, mode: number) {
+  if (process.platform === 'win32') return; // the profile folder's ACLs apply
   try {
     chmodSync(path, mode);
   } catch {
-    /* not supported on this platform (Windows) */
+    /* checked below */
+  }
+  try {
+    if (statSync(path).mode & 0o077) {
+      console.warn(`[bridge] warning: ${path} can be read by other users of this computer, and it holds the TVs' logins. Make it readable by the user the bridge runs as only.`);
+    }
+  } catch {
+    /* gone */
   }
 }
 

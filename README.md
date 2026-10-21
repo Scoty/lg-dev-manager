@@ -131,7 +131,8 @@ Browsers can't open SSH connections, so the app comes in two parts:
 - **The web app** is a static site, served at lg.scoty.uk and by the bridge as the local page. Saved TVs — names,
   addresses, keys and passwords — live in your browser's storage. They are never sent to the website; each request
   sends them to your own bridge, and only to it. (A bridge started with `--store`, like the Docker image, keeps them
-  instead, for every browser paired with it, and never sends the logins back.)
+  instead, for every browser paired with it, and never sends the logins back. It remembers each stored TV's SSH host
+  key and sends a stored login only to the TV that has it.)
 - **The bridge** is a small Node.js program that does the SSH, SFTP and HTTP work the browser can't. It listens on
   `127.0.0.1` only (nothing else on your network can reach it), accepts only the app's own pages, needs the pairing
   token, and keeps nothing on disk except that token. It offers fixed operations — list apps, install, read a log —

@@ -83,6 +83,20 @@ export interface Channel {
   close(): void;
 }
 
+/**
+ * Host keys of the TVs the bridge stores (--store). For a call with a stored TV's login, the TV's host key is checked
+ * during the handshake, before the login is sent: a stored password only ever goes to the TV it was entered for.
+ * The first connection records the key (trust on first use).
+ */
+export interface HostKeyPolicy {
+  forTarget(t: DeviceTarget): { expected?: string; remember(fingerprint: string): void } | undefined;
+}
+
+/** OpenSSH's form: SHA256:<base64 without padding>. */
+export function hostKeyFingerprint(key: Buffer): string {
+  return `SHA256:${createHash('sha256').update(key).digest('base64').replace(/=+$/, '')}`;
+}
+
 function configFor(t: DeviceTarget): ConnectConfig {
   const config: ConnectConfig = {
     host: t.host.replace(/^\[|\]$/g, ''),
@@ -129,6 +143,9 @@ function mapConnectError(e: Error & { level?: string; code?: string }, t: Device
 export class SshPool implements SshRunner {
   private entries = new Map<string, Entry>();
 
+  /** Set by the server when it stores TVs. */
+  hostKeys?: HostKeyPolicy;
+
   constructor(private readonly idleMs = IDLE_MS) {}
 
   get size() {
@@ -139,8 +156,19 @@ export class SshPool implements SshRunner {
     const config = configFor(t);
     const client = new Client();
     const key = keyOf(t);
+    const pin = this.hostKeys?.forTarget(t);
+    let seen: string | undefined;
+    let mismatch = false;
+    if (pin) {
+      config.hostVerifier = (hostKey: Buffer) => {
+        seen = hostKeyFingerprint(hostKey);
+        mismatch = !!pin.expected && pin.expected !== seen;
+        return !mismatch;
+      };
+    }
     const ready = new Promise<Client>((resolve, reject) => {
       client.once('ready', () => {
+        if (pin && !pin.expected && seen) pin.remember(seen);
         // Small request/response traffic: without this, Nagle + delayed ACKs add up to ~200 ms per command
         // (macOS). OpenSSH sets TCP_NODELAY for the same reason.
         client.setNoDelay(true);
@@ -148,7 +176,14 @@ export class SshPool implements SshRunner {
       });
       client.once('error', (e) => {
         this.forget(entry);
-        reject(mapConnectError(e, t));
+        reject(
+          mismatch
+            ? new RpcError(
+                DeviceErrorCodes.HostKeyChanged,
+                `${t.host}:${t.port} isn’t the TV saved with this login: its SSH host key is different, so the bridge didn’t send the login. If you reset the TV or moved it to another TV’s address, edit it and enter its login again.`,
+              )
+            : mapConnectError(e, t),
+        );
       });
       if (t.auth.kind === 'password') {
         const pw = t.auth.password;

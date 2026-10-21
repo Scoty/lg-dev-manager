@@ -104,14 +104,25 @@ export async function deleteShots(ids: readonly string[]): Promise<void> {
   notify();
 }
 
-/** Copy this browser's screenshots of these TVs to the bridge (moving the TVs there; storage/backend.ts). */
-export async function moveBrowserShotsToBridge(deviceIds: string[]): Promise<void> {
+/**
+ * Move this browser's screenshots of these TVs to the bridge (moving the TVs there; storage/backend.ts). Each one is
+ * removed from this browser once the bridge has it. Returns how many stayed (the bridge refused them, or went away).
+ */
+export async function moveBrowserShotsToBridge(deviceIds: string[]): Promise<number> {
   const client = storageClient();
+  let left = 0;
   for (const deviceId of deviceIds) {
     for (const s of await listBrowserShots(deviceId)) {
-      await client.call('store.shots.add', { deviceId, method: s.method, at: s.at, base64: await toBase64(s.blob) }, 60_000).catch(() => {});
+      try {
+        await client.call('store.shots.add', { deviceId, method: s.method, at: s.at, base64: await toBase64(s.blob) }, 60_000);
+        const d = await db();
+        await req(d.transaction(SHOTS_STORE, 'readwrite').objectStore(SHOTS_STORE).delete(s.id));
+      } catch {
+        left++;
+      }
     }
   }
+  return left;
 }
 
 /** A TV's screenshots, kept in step with changes from this page and others. */

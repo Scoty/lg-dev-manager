@@ -384,18 +384,24 @@ export async function importDevices(json: unknown, opts: { customRepos?: boolean
  * Move this browser's own TVs (with their logins and screenshots) and custom repositories to the bridge, then remove
  * them from this browser. For a page whose bridge stores them (storage/backend.ts). Returns how many TVs moved.
  */
-export async function moveBrowserDataToBridge(moveShots: (deviceIds: string[]) => Promise<void>, moveRepos: () => Promise<void>): Promise<number> {
+export async function moveBrowserDataToBridge(
+  moveShots: (deviceIds: string[]) => Promise<number>,
+  moveRepos: () => Promise<void>,
+): Promise<{ tvs: number; shotsLeft: number }> {
+  // Repositories first: the one step that can be refused for being too many, before anything else moves.
+  await moveRepos();
   const local = (await listBrowserDevices()).filter((d) => d.auth);
+  let shotsLeft = 0;
   if (local.length) {
     await storageClient().call('store.devices.import', { devices: local.map((d) => ({ ...toStoredInput(d), createdAt: d.createdAt, updatedAt: d.updatedAt })) });
     bridgeCache = null;
-    await moveShots(local.map((d) => d.id));
+    shotsLeft = await moveShots(local.map((d) => d.id));
   }
-  await moveRepos();
   await tx('readwrite', (s) => s.clear());
-  await clearShots().catch(() => {});
+  // Screenshots the bridge didn't take stay in this browser rather than be lost.
+  if (!shotsLeft) await clearShots().catch(() => {});
   notify();
-  return local.length;
+  return { tvs: local.length, shotsLeft };
 }
 
 /** Remove every saved device, their screenshots and the active selection from this browser. */
