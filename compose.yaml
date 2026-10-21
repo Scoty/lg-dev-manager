@@ -7,11 +7,15 @@
 #
 # ⚠️ Don't make it reachable from the internet — no port forwarding, no tunnel or relay on the server. It controls your
 # TVs. The one exception: a Cloudflare Tunnel with Cloudflare Access, set up as the README says (the LGDM_CF_ACCESS_*
-# lines below) — it has no login of its own, so Cloudflare Access is then its only protection: use with caution. It uses plain HTTP: for encryption, put it behind your own HTTPS reverse proxy and set
-# LGDM_PUBLIC_URL to the proxy's https:// address.
+# lines below) — it has no login of its own, so Cloudflare Access is then its only protection: use with caution.
+# It uses plain HTTP: for encryption, put it behind your own HTTPS reverse proxy and set LGDM_PUBLIC_URL to the proxy's
+# https:// address.
 services:
   lg-dev-manager:
-    image: ghcr.io/scoty/lg-dev-manager:2
+    # The newest release, fetched again on every `docker compose up`. (To stay on one major version, use :2 instead of
+    # :latest.)
+    image: ghcr.io/scoty/lg-dev-manager:latest
+    pull_policy: always
     container_name: lg-dev-manager
     # Host networking: the TV scan needs the server's own network, and the bridge must see who connects (with port
     # publishing Docker hides every client's real address). Linux only.

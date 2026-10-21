@@ -109,7 +109,7 @@ docker compose up -d
 docker compose logs lg-dev-manager    # shows the pairing links
 ```
 
-To update: `docker compose pull && docker compose up -d`. Your pairing and TVs stay as they are.
+To update: `docker compose up -d` — it fetches the newest release each time. Your pairing and TVs stay as they are.
 
 ### Example: a Ugreen NAS
 
