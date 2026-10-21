@@ -33,7 +33,9 @@ jobs:
         include:
           - { target: windows-x64, runner: windows-2025 }
           - { target: macos-arm64, runner: macos-15 }
-          - { target: macos-x64, runner: macos-15-intel }
+          # Built on Apple Silicon with x64 Node.js under Rosetta: GitHub's Intel macOS runners took 3–4 minutes for
+          # what takes one here. Install, build, the app (an x64 node binary) and its test all run as x64.
+          - { target: macos-x64, runner: macos-15, arch: x64 }
           - { target: linux-x64, runner: ubuntu-24.04 }
           - { target: linux-arm64, runner: ubuntu-24.04-arm }
     runs-on: ${{ matrix.runner }}
@@ -47,6 +49,7 @@ jobs:
         with:
           # The app packs the node binary that runs the build: the active LTS from .nvmrc.
           node-version-file: .nvmrc
+          architecture: ${{ matrix.arch }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Tag matches the package version
@@ -54,8 +57,12 @@ jobs:
         run: |
           version=$(node -p "require('./apps/bridge/package.json').version")
           test "$TAG" = "bridge-v$version" || { echo "Tag $TAG doesn't match apps/bridge/package.json version $version"; exit 1; }
-      - run: pnpm build
+      # Only the web page: the app bundles the bridge from its source, and type checks run in the build job.
+      - run: pnpm --filter @lgdm/web exec vite build
       - run: node apps/bridge/scripts/build-app.mjs
+      - name: Built for ${{ matrix.target }}
+        shell: bash
+        run: ls apps/bridge/release/*-${{ matrix.target }}.* # the name carries the platform and CPU the app was built for
       # The built executable against the mock TVs: local page, pairing, SSH with a password and with a Dev Mode key.
       - name: Test the app
         shell: bash
