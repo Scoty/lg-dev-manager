@@ -1,11 +1,11 @@
 {
   "name": "@lgdm/web",
-  "version": "1.0.5",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p e2e",
     "lint": "tsc --noEmit && tsc --noEmit -p e2e",

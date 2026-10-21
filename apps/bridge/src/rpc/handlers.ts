@@ -21,6 +21,7 @@ import {
   type ParamsOf,
   type ResultOf,
   BridgeFeatures,
+  StoreErrorCodes,
 } from '@lgdm/protocol';
 import { RpcError } from './errors.js';
 import { BRIDGE_VERSION } from '../version.js';
@@ -35,12 +36,13 @@ import { deviceInfo, generateKey, storageInfo, takeScreenshot } from '../devices
 import { DEFAULT_LGE_URL, devModeStatus, renewDevMode } from '../devices/devmode.js';
 import { tvPower } from '../devices/power.js';
 import { appIcon, hbChannelConfig, installDownloadable, installFromRepo, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
-import type { HttpTrace } from '../repo/repo.js';
+import type { HttpTrace } from '../net/fetch.js';
 import type { RepoRegistry } from '../repo/registry.js';
 import type { LitefinClient } from '../litefin/litefin.js';
 import type { ShellSessions } from '../shell/shells.js';
 import { homeDir, listDir, makeDir, readChunk, removePath, renameFile, statFile, writeFile } from '../files/files.js';
 import type { UploadStore } from './uploads.js';
+import type { BridgeStore } from '../store/store.js';
 import { LineBatcher, clearLog, deleteCrashReport, enableDevLogs, listCrashReports, logCommand, pmLogSet, pmLogShow, readCrashReport, requireRoot } from '../debug/debug.js';
 
 export interface Session {
@@ -62,6 +64,34 @@ export interface RunningCommand {
   ch?: Channel;
   cancelled: boolean;
   cancel(): void;
+}
+
+/**
+ * A running command that can be stopped, and a promise that settles (null) as soon as it is — the call then answers at
+ * once, even if the TV is slow to confirm the channel closed (or has gone offline).
+ */
+function stoppable(): { run: RunningCommand; stopped: Promise<null> } {
+  let onStop: () => void = () => {};
+  const stopped = new Promise<null>((resolve) => (onStop = () => resolve(null)));
+  const run: RunningCommand = {
+    cancelled: false,
+    cancel() {
+      this.cancelled = true;
+      this.ch?.close();
+      onStop();
+    },
+  };
+  return { run, stopped };
+}
+
+/**
+ * A channel being opened, unless Stop comes first (the TV slow to connect, or every channel busy): then null at once,
+ * and a channel that arrives later is closed straight away.
+ */
+async function openUnlessStopped(opening: Promise<Channel>, stopped: Promise<null>): Promise<Channel | null> {
+  const ch = await Promise.race([opening, stopped]);
+  if (!ch) opening.then((late) => late.close(), () => {});
+  return ch;
 }
 
 /** The SSH pool as this client sees it: everything it runs shows up in its console (`cmd.log`). */
@@ -102,7 +132,17 @@ export interface Context {
   lgeUrl?: string;
   /** Started with --dev: unexpected errors include their stack trace. */
   dev?: boolean;
+  /** LAN mode: shared on the local network (reported in system.hello). */
+  lan?: boolean;
+  /** Bridge-side storage (--store): the TVs, custom repositories and screenshots. */
+  store?: BridgeStore;
 }
+
+/** The bridge's storage, or a clear error when it was started without --store. */
+const storeOf = (ctx: Context): BridgeStore => {
+  if (!ctx.store) throw new RpcError(StoreErrorCodes.Off, 'This bridge doesn’t store TVs (start it with --store).');
+  return ctx.store;
+};
 
 /** Console commands and followed logs one tab may run at once. */
 const MAX_STREAMS = 16;
@@ -117,7 +157,7 @@ type Handler<M extends MethodName> = (
   ctx: Context,
 ) => Promise<ResultOf<M>> | ResultOf<M>;
 
-export type HandlerMap = { [M in MethodName]: Handler<M> };
+type HandlerMap = { [M in MethodName]: Handler<M> };
 
 function tokensMatch(a: string, b: string): boolean {
   const ab = Buffer.from(a);
@@ -142,7 +182,8 @@ export const handlers: HandlerMap = {
       bridgeVersion: BRIDGE_VERSION,
       platform: platform(),
       distribution: distribution(),
-      features: [BridgeFeatures.CustomRepos],
+      features: [BridgeFeatures.CustomRepos, ...(ctx.store ? [BridgeFeatures.ServerStore] : [])],
+      ...(ctx.lan ? { lan: true } : {}),
     };
   },
   'system.ping': () => ({ now: Date.now() }),
@@ -192,18 +233,13 @@ export const handlers: HandlerMap = {
 
   'cmd.stream': async ({ device, command, opId }, session, { pool }) => {
     startStream(session, opId);
-    const run: RunningCommand = {
-      cancelled: false,
-      cancel() {
-        this.cancelled = true;
-        this.ch?.close();
-      },
-    };
+    const { run, stopped } = stoppable();
     // Registered before the channel opens, so a quick Stop isn't lost.
     session.streams.set(opId, run);
     try {
       // Not logged as cmd.log: the console already shows the commands the user types, with live output.
-      const ch = await pool.open(device, command);
+      const ch = await openUnlessStopped(pool.open(device, command), stopped);
+      if (!ch) return { exitCode: null, cancelled: true };
       run.ch = ch;
       // One decoder per stream: a character split across two chunks stays whole.
       const decoders = { stdout: new StringDecoder('utf8'), stderr: new StringDecoder('utf8') };
@@ -229,7 +265,7 @@ export const handlers: HandlerMap = {
       const exit = new Promise<number | null>((resolve) => ch.stream.on('close', (code: number | null) => resolve(typeof code === 'number' ? code : null)));
       // stdin stays open (luna-send quits on EOF); a command that waits for input runs until Stop.
       if (run.cancelled) ch.close();
-      const exitCode = await exit;
+      const exitCode = await Promise.race([exit, stopped]);
       return { exitCode: run.cancelled ? null : exitCode, cancelled: run.cancelled };
     } finally {
       session.streams.delete(opId);
@@ -239,21 +275,7 @@ export const handlers: HandlerMap = {
   'logs.stream': async ({ device, source, opId, lines }, session, ctx) => {
     requireRoot(device, source === 'lsmonitor' ? 'The luna monitor' : source === 'dmesg' ? 'dmesg' : 'The system log');
     startStream(session, opId);
-    const run: RunningCommand = {
-      cancelled: false,
-      cancel() {
-        this.cancelled = true;
-        this.ch?.close();
-      },
-    };
-    // Stopping answers at once, even if the TV is slow to confirm the channel closed (or has gone offline).
-    let onCancel: () => void = () => {};
-    const cancelled = new Promise<null>((resolve) => (onCancel = () => resolve(null)));
-    const cancel = run.cancel.bind(run);
-    run.cancel = () => {
-      cancel();
-      onCancel();
-    };
+    const { run, stopped } = stoppable();
     session.streams.set(opId, run);
     const batch = new LineBatcher(
       (l, dropped) => session.emit(LOG_LINES_EVENT, { opId, lines: l, ...(dropped ? { dropped } : {}) } satisfies LogLines),
@@ -264,14 +286,15 @@ export const handlers: HandlerMap = {
       const ssh = sshFor(session, ctx);
       if (source === 'syslog') await enableDevLogs(ssh, device);
       if (run.cancelled) return { exitCode: null, stopped: true };
-      const ch = await ssh.open(device, logCommand(source, lines ?? 100));
+      const ch = await openUnlessStopped(ssh.open(device, logCommand(source, lines ?? 100)), stopped);
+      if (!ch) return { exitCode: null, stopped: true };
       run.ch = ch;
       const stderr: Buffer[] = [];
       ch.stream.on('data', (c: Buffer) => batch.push(c));
       ch.stream.stderr.on('data', (c: Buffer) => stderr.length < 64 && stderr.push(c));
       const exit = new Promise<number | null>((resolve) => ch.stream.on('close', (code: number | null) => resolve(typeof code === 'number' ? code : null)));
       if (run.cancelled) ch.close();
-      const exitCode = await Promise.race([exit, cancelled]);
+      const exitCode = await Promise.race([exit, stopped]);
       batch.flush(true);
       if (!run.cancelled && exitCode !== 0 && !batch.sawOutput) {
         const detail = Buffer.concat(stderr).toString('utf8').trim();
@@ -296,6 +319,20 @@ export const handlers: HandlerMap = {
   'crashes.list': ({ device }, session, ctx) => listCrashReports(sshFor(session, ctx), device),
   'crashes.read': ({ device, path }, session, ctx) => readCrashReport(sshFor(session, ctx), device, path),
   'crashes.delete': async ({ device, path }, session, ctx) => (await deleteCrashReport(sshFor(session, ctx), device, path), {}),
+
+  'store.devices.list': (_p, _s, ctx) => ({ devices: storeOf(ctx).listDevices() }),
+  'store.devices.save': async ({ device }, _s, ctx) => ({ device: await storeOf(ctx).saveDevice(device) }),
+  'store.devices.setInfo': async ({ id, info }, _s, ctx) => (await storeOf(ctx).setDeviceInfo(id, info), {}),
+  'store.devices.remove': async ({ id }, _s, ctx) => (await storeOf(ctx).removeDevice(id), {}),
+  'store.devices.import': async ({ devices }, _s, ctx) => ({ imported: await storeOf(ctx).importDevices(devices) }),
+  'store.repos.get': (_p, _s, ctx) => ({ repos: storeOf(ctx).getRepos() }),
+  'store.repos.set': async ({ repos }, _s, ctx) => (await storeOf(ctx).setRepos(repos), {}),
+  'store.shots.list': ({ deviceId }, _s, ctx) => ({ shots: storeOf(ctx).listShots(deviceId) }),
+  'store.shots.get': ({ id }, _s, ctx) => storeOf(ctx).getShot(id),
+  'store.shots.add': async ({ deviceId, method, at, base64, keepExisting }, _s, ctx) => ({
+    shot: await storeOf(ctx).addShot(deviceId, method, base64, at, keepExisting),
+  }),
+  'store.shots.remove': async ({ ids }, _s, ctx) => (await storeOf(ctx).removeShots(ids), {}),
   'cmd.cancel': ({ opId }, session) => {
     const run = session.streams.get(opId);
     if (!run) return { cancelled: false };

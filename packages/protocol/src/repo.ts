@@ -102,4 +102,8 @@ export const RepoErrorCodes = {
 } as const;
 
 /** Features a bridge supports beyond the protocol version, reported in `system.hello`. */
-export const BridgeFeatures = { CustomRepos: 'customRepos' } as const;
+export const BridgeFeatures = {
+  CustomRepos: 'customRepos',
+  /** 2.0: the bridge stores the TVs, custom repositories and screenshots (store.* methods, `{ stored: id }` targets). */
+  ServerStore: 'serverStore',
+} as const;

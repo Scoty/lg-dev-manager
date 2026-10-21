@@ -4,7 +4,7 @@ import { Alert } from './Alert';
 
 /* ---------------- Confirm dialogs ---------------- */
 
-export interface ConfirmOptions {
+interface ConfirmOptions {
   title: string;
   message: ReactNode;
   confirmText?: string;

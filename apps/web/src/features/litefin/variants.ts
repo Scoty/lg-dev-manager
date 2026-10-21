@@ -4,14 +4,14 @@ import type { LitefinRelease } from '@lgdm/protocol';
  * Litefin's webOS builds, from its release notes ("Which version to use?", .github/RELEASE_NOTES_FOOTER.md in
  * MoazSalem/litefin): one per hardware generation.
  */
-export interface VariantInfo {
+interface VariantInfo {
   label: string;
   /** Who it is for, in the release notes' words. */
   target: string;
   webos: string;
 }
 
-export const KNOWN_VARIANTS: Record<string, VariantInfo> = {
+const KNOWN_VARIANTS: Record<string, VariantInfo> = {
   Modern: { label: 'Modern', target: '2022 and newer TVs, the fastest', webos: 'webOS 22+' },
   Normal: { label: 'Normal', target: '2021 and newer TVs', webos: 'webOS 6+' },
   Legacy: { label: 'Legacy', target: '2018–2020 TVs', webos: 'webOS 4–5' },

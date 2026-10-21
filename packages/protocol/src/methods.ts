@@ -6,6 +6,7 @@ import { CustomRepoUrl, RepoPackage, WebUrl } from './repo';
 import { FileItem, FileName, MAX_READ_CHUNK, RemotePath } from './files';
 import { CrashReportFile, LogSource, PmLogContext, PmLogLevel } from './debug';
 import { LitefinRelease, LitefinVariant } from './litefin';
+import { DeviceId, ShotId, ShotMethod, STORE_LIMITS, StoredCustomRepo, StoredDevice, StoredDeviceInput, StoredShot, StoredTvInfo } from './store';
 
 /**
  * Bumped when the wire contract changes in a way an older peer can't handle (including new methods the
@@ -18,7 +19,8 @@ import { LitefinRelease, LitefinVariant } from './litefin';
  *  v7 — M7: logs.*, pmlog.*, crashes.*
  *  v8 — M8: litefin.list, litefin.install
  * Optional additions that keep the version (older bridges ignore them, the site checks `features`): 1.0.4
- * device.power; 1.0.5 custom repositories (`repo` on the repo methods, repo.check).
+ * device.power; 1.0.5 custom repositories (`repo` on the repo methods, repo.check); 2.0 store.* (feature serverStore)
+ * and `{ stored: id }` in place of any `device` (store.ts).
  */
 export const PROTOCOL_VERSION = 8;
 
@@ -48,7 +50,9 @@ export const Methods = {
       bridgeVersion: z.string(),
       platform: z.string(),
       /** How the bridge was installed, so the site can say how to update it (bridges before 1.0.2 don't say). */
-      distribution: z.enum(['app', 'npm', 'source']).optional(),
+      distribution: z.enum(['app', 'npm', 'source', 'docker']).optional(),
+      /** LAN mode (2.0): the bridge is shared on the local network and this page reached it over the network. */
+      lan: z.boolean().optional(),
       /** Optional features (BridgeFeatures), e.g. custom repositories from 1.0.5. Older bridges don't say. */
       features: z.array(z.string()).optional(),
     }),
@@ -464,6 +468,72 @@ export const Methods = {
   /** Delete a crash report. Only files in the crash folders. */
   'crashes.delete': {
     params: z.object({ device: DeviceTarget, path: RemotePath }),
+    result: z.object({}),
+  },
+
+  // ---- Bridge-side storage (2.0, feature `serverStore`; store.ts). Logins go in, never out. ----
+
+  /** The stored TVs, without their passwords and keys. */
+  'store.devices.list': {
+    params: z.object({}).optional(),
+    result: z.object({ devices: z.array(StoredDevice) }),
+  },
+  /** Add or change a TV. Without `auth`, an existing TV keeps its stored login. */
+  'store.devices.save': {
+    params: z.object({ device: StoredDeviceInput }),
+    result: z.object({ device: StoredDevice }),
+  },
+  /** Remember what a TV said about itself (not an edit: `updatedAt` stays). */
+  'store.devices.setInfo': {
+    params: z.object({ id: DeviceId, info: StoredTvInfo }),
+    result: z.object({}),
+  },
+  /** Remove a TV and its screenshots. */
+  'store.devices.remove': {
+    params: z.object({ id: DeviceId }),
+    result: z.object({}),
+  },
+  /** Many TVs at once, with their logins: a browser moving its own TVs to the bridge, or a backup. */
+  'store.devices.import': {
+    params: z.object({
+      devices: z
+        .array(StoredDeviceInput.extend({ createdAt: z.number().optional(), updatedAt: z.number().optional() }))
+        .max(STORE_LIMITS.devices),
+    }),
+    result: z.object({ imported: z.number() }),
+  },
+  'store.repos.get': {
+    params: z.object({}).optional(),
+    result: z.object({ repos: z.array(StoredCustomRepo) }),
+  },
+  /** Replace the whole list (the browser adds, renames and removes, then saves it). */
+  'store.repos.set': {
+    params: z.object({ repos: z.array(StoredCustomRepo).max(STORE_LIMITS.customRepos) }),
+    result: z.object({}),
+  },
+  /** One TV's screenshots, oldest first (without the images). */
+  'store.shots.list': {
+    params: z.object({ deviceId: DeviceId }),
+    result: z.object({ shots: z.array(StoredShot) }),
+  },
+  'store.shots.get': {
+    params: z.object({ id: ShotId }),
+    result: z.object({ mime: z.string(), base64 }),
+  },
+  /** Keep a screenshot (PNG or JPEG, up to STORE_LIMITS.shotBytes). */
+  'store.shots.add': {
+    params: z.object({
+      deviceId: DeviceId,
+      method: ShotMethod,
+      at: z.number().optional(),
+      base64: base64.max(Math.ceil((STORE_LIMITS.shotBytes * 4) / 3) + 4),
+      /** Moving a browser's screenshots in: refuse (store_full) rather than drop older ones to make room. */
+      keepExisting: z.boolean().optional(),
+    }),
+    result: z.object({ shot: StoredShot }),
+  },
+  'store.shots.remove': {
+    params: z.object({ ids: z.array(ShotId).min(1).max(500) }),
     result: z.object({}),
   },
 } as const;

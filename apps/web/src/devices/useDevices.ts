@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { getActiveDeviceId, listDevices, subscribe, type SavedDevice } from './store';
+import { storageUnavailable } from '../storage/backend';
 
 /** Live list of saved devices plus the active one. */
 export function useDevices() {
@@ -8,10 +9,17 @@ export function useDevices() {
 
   useEffect(() => {
     let alive = true;
-    const load = () =>
+    // Only the newest load counts: when the storing bridge connects, a slower read of this browser's own list that
+    // started first must not land after the bridge's list.
+    let seq = 0;
+    const load = () => {
+      const mine = ++seq;
+      const current = () => alive && mine === seq;
       listDevices()
-        .then((d) => alive && setDevices(d))
-        .catch(() => alive && setDevices([]));
+        .then((d) => current() && setDevices(d))
+        // Stored on the bridge, which is away: keep what's shown (or "loading") until it's back.
+        .catch((e: unknown) => current() && setDevices((prev) => (storageUnavailable(e) ? prev : [])));
+    };
     load();
     const off = subscribe(load);
     return () => {

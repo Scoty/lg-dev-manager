@@ -12,6 +12,7 @@ import { useDevices } from '../../devices/useDevices';
 import { toTarget, type SavedDevice } from '../../devices/store';
 import { modelLabel } from '../../devices/model';
 import { terminals, type Tab } from './store';
+import { TermKeys } from './TermKeys';
 
 /** Rough character cell of 13px JetBrains Mono, for sizing a shell before its terminal is on screen. */
 const CELL = { w: 7.8, h: 17 };
@@ -183,6 +184,7 @@ export function TerminalPage() {
                   )}
                   {!current.pty && current.state !== 'connecting' && current.state !== 'failed' && <DumbShell tab={current} />}
                   <div ref={setStageEl} className={`term-stage${current.term ? '' : ' is-empty'}`} />
+                  <TermKeys tab={current} />
                 </>
               )}
             </div>

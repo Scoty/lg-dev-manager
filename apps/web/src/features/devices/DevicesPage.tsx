@@ -14,8 +14,10 @@ import { useDevices } from '../../devices/useDevices';
 import { DataPrivacyCard } from './DataPrivacyCard';
 import { EditDeviceDialog } from './EditDeviceDialog';
 import { describeLogin } from './auth';
+import { useStoredOnBridge } from '../../storage/backend';
 
 export function DevicesPage() {
+  const onBridge = useStoredOnBridge();
   const { devices, activeId } = useDevices();
   const { ready, call } = useRpc();
   const { confirm, toast } = useFeedback();
@@ -48,7 +50,7 @@ export function DevicesPage() {
       title: `Remove ${d.name}?`,
       message: (
         <>
-          This removes <b>{d.name}</b> and its saved {describeLogin(d.auth)} from this browser. Nothing on the TV changes, and you can
+          This removes <b>{d.name}</b> and its saved {describeLogin(d.auth ?? d.login)} from {d.auth ? 'this browser' : 'the bridge'}. Nothing on the TV changes, and you can
           add it again later.
         </>
       ),
@@ -66,7 +68,7 @@ export function DevicesPage() {
       <PageHeader
         eyebrow="Setup"
         title="Devices"
-        sub="The TVs this browser knows about. The active TV is the one the Apps, Files and Terminal pages work with."
+        sub={`${onBridge ? 'The TVs stored on the bridge, shared by every paired browser.' : 'The TVs this browser knows about.'} The active TV is the one the Apps, Files and Terminal pages work with.`}
         actions={
           <Link to="/devices/new" className="btn btn--primary">
             <Icon name="plus" /> Add a TV
@@ -129,7 +131,7 @@ export function DevicesPage() {
                         <td className="hide-sm">
                           <span className={`badge ${d.mode === 'rooted' ? 'purple' : 'info'}`}>{d.mode === 'rooted' ? 'Rooted' : 'Dev Mode'}</span>
                         </td>
-                        <td className="data-cell-mono hide-sm">{d.username} · {describeLogin(d.auth)}</td>
+                        <td className="data-cell-mono hide-sm">{d.username} · {describeLogin(d.auth ?? d.login)}</td>
                         <td>
                           {active ? (
                             <span className="badge success dot">Active</span>
@@ -175,7 +177,7 @@ export function DevicesPage() {
                                       remove(d);
                                     }}
                                   >
-                                    <Icon name="trash" /> Remove from this browser
+                                    <Icon name="trash" /> {onBridge ? 'Remove from the bridge' : 'Remove from this browser'}
                                   </button>
                                 </>
                               )}

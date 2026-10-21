@@ -4,7 +4,9 @@ import type { AddressInfo } from 'node:net';
 import { makeIconPng, MOCK_CUSTOM_REPO_APPS, startMockRepo, startMockTv, type MockRepo, type MockTv } from '@lgdm/mock-tv';
 import type { DeviceTarget, OpProgress } from '@lgdm/protocol';
 import { findInstallLocation, hbChannelConfig, installFromRepo, listApps } from './apps/apps.js';
-import { finalUrl, imgSources, isNonPublicAddress, normalizePackage, plainText, RepoClient, safeGet, sniffImage } from './repo/repo.js';
+import { imgSources, normalizePackage, plainText, RepoClient } from './repo/repo.js';
+import { finalUrl, isNonPublicAddress, safeGet } from './net/fetch.js';
+import { sniffImage } from './net/image.js';
 import { githubRaw, RepoRegistry } from './repo/registry.js';
 import { RpcError } from './rpc/errors.js';
 import { UploadBudget } from './rpc/uploads.js';
@@ -309,7 +311,7 @@ describe('install from the repository', () => {
 
 describe('pinned connections', () => {
   it('refuse a host name that resolves to this computer at connect time', async () => {
-    const { publicLookup } = await import('./repo/repo.js');
+    const { publicLookup } = await import('./net/fetch.js');
     const err = await new Promise<NodeJS.ErrnoException | null>((r) => publicLookup('localhost', {}, (e) => r(e)));
     expect(err?.code).toBe('EPRIVATE');
   });

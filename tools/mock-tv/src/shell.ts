@@ -5,14 +5,14 @@ import { canWrite, ensureDir, type MockState } from './state.js';
 import { listDir, removeTree, statPath, touch } from './fs.js';
 import { runDebugCommand } from './debug.js';
 
-export interface CommandResult {
+interface CommandResult {
   stdout: string | Buffer;
   stderr?: string;
   /** Exit code. -1 means "never finishes" (for timeout tests). */
   code: number;
 }
 
-export interface CommandContext {
+interface CommandContext {
   state: MockState;
   stdin: Buffer;
 }

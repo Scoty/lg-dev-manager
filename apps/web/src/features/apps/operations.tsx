@@ -12,6 +12,7 @@ import { useRefreshDeviceData, useTvPower } from './queries';
 import { useQueryClient } from '@tanstack/react-query';
 import { INCOMPATIBLE_TEXT, type IncompatibleReason } from '../repo/logic';
 import { repoParam, useRepoSource } from '../repo/source';
+import { fmtBytes } from '../../lib/format';
 
 type Phase = 'send' | 'copy' | 'install';
 
@@ -23,6 +24,8 @@ interface OpState {
   /** For `repo`: "Installing" or "Updating". */
   verb?: string;
   subject: string;
+  /** For `repo`: where the IPK came from ("the Homebrew repository", a custom repository's name, Litefin's releases). */
+  from?: string;
   phase: Phase;
   percent?: number;
   text?: string;
@@ -45,8 +48,6 @@ const PHASES: Record<OpState['kind'], { id: Phase; label: string }[]> = {
 
 const phaseOf = (stage: Exclude<OpProgress['stage'], 'cleanup'>): Phase => (stage === 'upload' || stage === 'verify' ? 'copy' : 'install');
 
-const fmtBytes = (n: number) =>
-  n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`;
 
 function installHint(e: unknown) {
   const { code } = describeError(e);
@@ -135,7 +136,16 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
    */
   const installFromRepo = async (
     pkg: RepoPackage,
-    opts: { channel?: 'stable' | 'beta'; update?: boolean; incompatible?: IncompatibleReason[] | null } = {},
+    opts: {
+      channel?: 'stable' | 'beta';
+      update?: boolean;
+      incompatible?: IncompatibleReason[] | null;
+      /**
+       * Offered on the Installed page, which only knows the official repository: an install over an app that's there
+       * asks first — the TV doesn't record where an app came from, so it may replace a custom repository's or an IPK's.
+       */
+      confirmOfficial?: boolean;
+    } = {},
   ) => {
     if (!device || !client || running) return false;
     const channel = opts.channel ?? 'stable';
@@ -158,6 +168,35 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
       });
       if (!ok) return false;
     }
+    // On the Installed page, an install over an app that's there (an update, or a beta) may replace a build from a
+    // custom repository or an IPK file: ask first. Homebrew Channel only ever comes from the official repository.
+    const installed = apps?.find((a) => a.id === pkg.id);
+    if (opts.confirmOfficial && installed && !source.custom && pkg.id !== APP_ID_HBCHANNEL) {
+      const next = channel === 'beta' ? pkg.manifestBeta?.version : pkg.manifest?.version;
+      const ok = await confirm({
+        title:
+          channel === 'beta'
+            ? `Install the beta of ${pkg.title} from the Homebrew repository?`
+            : opts.update
+              ? `Update ${pkg.title} from the Homebrew repository?`
+              : `Install ${pkg.title} from the Homebrew repository?`,
+        message: (
+          <>
+            <p style={{ marginTop: 0 }}>
+              {next && installed.version
+                ? `This installs the official build of ${pkg.title}, v${next}, from the webOS Homebrew repository over the v${installed.version} on ${device.name}.`
+                : `This installs the official build of ${pkg.title} from the webOS Homebrew repository over the one on ${device.name}.`}
+            </p>
+            <p style={{ marginBottom: 0 }}>
+              If you installed it from a custom repository or an IPK file, this replaces that build with the official one,
+              and its later updates come from the Homebrew repository. The TV doesn’t record where an app came from.
+            </p>
+          </>
+        ),
+        confirmText: channel === 'beta' ? 'Install the beta' : opts.update ? 'Update' : 'Install',
+      });
+      if (!ok) return false;
+    }
     if (source.custom) {
       // Each install from an unofficial repository is the user's own call, with the warning in front of them — and
       // with what it would replace: an app with the same id from the official repository or already on the TV.
@@ -166,7 +205,6 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
         .fetchQuery({ queryKey: ['repo', 'official'], queryFn: () => call('repo.list', {}, 60_000), staleTime: 5 * 60_000 })
         .then((r) => r.packages.find((p) => p.id === pkg.id))
         .catch(() => undefined);
-      const installed = apps?.find((a) => a.id === pkg.id);
       const ok = await confirm({
         title: `Install ${pkg.title} from ${source.custom.name}?`,
         message: (
@@ -200,25 +238,27 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
     }
     const verb = opts.update ? 'Updating' : channel === 'beta' ? 'Installing the beta of' : 'Installing';
     const target = toTarget(device);
-    return runWebInstall(verb, pkg.title, (opId) => client.call('apps.installFromRepo', { device: target, id: pkg.id, channel, opId, ...repoParam(source) }, 20 * 60_000));
+    const from = source.custom ? source.custom.name : 'the Homebrew repository';
+    return runWebInstall(verb, pkg.title, from, (opId) => client.call('apps.installFromRepo', { device: target, id: pkg.id, channel, opId, ...repoParam(source) }, 20 * 60_000));
   };
 
   /** Install one build of a Litefin release from GitHub (M8). */
   const installLitefin = async (tag: string, variant: string, subject: string) => {
     if (!device || !client || running) return false;
     const target = toTarget(device);
-    return runWebInstall('Installing', subject, (opId) => client.call('litefin.install', { device: target, tag, variant, opId }, 20 * 60_000));
+    return runWebInstall('Installing', subject, 'Litefin’s GitHub releases', (opId) => client.call('litefin.install', { device: target, tag, variant, opId }, 20 * 60_000));
   };
 
   /** An install the bridge downloads from the web (Homebrew repo, Litefin), with the progress dialog. */
   const runWebInstall = async (
     verb: string,
     subject: string,
+    from: string,
     run: (opId: string) => Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel' }>,
   ) => {
     if (!device || !client) return false;
     const opId = newOpId();
-    setOp({ kind: 'repo', verb, subject, phase: 'copy', text: 'Starting…' });
+    setOp({ kind: 'repo', verb, subject, from, phase: 'copy', text: 'Starting…' });
     const off = onOpProgress(client, opId, (p) => {
       if (p.stage === 'cleanup') return;
       const phase = phaseOf(p.stage);
@@ -362,8 +402,10 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
                     : 'Installed'
               }
             >
-              {op.done.via === 'hbchannel' ? 'Installed by Homebrew Channel on ' : 'Installed on '}
-              {device?.name}.
+              {/* Where it came from, not how the TV installed it (rooted TVs use Homebrew Channel's installer for every
+                  source, which read as if the app came from the Homebrew repository). */}
+              Installed on {device?.name}
+              {op.from ? ` from ${op.from}` : ''}.
             </Alert>
           )}
           {op.error !== undefined && (

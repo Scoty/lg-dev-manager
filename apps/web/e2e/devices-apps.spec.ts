@@ -75,7 +75,7 @@ test.describe('rooted TV with Homebrew Channel', () => {
     const chooser = page.waitForEvent('filechooser');
     await page.getByRole('button', { name: 'Install IPK' }).click();
     await (await chooser).setFiles(ipk);
-    await expect(page.getByText('Installed by Homebrew Channel on Bedroom.')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Installed on Bedroom.')).toBeVisible({ timeout: 30_000 });
     await page.getByRole('button', { name: 'Done' }).click();
     await expect(page.getByText('org.example.e2eroot')).toBeVisible();
 

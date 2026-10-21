@@ -45,7 +45,7 @@ test('backup: export, remove all, import restores the TV, a hostile backup is re
 
   // Importing the exported file brings the TV back.
   await importFile(page, backupPath);
-  await expect(page.getByText('Imported 1 device.')).toBeVisible();
+  await expect(page.getByText('Imported 1 TV.')).toBeVisible();
   await expect(tvRow).toBeVisible();
 
   // A hand-made backup with a user name that ssh would read as an option is refused, and nothing is added.

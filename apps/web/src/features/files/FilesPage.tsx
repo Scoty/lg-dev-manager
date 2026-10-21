@@ -14,7 +14,6 @@ import { toTarget, type SavedDevice } from '../../devices/store';
 import { NameDialog, PreviewDialog, ProgressDialog, type Preview, type Progress } from './dialogs';
 import {
   crumbsOf,
-  fmtBytes,
   fmtTime,
   imageType,
   isDirLike,
@@ -27,6 +26,7 @@ import {
   type SortKey,
 } from './paths';
 import { readRemoteFile, saveBlob } from './transfer';
+import { count, fmtBytes } from '../../lib/format';
 
 const PREVIEW_TEXT_BYTES = 512 * 1024;
 const PREVIEW_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -253,7 +253,7 @@ function FileBrowser({ device }: { device: SavedDevice }) {
     const finish = () => {
       refresh();
       storage.refetch();
-      if (uploaded) toast({ kind: 'success', title: uploaded === 1 && list.length === 1 ? `Uploaded ${list[0]!.name}` : `Uploaded ${uploaded} ${uploaded === 1 ? 'file' : 'files'}`, text: `To ${dir}.` });
+      if (uploaded) toast({ kind: 'success', title: uploaded === 1 && list.length === 1 ? `Uploaded ${list[0]!.name}` : `Uploaded ${count(uploaded, 'file', 'files')}`, text: `To ${dir}.` });
     };
     for (const [i, file] of list.entries()) {
       const title = list.length > 1 ? `Uploading ${list.length} files` : `Uploading ${file.name}`;
@@ -345,7 +345,7 @@ function FileBrowser({ device }: { device: SavedDevice }) {
       setSelected(new Set());
       refresh();
       storage.refetch();
-      if (deleted) toast({ kind: 'success', title: deleted === 1 && targets.length === 1 ? `Deleted ${targets[0]!.name}` : `Deleted ${deleted} ${deleted === 1 ? 'item' : 'items'}` });
+      if (deleted) toast({ kind: 'success', title: deleted === 1 && targets.length === 1 ? `Deleted ${targets[0]!.name}` : `Deleted ${count(deleted, 'item', 'items')}` });
     };
     for (const [i, f] of targets.entries()) {
       const base = { title: 'Deleting', step: targets.length > 1 ? `${i + 1} of ${targets.length}` : undefined, canCancel: false };
@@ -635,7 +635,7 @@ function FileBrowser({ device }: { device: SavedDevice }) {
 
       <div className="data-foot files-foot">
         <span className="muted">
-          {listing.data ? `${items.length} ${items.length === 1 ? 'item' : 'items'}` : ''}
+          {listing.data ? `${count(items.length, 'item', 'items')}` : ''}
           {chosen.length > 0 ? ` · ${chosen.length} selected` : ''}
         </span>
         {storage.data && (

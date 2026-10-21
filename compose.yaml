@@ -1,0 +1,43 @@
+# LG Dev Manager on a home server or NAS: `docker compose up -d`, then open the pairing link from
+# `docker compose logs lg-dev-manager` in each browser that should use it.
+#
+# Change LGDM_PUBLIC_URL to the addresses you open it at, separated by commas: the server's name and/or its IP, e.g.
+# http://nasname.local:5199,http://192.0.2.10:5199. Only requests for those addresses are answered, and only from
+# devices on your local network. A Ugreen NAS example: examples/ugreen-nas/compose.yaml.
+#
+# ⚠️ Don't make it reachable from the internet — no port forwarding, no tunnel or relay on the server. It controls your
+# TVs. The one exception: a Cloudflare Tunnel with Cloudflare Access, set up as the README says (the LGDM_CF_ACCESS_*
+# lines below) — it has no login of its own, so Cloudflare Access is then its only protection: use with caution.
+# It uses plain HTTP: for encryption, put it behind your own HTTPS reverse proxy and set LGDM_PUBLIC_URL to the proxy's
+# https:// address.
+services:
+  lg-dev-manager:
+    # The newest release (`docker compose pull` fetches it). To stay on one major version, use :2 instead of :latest.
+    image: ghcr.io/scoty/lg-dev-manager:latest
+    container_name: lg-dev-manager
+    # Host networking: the TV scan needs the server's own network, and the bridge must see who connects (with port
+    # publishing Docker hides every client's real address). Linux only.
+    network_mode: host
+    environment:
+      LGDM_PUBLIC_URL: ${LGDM_PUBLIC_URL:-http://nasname.local:5199,http://192.0.2.10:5199}
+      # LGDM_PORT: 5199                    # another port
+      # LGDM_ALLOWED_NETWORKS: 2001:db8::/56   # devices on a network that isn't a private range
+      # LGDM_TOKEN: ...                    # your own token (16+ characters); unset = a random one, kept in /data
+      # LGDM_STORE: 0                      # keep the TVs in each browser instead of here (shared by every browser)
+      # From outside through Cloudflare Access (README → Cloudflare Access; add https://tv.example.com to LGDM_PUBLIC_URL):
+      # LGDM_CF_ACCESS_TEAM: yourteam      # from yourteam.cloudflareaccess.com
+      # LGDM_CF_ACCESS_AUD: ...            # the Access application's audience (AUD) tag
+      # LGDM_CF_ACCESS_ALLOW: you@gmail.com   # emails / service-token client ids, comma-separated
+    volumes:
+      - lgdm-data:/data # the pairing token, and your TVs (with their logins), repositories and screenshots
+      # Or a folder on the server instead of the lgdm-data volume (then delete the volumes: block at the end). The
+      # container runs as user 1000, which must be able to write it: `sudo chown 1000:1000 /path/to/lgdm`, or add
+      # `user: "<uid>:<gid>"` above with your own ids (`id` on the server).
+      # - /volume1/docker/lg-dev-manager:/data
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  lgdm-data:

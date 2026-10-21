@@ -9,7 +9,7 @@ import { repoKey, repoParam, useRepoSource } from './source';
  * The apps of the repository this page shows (useRepoSource): the official Homebrew repository, or a custom one.
  * Fetched by the bridge, which also caches it for a few minutes.
  */
-export function useRepo() {
+function useRepo() {
   const { ready, call } = useRpc();
   const source = useRepoSource();
   return useQuery({

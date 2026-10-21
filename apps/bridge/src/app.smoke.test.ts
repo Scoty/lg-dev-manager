@@ -1,5 +1,6 @@
 // Checks a built bridge end to end, as users get it: the packed local page, pairing, and SSH to the mock TVs with a
-// password and with an encrypted Dev Mode key. Skipped unless LGDM_APP points at one of:
+// password and with an encrypted Dev Mode key. Not part of `pnpm test`: run it with `pnpm --filter
+// lg-dev-manager-bridge test:app` and LGDM_APP pointing at one of:
 // - the standalone app (scripts/build-app.mjs): ssh2 runs bundled, without its native add-ons;
 // - dist/cli.js of the npm package installed from its tarball (CI's npm-package job) — the npm build as npx runs it.
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
@@ -14,6 +15,7 @@ import { PROTOCOL_VERSION } from '@lgdm/protocol';
 import { BRIDGE_VERSION } from './version.js';
 
 const APP = process.env.LGDM_APP;
+if (!APP) throw new Error('Set LGDM_APP to the built app or to the installed npm package’s dist/cli.js (see the top of this file).');
 /** The npm package's cli.js runs under this Node.js; the app is its own executable. */
 const IS_NPM = !!APP?.endsWith('.js');
 const run = (args: string[]): [string, string[]] => (IS_NPM ? [process.execPath, [APP!, ...args]] : [APP!, args]);
@@ -27,7 +29,7 @@ const freePort = () =>
     });
   });
 
-describe.skipIf(!APP)(IS_NPM ? 'npm package' : 'standalone app', () => {
+describe(IS_NPM ? 'npm package' : 'standalone app', () => {
   let app: ChildProcess;
   let port: number;
   let devTv: MockTv;
@@ -82,7 +84,8 @@ describe.skipIf(!APP)(IS_NPM ? 'npm package' : 'standalone app', () => {
     expect(execFileSync(...run(['--version']), { encoding: 'utf8' }).trim()).toBe(BRIDGE_VERSION);
   });
 
-  it.skipIf(IS_NPM)('prints the licenses it carries', () => {
+  // The app carries the licenses of everything bundled in it; the npm package lists its dependencies instead.
+  if (!IS_NPM) it('prints the licenses it carries', () => {
     const licenses = execFileSync(...run(['--license']), { encoding: 'utf8' });
     expect(licenses).toContain('Apache License');
     expect(licenses).toContain('LG Dev Manager contributors'); // NOTICE

@@ -41,15 +41,6 @@ export const isDirLike = (f: FileItem) => f.type === 'd' || (f.type === 'l' && f
 /** Regular files (or links to them) can be previewed and downloaded. */
 export const isFileLike = (f: FileItem) => f.type === '-' || (f.type === 'l' && f.link?.type === '-');
 
-export const fmtBytes = (n: number) =>
-  n >= 1024 ** 3
-    ? `${(n / 1024 ** 3).toFixed(1)} GB`
-    : n >= 1024 ** 2
-      ? `${(n / 1024 ** 2).toFixed(1)} MB`
-      : n >= 1024
-        ? `${(n / 1024).toFixed(n >= 10 * 1024 ? 0 : 1)} KB`
-        : `${n} B`;
-
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 export const fmtTime = (seconds: number) => (seconds > 0 ? dateFmt.format(new Date(seconds * 1000)) : '—');
 

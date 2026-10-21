@@ -16,8 +16,9 @@ import { TV_OFF_HINT, useAppOperations } from './operations';
 import { useInstalledApps, useStorage } from './queries';
 import { useRepoApps, type RepoAppView } from '../repo/useRepoApps';
 import { RepoDetails } from '../repo/RepoDetails';
+import { copyText } from '../../lib/secureContext';
+import { fmtKilobytes } from '../../lib/format';
 
-const fmtKb = (kb: number) => (kb >= 1024 * 1024 ? `${(kb / 1024 / 1024).toFixed(1)} GB` : `${Math.round(kb / 1024)} MB`);
 
 function StorageBar({ device }: { device: SavedDevice }) {
   const { data } = useStorage(device);
@@ -27,7 +28,7 @@ function StorageBar({ device }: { device: SavedDevice }) {
     <div className="storage-bar" title="Developer partition (/media/developer)">
       <Icon name="disk" />
       <span>
-        <b>{fmtKb(data.available)}</b> free of {fmtKb(data.total)}
+        <b>{fmtKilobytes(data.available)}</b> free of {fmtKilobytes(data.total)}
       </span>
       <div className="progress thin">
         <div className={`progress-fill${pct > 90 ? ' danger' : pct > 75 ? ' warning' : ''}`} style={{ width: `${pct}%` }} />
@@ -43,6 +44,8 @@ export function InstalledAppsPage() {
   const { install, remove, launch, busy, dialog } = ops;
   // Homebrew repository entries for installed apps: update badges and details (InstalledComponent in the original).
   const repoApps = useRepoApps(active);
+  // Updates offered here come from the official repository only: they ask first (operations.tsx, confirmOfficial).
+  const detailsActions = { ...ops, installFromRepo: (...[pkg, opts]: Parameters<typeof ops.installFromRepo>) => ops.installFromRepo(pkg, { ...opts, confirmOfficial: true }) };
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const { toast } = useFeedback();
   const [query, setQuery] = useState('');
@@ -189,7 +192,7 @@ export function InstalledAppsPage() {
                         onLaunch={launch}
                         tvOff={ops.tvOff}
                         onRemove={remove}
-                        onUpdate={(v) => ops.installFromRepo(v.pkg, { update: true, incompatible: v.incompatible })}
+                        onUpdate={(v) => ops.installFromRepo(v.pkg, { update: true, incompatible: v.incompatible, confirmOfficial: true })}
                         onDetails={(v) => setDetailsId(v.pkg.id)}
                         busy={busy}
                       />
@@ -218,7 +221,7 @@ export function InstalledAppsPage() {
         view={detailsId ? (repoApps.view.get(detailsId) ?? null) : null}
         device={active}
         ready={repoApps.ready}
-        actions={ops}
+        actions={detailsActions}
         onClose={() => setDetailsId(null)}
       />
       {dialog}
@@ -270,8 +273,11 @@ function AppRow({
       <td className="data-cell-mono hide-sm">
         {app.version ? `v${app.version}` : '—'}
         {update && (
-          <span className="badge warning update-badge" title={`v${update.pkg.manifest?.version} is in the Homebrew repository`}>
-            v{update.pkg.manifest?.version} available
+          <span
+            className="badge warning update-badge"
+            title={`The official webOS Homebrew repository has v${update.pkg.manifest?.version}. If you installed this app from a custom repository or an IPK file, updating replaces it with the official build.`}
+          >
+            v{update.pkg.manifest?.version} available · Homebrew
           </span>
         )}
       </td>
@@ -318,7 +324,10 @@ function AppRow({
                   className="dd-menu-item"
                   onClick={() => {
                     close();
-                    navigator.clipboard.writeText(app.id).then(() => toast({ kind: 'success', title: 'App id copied', text: app.id }));
+                    copyText(app.id).then(
+                      () => toast({ kind: 'success', title: 'App id copied', text: app.id }),
+                      () => toast({ kind: 'danger', title: 'Couldn’t copy', text: app.id }),
+                    );
                   }}
                 >
                   <Icon name="copy" /> Copy app id

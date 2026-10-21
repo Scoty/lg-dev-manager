@@ -83,9 +83,25 @@ test('rooted: update badges on the Installed page, Homebrew Channel updates itse
   // Homebrew Channel 0.7.2 is installed; the repository has 0.7.3.
   await expect(page.getByText('v0.7.3 available')).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Update Homebrew Channel to 0.7.3' }).click();
-  await expect(page.getByText('Installed by Homebrew Channel on Repo Root.')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('Installed on Repo Root from the Homebrew repository.')).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Done' }).click();
   await expect(page.getByText('v0.7.3 available')).toHaveCount(0);
+
+  // Other apps: the badge says the update is the official build, and updating asks first — it may replace a build
+  // from a custom repository or an IPK file (the TV doesn't record where an app came from).
+  const badge = page.getByText('v0.5.0 available · Homebrew');
+  await expect(badge).toBeVisible();
+  await page.getByRole('button', { name: 'Update YouTube AdFree to 0.5.0' }).click();
+  const ask = page.getByRole('dialog', { name: 'Update YouTube AdFree from the Homebrew repository?' });
+  await expect(ask).toContainText('replaces that build with the official one');
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(badge).toBeVisible();
+  await page.getByRole('button', { name: 'Update YouTube AdFree to 0.5.0' }).click();
+  await ask.getByRole('button', { name: 'Update', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Updating YouTube AdFree' }).getByText('Installed on Repo Root from the Homebrew repository.')).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(badge).toHaveCount(0);
 
   // Repo details from the row menu.
   await page.getByRole('button', { name: 'More actions for Moonlight' }).click();

@@ -75,7 +75,7 @@ export async function lunaCall(
 }
 
 /** Map a `returnValue: false` payload to a typed error (LunaUnknownMethodError etc. in remote-luna.service.ts). */
-export function lunaFailure(uri: string, typed: Record<string, unknown>): RpcError {
+function lunaFailure(uri: string, typed: Record<string, unknown>): RpcError {
   const errorText = typeof typed.errorText === 'string' ? typed.errorText : '';
   const detail = JSON.stringify(typed);
   if (errorText.startsWith('Unknown method')) return new RpcError(LunaErrorCodes.UnknownMethod, errorText, detail);

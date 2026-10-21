@@ -23,10 +23,15 @@ const SEARCH_TARGETS = ['urn:lge-com:service:webos-second-screen:1', 'urn:dial-m
 const SWEEP_CONCURRENCY = 96;
 const SWEEP_TIMEOUT_MS = 600;
 const MAX_NETWORKS = 4;
-/** Interfaces that are virtual / VPN and not where a TV would be. */
-const SKIP_IFACE = /^(docker|br-|veth|vmnet|vboxnet|virbr|tailscale|zt|utun|awdl|llw|lo)/i;
+/**
+ * Interfaces that are virtual / VPN and not where a TV would be — Linux/macOS names, and Windows' VirtualBox and VMware
+ * adapters, which could otherwise use up MAX_NETWORKS before the real network. Not Hyper-V's "vEthernet": with an
+ * external switch, that is the real network. `lo` exactly or with a number (lo0), so Windows' "Local Area Connection"
+ * isn't skipped.
+ */
+export const SKIP_IFACE = /^(docker|br-|veth(?!ernet)|vmnet|vboxnet|virbr|tailscale|zt|utun|awdl|llw|lo\d*$|loopback|virtualbox|vmware|zerotier)/i;
 
-export interface ScanOptions {
+interface ScanOptions {
   timeoutMs?: number;
   ssdp?: boolean;
   /** /24 prefixes to sweep, e.g. "192.168.1". Defaults to this computer's networks. */
@@ -125,7 +130,7 @@ function fetchDescription(hit: SsdpHit): Promise<{ name?: string; modelName?: st
 }
 
 /** The /24 networks this computer is on (skipping loopback, VPN and container interfaces). */
-export function localNetworks(): { prefixes: string[]; self: Set<string> } {
+function localNetworks(): { prefixes: string[]; self: Set<string> } {
   const prefixes: string[] = [];
   const self = new Set<string>();
   for (const [name, addrs] of Object.entries(networkInterfaces())) {

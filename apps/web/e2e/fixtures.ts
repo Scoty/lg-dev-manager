@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fakeIpk } from '@lgdm/mock-tv';
 
 export const TOKEN = 'e2e-token';
-export const PASSPHRASE = 'A1B2C3';
+const PASSPHRASE = 'A1B2C3';
 export const ROOTED_PORT = 2222;
 export const NO_PTY_PORT = 2223;
 /** A rooted TV in standby (Quick Start+): reachable, installs work, launching is refused. */

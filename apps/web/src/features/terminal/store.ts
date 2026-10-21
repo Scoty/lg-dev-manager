@@ -5,6 +5,7 @@ import { SHELL_EXIT_EVENT, SHELL_OUTPUT_EVENT, ShellExit, ShellOutput, type Devi
 import type { BridgeClient } from '../../bridge/client';
 import { describeError } from '../../components/ErrorAlert';
 import { openTerminalLink } from './links';
+import { copyText, randomId } from '../../lib/secureContext';
 
 /**
  * Open terminals, kept outside React so tabs (and their scrollback) survive moving between pages — the
@@ -48,7 +49,7 @@ function cssVar(name: string) {
 }
 
 /** xterm colours from the theme's CSS variables (see _tokens.scss → --term-*). */
-export function terminalTheme(): ITheme {
+function terminalTheme(): ITheme {
   const v = (n: string) => cssVar(`--term-${n}`) || undefined;
   return {
     background: cssVar('--bg-card'),
@@ -200,7 +201,7 @@ class TerminalStore {
     const host = document.createElement('div');
     host.className = 'term-host';
     const tab: Tab = {
-      key: crypto.randomUUID(),
+      key: randomId(),
       deviceId: opts.deviceId,
       deviceName: opts.deviceName,
       device: opts.device,
@@ -267,7 +268,7 @@ class TerminalStore {
     term.attachCustomKeyEventHandler((e) => {
       if (e.type === 'keydown' && e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') {
         const sel = term.getSelection();
-        if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+        if (sel) copyText(sel).catch(() => {});
         return false;
       }
       return true;
@@ -299,7 +300,7 @@ class TerminalStore {
   sendDumb(tab: Tab, command: string) {
     const c = command.trim();
     if (!c || tab.state !== 'open') return;
-    const id = crypto.randomUUID().slice(0, 8);
+    const id = randomId().slice(0, 8);
     tab.dumb = [...tab.dumb.slice(-199), { id, input: c, output: '' }];
     this.changed();
     // The marker on its own line, so `&` or a trailing `# comment` in the command can't swallow it.

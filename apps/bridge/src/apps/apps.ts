@@ -17,7 +17,8 @@ import { serveToDevice } from '../ssh/serve.js';
 import { mkdirp, putFile, readFile, rmFile, sha256sum } from '../ssh/transfer.js';
 import { readIpkControl, untrustedIpkProblem } from './ipk.js';
 import { turnOnScreen, tvPower } from '../devices/power.js';
-import type { HttpTrace, RepoClient } from '../repo/repo.js';
+import type { RepoClient } from '../repo/repo.js';
+import type { HttpTrace } from '../net/fetch.js';
 
 /**
  * App management. Port of AppManagerService (dev-manager-desktop src/app/core/services/app-manager.service.ts)
@@ -79,7 +80,7 @@ export async function appIcon(pool: SshRunner, device: DeviceTarget, path: strin
  * appinstalld subscription messages → done / keep going / error (mapAppinstalldResponse in app-manager.service.ts,
  * map_installer_message in ares-install).
  */
-export function appinstalldStep(
+function appinstalldStep(
   msg: Record<string, unknown>,
   expect: RegExp,
   failCode: string,

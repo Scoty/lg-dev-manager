@@ -5,8 +5,9 @@ A browser-based rebuild of [webosbrew/dev-manager-desktop](https://github.com/we
 hosted at **https://lg.scoty.uk** (GitHub Pages, custom domain on Cloudflare DNS).
 
 > **Status:** v1.0.0 released (M10) — full parity with the desktop app (§3), the Litefin repo (M8) and a pre-release
-> security review (§10). The site at lg.scoty.uk deploys from `main` after CI passes; the bridge is on npm.
-> M9 (phones) is skipped for now: phones and tablets get a notice to use a computer instead.
+> security review (§10). The site at lg.scoty.uk deploys from `main` after CI passes; the bridge is on npm and as an app
+> per OS. **2.0** (in testing) adds the Docker image for a NAS or home server: LAN mode with pairing links, phones and
+> tablets through it (M9), and bridge storage (`--store`) — plan in the project doc `docker-2.0.0-plan.md`.
 
 ---
 
@@ -27,17 +28,20 @@ plus raw TCP to the Dev Mode **key server on port 9991**. A web page cannot open
 ```
 ┌──────────────────────────┐   WebSocket (JSON-RPC)   ┌───────────────────┐   SSH / SFTP   ┌────────┐
 │ Web UI (lg.scoty.uk)     │ ───────────────────────▶ │ Bridge (tiny,     │ ─────────────▶ │ LG TV  │
-│ React + TS, Adminator UI │ ◀─────────────────────── │ Node, this PC)    │ ◀───────────── │ webOS  │
+│ React + TS, Adminator UI │ ◀─────────────────────── │ Node, PC or NAS)  │ ◀───────────── │ webOS  │
 └──────────────────────────┘   events, streams        └───────────────────┘   :9991 keysrv └────────┘
 ```
 
-- **Web UI** — everything you see. Static files on GitHub Pages at `lg.scoty.uk`. Also keeps **all settings**
-  (saved TVs, keys, passwords, bridge pairing) in the browser — see *Where settings live* below.
+- **Web UI** — everything you see. Static files on GitHub Pages at `lg.scoty.uk`, also served by every bridge. Keeps
+  the settings (saved TVs, keys, passwords, bridge pairing) in the browser — unless the bridge stores the TVs
+  (`--store`, the Docker image); see *Where settings live* below.
 - **Bridge** — a small headless service (~1 process, no UI) that holds the SSH connections and does the
   network calls the browser can't. It is the replacement for the Rust half of the Tauri app.
-  It is **stateless about devices**: it gets connection details with each call and keeps them in memory only
-  while an SSH connection is pooled (idle connections close after 2 minutes).
-  Distributed as a terminal command: `npx lg-dev-manager-bridge` (needs Node 22+). No desktop app, installer or binary downloads (owner decision).
+  By default it is **stateless about devices**: it gets connection details with each call and keeps them in memory only
+  while an SSH connection is pooled (idle connections close after 2 minutes). With `--store` (2.0) it keeps them itself.
+  Four ways to run it: the standalone app per OS (no Node.js), `npx lg-dev-manager-bridge` (Node 22.12+), `pnpm bridge`
+  from a clone, and (2.0) the Docker image `ghcr.io/scoty/lg-dev-manager` on a NAS or home server, in LAN mode for the
+  whole network. No installers or tray app (owner decision).
 - The bridge can **also serve the Web UI itself** (`http://localhost:5199`), so the app works fully
   offline and without the public site at all.
 
@@ -45,7 +49,14 @@ plus raw TCP to the Dev Mode **key server on port 9991**. A web page cannot open
 - **Saved TVs** (name, address, port, user, key/password): the browser's IndexedDB for the site's origin. Never uploaded
   to the website; sent only to the paired bridge for the call it is making. The bridge never writes them to disk or logs.
 - **Bridge pairing** (bridge address + token): browser `localStorage`.
-- **On the bridge**: only its own pairing token (`~/.lg-dev-manager/bridge.json`).
+- **On the bridge**: only its own pairing token (`~/.lg-dev-manager/bridge.json`) — unless it was started with
+  **`--store`** (2.0; `LGDM_STORE=1`, on in the Docker image). Then it also keeps the TVs with their logins
+  (`devices.json`), the custom repositories (`repos.json`) and the screenshots (`screenshots/`, `screenshots.json`) in
+  the same folder (0700, files 0600, atomic writes), shared by every paired browser and kept in step with a
+  `store.changed` event. Logins go in (add / edit / import / "Move to the bridge") and never come out: browsers get
+  `StoredDevice` (a `login` summary) and send `{ stored: id }` as `device`, which the bridge swaps for the full target
+  before the call is checked (`rpc/dispatch.ts`). Export backup is for browser storage only; with bridge storage, back
+  up the data folder. The page remembers per site which storage its bridge uses (`apps/web/src/storage/backend.ts`).
 - Storage is **per origin**: `lg.scoty.uk`, `localhost:5173` and the bridge-served copy (`localhost:5199`) each have their own list.
   The Devices page has **export / import** (a JSON backup — contains keys, so the UI warns) and **remove all**.
 - The public site ships a strict **Content-Security-Policy** (no third-party or inline scripts; connections only to
@@ -53,10 +64,46 @@ plus raw TCP to the Dev Mode **key server on port 9991**. A web page cannot open
 
 ### Bridge security (non-negotiable)
 Any website you visit could try to talk to `ws://localhost`. So the bridge:
-1. binds to `127.0.0.1` only — nothing else on the network can reach it;
+1. binds to `127.0.0.1` only — nothing else on the network can reach it (except in opt-in **LAN mode**, below);
 2. checks the `Origin` header against an allowlist (`https://lg.scoty.uk` + localhost dev, plus `--allow-origin`);
 3. requires a **pairing token** printed at startup, entered once in the Web UI and kept in browser storage;
 4. never exposes a generic "connect anywhere" socket — only typed SSH/luna operations (luna URIs validated, params shell-quoted).
+
+**Cloudflare Access mode (2.0, opt-in inside LAN mode).** `LGDM_CF_ACCESS_TEAM`, `LGDM_CF_ACCESS_AUD` and
+`LGDM_CF_ACCESS_ALLOW` (all required, plus an https public URL) let requests through a Cloudflare Tunnel in when they
+carry a valid Access JWT (`Cf-Access-Jwt-Assertion`: RS256 with the team's keys, this application's audience, not
+expired, an allowed email or service-token client id; `apps/bridge/src/cfaccess.ts`). Everything else from Cloudflare is
+still refused, so a hostname without Access or a Bypass policy fails closed. The tunnel client must be on the LAN;
+pairing attempts are limited per Access identity; a request for the Cloudflare hostname (the https public URL) needs
+the token even without Cloudflare headers, only that hostname's page may open a WebSocket through Access, and each such
+WebSocket closes after an hour or when the token expires. Allow entries are emails or service-token ids (`….access`),
+matched only against `email` or (no email, empty `sub`) `common_name`. The log prints no pairing link for the
+Cloudflare hostname. The bridge has no
+accounts of its own, so the docs present it as "use with caution" (owner request, 21 Oct 2026).
+
+**LAN mode (2.0, opt-in; the Docker image).** `--listen 0.0.0.0 --public-url http://nas.local:5199` (env `LGDM_LISTEN`,
+`LGDM_PUBLIC_URL`) shares the bridge with browsers on the local network, which use the page it serves. Then:
+- only the public URLs (and localhost, for the health check) pass the Host and Origin checks;
+- only clients on the local network get in — a fail-closed allowlist of its own (loopback, 10/8, 172.16/12,
+  192.168/16, 100.64/10 incl. Tailscale, link-local, fc00::/7), the server's own IPv6 networks (/48–/128, read from its
+  interfaces, so a changing ISP prefix keeps working), plus `LGDM_ALLOWED_NETWORKS`. Anything forwarded from the internet
+  is refused in every mode (Cloudflare headers, `X-Forwarded-For` / `Forwarded` / `X-Real-IP` naming a public address).
+  Limits: a relay on the server itself (ssh -R, frp, ngrok) arrives from 127.0.0.1, and Docker's userland proxy hides
+  the real source address — so the Docker image uses `network_mode: host`, and the docs say never to tunnel it;
+- pairing attempts are rate-limited per device (IPv4 address / IPv6 /64), loopback included: one attempt per
+  connection (frames sent together can't each try a token; a failed one closes it), counted before the check, 5 free,
+  then 30 s doubling to 15 min. A chosen `LGDM_TOKEN` must have 16+ characters, 8+ different;
+- public URLs have no path (a folder on a host shared with other apps would share the origin, its storage and the
+  bridge with them);
+- the bridge prints a pairing link, `<url>/#/pair?token=…` (also for the local page). The fragment never leaves the
+  browser; the page removes it from the address bar, and only on a click checks it with its own bridge (a link can name
+  another port on this computer, never another host; the page then says it replaces the current bridge) before saving
+  it. The app opens lg.scoty.uk ready to pair through a page that forwards to the link, written to a temporary folder
+  only this user can read (`pairing.ts` `pairingPage`, removed after 2 minutes), so no secret appears in a command line
+  other users can see (a one-time localhost redirect did, as its nonce, in 2.0 betas);
+- plain HTTP: the page warns once that keys and passwords cross the LAN unencrypted (HTTPS through the user's own
+  reverse proxy works: the page then uses `wss://` to its own origin). Browser features that need a secure context
+  (`crypto.randomUUID`, the Clipboard API, COOP) have fallbacks (`apps/web/src/lib/secureContext.ts`).
 
 ---
 
@@ -203,13 +250,13 @@ lg-dev-manager/
 | M6 ✅ | Info + Dev Mode renew + screenshot | TV details, session countdown + renew, screenshots. |
 | M7 ✅ | Debug tools | PmLog, log reader, dmesg, crashes, ls-monitor. |
 | M8 ✅ | Litefin repo | **Apps → Litefin repo**: the last 5 Litefin releases from GitHub, every webOS variant installable straight from the page (see §8). |
-| M9 ⏸ | Phones (research) | **Skipped for now** (owner, Oct 2026). Phones and tablets see a notice that the bridge must run on the same computer, that the phone workarounds are risky, and to use a desktop or laptop instead. The research notes stay in §9 for later. |
+| M9 ✅ | Phones | Done in 2.0 a different way: phones and tablets use a bridge on the network (LAN mode, the Docker image) and the page it serves — no bridge on the phone. Pages fit a phone, the terminal has an extra-keys bar, and the notice elsewhere points to Docker. (Was skipped in Oct 2026; the research notes stay in §9.) |
 | M10 ✅ | Ship | v1.0.0: bridge on npm (`npx lg-dev-manager-bridge`, also serves the local page), README with two demos, "preview" label removed, security review (§10), release process (§11). |
 
 Scope is **full parity before release** (v1.0 at M10). The site at **lg.scoty.uk** is already public as a *preview*:
 every push to `main` deploys it, and it shows which features are still to come.
 
-**Browsers:** lg.scoty.uk talking to the bridge on the same computer (`ws://127.0.0.1`) works in Chrome, Edge and Firefox. Where a browser blocks that, open the bridge-served copy at `http://localhost:5199` instead.
+**Browsers:** lg.scoty.uk talking to the bridge on the same computer (`ws://127.0.0.1`) works in Chrome, Edge and Firefox. Where a browser blocks that, open the bridge-served copy at `http://localhost:5199` instead — the docs suggest the local page first. A bridge on another machine (Docker, LAN mode) is used only through the page it serves: an https page can't open `ws://` to another host.
 
 ### Hosting setup (lg.scoty.uk)
 1. Repo **Settings → Pages → Source: GitHub Actions** (the `Deploy web UI` workflow publishes `apps/web/dist`).
@@ -272,11 +319,12 @@ Legacy, newer ones run Modern best, and sometimes an older version is wanted.
 
 ---
 
-## 9. M9 — Phones (research) — skipped for now
+## 9. M9 — Phones (research)
 
-**Status (Oct 2026):** skipped by the owner. Instead, `apps/web/src/shell/PhoneNotice.tsx` shows phone and tablet users
-a warning on every page (dismissible for the session; always shown on the Bridge page) that explains the risk and asks
-them to use a computer. The notes below are kept in case this is picked up again.
+**Status:** skipped in Oct 2026, then done in 2.0 with option 3 below: the bridge runs on a NAS or home server (the
+Docker image, LAN mode) and phones and tablets use the page it serves. Elsewhere (lg.scoty.uk, a local page),
+`apps/web/src/shell/PhoneNotice.tsx` still tells phone and tablet users that a phone can't run the bridge and points to
+Docker. The research notes below are kept for the record.
 
 **The problem.** A phone's browser can open lg.scoty.uk, but it still needs a bridge to speak SSH to the TV, and today
 the bridge is a Node program (`npx`) on the same computer as the browser. Phones can't run that normally.
@@ -378,3 +426,13 @@ Local builds use the code's own version.
    need an Apple Developer ID (notarization) and a Windows code-signing certificate. The app opens
    https://lg.scoty.uk on start (`--no-open` to skip) and reports `distribution: 'app'` in `system.hello`, so the
    update notice points to the releases page. About 120 MB unpacked (it is mostly Node.js), 40 MB to download.
+7. `bridge-v*` also runs **Publish the Docker image** (`.github/workflows/release-docker.yml`, 2.0): builds the
+   `Dockerfile` (the packed npm package with its production dependencies on `node:<.nvmrc>-alpine`, built once on the
+   runner's platform and copied into the amd64 and arm64 images), tests the amd64 image with
+   `apps/bridge/scripts/docker-smoke.mjs` (as compose runs it: host networking, read-only, no capabilities), then pushes
+   `ghcr.io/scoty/lg-dev-manager:X.Y.Z`, `X.Y`, `X` and `latest` with provenance and an SBOM. CI's `docker` job runs the
+   same build and test on every PR. **One-time:** after the first push, make the package public (GitHub → Packages →
+   lg-dev-manager → Package settings → Change visibility). The image sets `LGDM_DISTRIBUTION=docker`,
+   `LGDM_STATE_DIR=/data` (the token and the stored TVs, in a volume), `LGDM_LISTEN=0.0.0.0`, `LGDM_STORE=1` and
+   `LGDM_PORT=5199`; compose adds `LGDM_PUBLIC_URL`. The image's Node.js is `.nvmrc`'s (build-arg `NODE_VERSION`), and
+   `latest` moves only for releases, not prereleases (which go to npm's `next` tag and a GitHub prerelease).

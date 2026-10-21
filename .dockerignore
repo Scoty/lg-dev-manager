@@ -1,0 +1,15 @@
+# Only the sources go into the build; everything else is made inside it.
+.git
+**/node_modules
+**/dist
+**/coverage
+**/playwright-report
+**/test-results
+apps/bridge/web
+apps/bridge/release
+apps/bridge/LICENSE
+apps/bridge/NOTICE
+apps/bridge/README.md
+docs
+*.log
+.env*

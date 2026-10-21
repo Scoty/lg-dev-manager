@@ -1,9 +1,12 @@
+import { parseAllow, parseAud, parseTeamDomain, type CfAccessConfig } from './cfaccess.js';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { isIP } from 'node:net';
 import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_BRIDGE_PORT, DEV_ALLOWED_ORIGINS } from '@lgdm/protocol';
+import { parseNetworks, type LanConfig } from './lan.js';
 import type { WebUi } from './http/static.js';
 import { distribution, standaloneUi } from './standalone.js';
 
@@ -23,13 +26,26 @@ export interface BridgeConfig {
   /** Litefin's GitHub releases API (default api.github.com/repos/MoazSalem/litefin; LGDM_LITEFIN_URL overrides, for tests). */
   litefinUrl?: string;
   dev: boolean;
+  /**
+   * LAN mode (opt-in, `--listen` + `--public-url`): the bridge on a home server, opened from other devices on the
+   * network. Undefined: this computer only (127.0.0.1), as always.
+   */
+  lan?: LanConfig;
+  /**
+   * Bridge-side storage (2.0, opt-in: --store / LGDM_STORE=1; on in the Docker image): the folder that keeps the TVs
+   * (with their logins), the custom repositories and the screenshots — the same folder as the pairing token.
+   */
+  storeDir?: string;
 }
+
+/** Hosts that mean "this computer" for `--listen`. */
+const LOOPBACK_LISTEN = new Set(['127.0.0.1', 'localhost', '::1']);
 
 
 const stateDir = () => process.env.LGDM_STATE_DIR ?? join(homedir(), '.lg-dev-manager');
 
 /** Loads the persisted pairing token, creating one on first run, so pairing survives restarts. */
-export function loadOrCreateToken(reset = false): string {
+function loadOrCreateToken(reset = false): string {
   if (process.env.LGDM_TOKEN) return process.env.LGDM_TOKEN;
   const dir = stateDir();
   const file = join(dir, 'bridge.json');
@@ -84,7 +100,7 @@ export function bundledUi(): WebUi | undefined {
 }
 
 /** `--allow-origin` values: real http(s) origins only (`null` would let sandboxed frames on any site in). */
-export function parseOrigin(value: string): string {
+function parseOrigin(value: string): string {
   let u: URL;
   try {
     u = new URL(value.trim());
@@ -105,8 +121,6 @@ export function parseArgs(argv: string[]): BridgeConfig {
   const all = (name: string) =>
     argv.flatMap((a, i) => (a === `--${name}` && argv[i + 1] && !argv[i + 1]!.startsWith('--') ? [argv[i + 1]!] : []));
 
-  // Always loopback: only programs on this computer can reach the bridge.
-  const host = '127.0.0.1';
   const port = Number(get('port') ?? process.env.LGDM_PORT ?? DEFAULT_BRIDGE_PORT);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`--port must be a number from 1 to 65535`);
   const extra = [...all('allow-origin'), ...(process.env.LGDM_ALLOW_ORIGINS?.split(',') ?? [])]
@@ -115,15 +129,66 @@ export function parseArgs(argv: string[]): BridgeConfig {
   const self = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
   const dev = argv.includes('--dev');
 
+  // Loopback unless LAN mode is asked for explicitly: only programs on this computer can reach the bridge.
+  const listen = (get('listen') ?? process.env.LGDM_LISTEN ?? '127.0.0.1').trim();
+  const lanMode = !LOOPBACK_LISTEN.has(listen);
+  if (lanMode && !isIP(listen)) throw new Error(`--listen ${listen}: use an IP address, e.g. 0.0.0.0 for every network`);
+  const publicUrls = [...all('public-url'), ...(process.env.LGDM_PUBLIC_URL?.split(',') ?? [])]
+    .filter((o) => o.trim())
+    .map((u) => {
+      let origin: string;
+      try {
+        origin = parseOrigin(u);
+      } catch {
+        throw new Error(`--public-url ${u}: not an address like http://nas.local:${port}`);
+      }
+      // The page and its storage belong to the whole origin: with a path (https://home.example/lg) every other app on
+      // that host could talk to the bridge and read the pairing. Give it a host (or port) of its own.
+      const path = new URL(u.trim()).pathname;
+      if (path !== '/' && path !== '') throw new Error(`--public-url ${u}: use the bridge's own address without a path (e.g. https://lg.home.example), not a folder on a site shared with other apps`);
+      return origin;
+    });
+  if (lanMode && !publicUrls.length) {
+    throw new Error(
+      `--listen ${listen} shares the bridge on your network, so it needs --public-url (LGDM_PUBLIC_URL): the address you open it at, e.g. http://nas.local:${port}. Requests for any other address are refused.`,
+    );
+  }
+  if (!lanMode && publicUrls.length) throw new Error('--public-url only applies with --listen (LAN mode).');
+  // Cloudflare Access (cfaccess.ts): opt-in, for reaching a LAN-mode bridge from outside through a Cloudflare Tunnel.
+  const cfTeam = get('cf-access-team') ?? process.env.LGDM_CF_ACCESS_TEAM;
+  const cfAud = get('cf-access-aud') ?? process.env.LGDM_CF_ACCESS_AUD;
+  const cfAllow = [...all('cf-access-allow'), ...(process.env.LGDM_CF_ACCESS_ALLOW?.split(',') ?? [])].map((v) => v.trim().toLowerCase()).filter(Boolean);
+  let cfAccess: CfAccessConfig | undefined;
+  if (cfTeam || cfAud || cfAllow.length) {
+    if (!lanMode) throw new Error('Cloudflare Access (LGDM_CF_ACCESS_*) only applies to a bridge shared on your network (--listen, LAN mode).');
+    if (!cfTeam || !cfAud) throw new Error('Cloudflare Access needs both LGDM_CF_ACCESS_TEAM (your team name) and LGDM_CF_ACCESS_AUD (the application’s audience tag).');
+    // Defence in depth: even if the Access policy lets in more people than meant (Everyone, a whole email domain), the
+    // bridge only takes these.
+    if (!cfAllow.length) throw new Error('Cloudflare Access needs LGDM_CF_ACCESS_ALLOW: the emails (and service-token client ids) that may use the bridge, comma-separated.');
+    if (!publicUrls.some((u) => u.startsWith('https://'))) throw new Error('Cloudflare Access needs the Cloudflare hostname in LGDM_PUBLIC_URL, e.g. https://tv.example.com.');
+    cfAccess = { teamDomain: parseTeamDomain(cfTeam), aud: parseAud(cfAud), allow: parseAllow(cfAllow) };
+  }
+  const token = loadOrCreateToken(argv.includes('--reset-token'));
+  // Shared on the network, the token is what stands between the LAN and the TVs: one someone picked must be long and
+  // not a repeated pattern (the generated one is 22 random characters).
+  if (lanMode && (token.length < 16 || new Set(token).size < 8)) {
+    throw new Error('LGDM_TOKEN must be at least 16 characters, with at least 8 different ones, when the bridge is shared on your network. Leave it unset to get a random one.');
+  }
+
   return {
-    host,
+    host: lanMode ? listen : '127.0.0.1',
     port,
-    allowedOrigins: [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...(dev ? DEV_ALLOWED_ORIGINS : []), ...self, ...extra])],
-    token: loadOrCreateToken(argv.includes('--reset-token')),
+    // lg.scoty.uk only for a bridge on this computer: shared on the network (LAN mode, Docker), its own page at the
+    // public address is the way in — an https site can't open ws:// to another machine anyway, so allowing it would
+    // only matter for a browser on the server itself. --allow-origin adds it back if wanted.
+    allowedOrigins: [...new Set([...(lanMode ? [] : DEFAULT_ALLOWED_ORIGINS), ...(dev ? DEV_ALLOWED_ORIGINS : []), ...self, ...publicUrls, ...extra])],
+    token,
     webRoot: argv.includes('--no-ui') ? undefined : (get('web-root') ?? process.env.LGDM_WEB_ROOT ?? bundledUi()),
     repoUrl: process.env.LGDM_REPO_URL,
     lgeUrl: process.env.LGDM_LGE_URL,
     litefinUrl: process.env.LGDM_LITEFIN_URL,
     dev,
+    storeDir: argv.includes('--store') || /^(1|true|yes|on)$/i.test(process.env.LGDM_STORE ?? '') ? stateDir() : undefined,
+    lan: lanMode ? { publicUrls: [...new Set(publicUrls)], extraNetworks: parseNetworks(process.env.LGDM_ALLOWED_NETWORKS), cfAccess } : undefined,
   };
 }

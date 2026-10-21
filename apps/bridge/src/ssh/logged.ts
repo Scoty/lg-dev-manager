@@ -7,7 +7,7 @@ const MAX_LOG_OUTPUT = 8 * 1024;
 const targetOf = (t: DeviceTarget) => `${t.username}@${t.host}:${t.port}`;
 
 /** Text for the console: UTF-8 output, or a summary for binary data, capped at 8 KB. */
-export function summarize(stdout: Buffer, stderr: Buffer): string | undefined {
+function summarize(stdout: Buffer, stderr: Buffer): string | undefined {
   const parts: string[] = [];
   for (const b of [stdout, stderr]) {
     if (!b.length) continue;

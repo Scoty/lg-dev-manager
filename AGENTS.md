@@ -11,9 +11,11 @@ browse the Homebrew repo, manage files, open a shell, read logs, renew the Dev M
 
 It has two parts (see `PLAN.md` §1 for why):
 
-- `apps/web` — static React UI, hosted at **https://lg.scoty.uk** (GitHub Pages), styled after **Adminator 2026**.
-  It is the only place user settings are stored.
-- `apps/bridge` — small, **stateless** Node service that owns all SSH/SFTP/TCP traffic to the TV.
+- `apps/web` — static React UI, hosted at **https://lg.scoty.uk** (GitHub Pages) and served by every bridge as the
+  local page, styled after **Adminator 2026**. User settings are stored here, unless the bridge stores them (rule 3).
+- `apps/bridge` — small Node service that owns all SSH/SFTP/TCP traffic to the TV. Stateless about devices by default;
+  runs on the user's computer (the app, npx, a clone) or, from 2.0, on a NAS or home server as the Docker image
+  (`Dockerfile`, `compose.yaml`, `examples/ugreen-nas/compose.yaml`) in LAN mode with bridge storage.
 - `tools/mock-tv` — fake webOS TV (SSH + luna-send + key server) for tests and UI development.
 - `packages/protocol` — the shared, typed contract between the two. **Change it first, then both sides.**
 
@@ -21,15 +23,28 @@ It has two parts (see `PLAN.md` §1 for why):
 
 1. **The browser never talks to the TV directly.** Every TV operation is a typed RPC in
    `packages/protocol`, implemented in the bridge. No generic "open socket to host:port" RPC — ever.
-2. **Bridge security stays on.** Bind `127.0.0.1` only (no LAN mode), Origin allowlist, pairing token required,
-   Host header checked. The Vite dev origins are accepted only with `--dev` (`pnpm dev:bridge`).
+2. **Bridge security stays on.** Bind `127.0.0.1` by default, Origin allowlist, pairing token required,
+   Host header checked. **LAN mode** (2.0, for the Docker image) is the one exception and only ever opt-in
+   (`--listen` + `--public-url`, `apps/bridge/src/lan.ts`): then only the configured public addresses are accepted (as hosts and origins — not lg.scoty.uk,
+   which can't reach another machine anyway; `--allow-origin` adds it), only clients on the local network, nothing
+   forwarded from the internet, and wrong tokens are rate-limited. Inside LAN mode,
+   **Cloudflare Access mode** (`LGDM_CF_ACCESS_TEAM` + `_AUD` + `_ALLOW`, `apps/bridge/src/cfaccess.ts`) is the only way
+   in from the internet: a request through Cloudflare needs a valid Access JWT (team keys, audience, expiry, an allowed
+   email / service token), checked by the bridge itself so a Cloudflare misconfiguration fails closed. The Vite dev origins are accepted only with `--dev` (`pnpm dev:bridge`).
    Don't add flags that disable these without an explicit, documented reason. Anything a web page can send the
    bridge (frames, URLs, uploads) must fail that request, never the process — see PLAN.md §10.
-3. **User settings live only in the browser.** Saved TVs (names, addresses, keys, passwords) are kept in
-   IndexedDB (`apps/web/src/devices/store.ts`) and the bridge pairing in `localStorage`. Nothing is ever sent to
-   the website or any third party. Device details go **only to the paired bridge**, inside the RPC that needs them.
-   The bridge must **never persist** device details (no device files, no caches on disk) and must **never log or
-   echo** keys/passwords — not in logs, error messages or `detail`. Only its own pairing token is stored on disk.
+3. **User settings live in the browser — or, opt-in, on the bridge.** By default saved TVs (names, addresses, keys,
+   passwords) are kept in IndexedDB (`apps/web/src/devices/store.ts`) and the bridge pairing in `localStorage`, and the
+   bridge must **never persist** device details — only its own pairing token is on disk. The one exception is
+   **bridge storage** (2.0, `--store` / `LGDM_STORE=1`, on in the Docker image; `apps/bridge/src/store/store.ts`): the
+   bridge keeps the TVs with their logins, the custom repositories and the screenshots in its data folder (files 0600,
+   folder 0700) for every paired browser — and **never sends a stored login back** to any browser (they get
+   `StoredDevice` with a `login` summary and name TVs by `{ stored: id }` — the id only, never an address to override;
+   `publicDevice` builds their copy from `StoredDevice`'s fields only). A stored login goes only to the TV with the SSH
+   host key the bridge recorded for it (`HostKeyPolicy` in `ssh/pool.ts`); moving a password TV to a new address
+   without that key needs the password again. Either way nothing is ever sent to the
+   website or any third party, device details go **only to the paired bridge**, and the bridge must **never log or
+   echo** keys/passwords — not in logs, error messages or `detail`.
    Keep the production Content-Security-Policy strict (no third-party/inline scripts, no new `connect-src` hosts
    without a reason), and never render TV-supplied text as HTML.
 4. **Behavioural parity with the original.** When implementing a feature, read the matching code in
@@ -67,8 +82,10 @@ pnpm e2e            # Playwright: built UI + real bridge + mock TVs + fake Homeb
 pnpm dev:rig        # same rig for trying the UI by hand: http://127.0.0.1:5299, token e2e-token
 pnpm bridge         # the built bridge as users run it from a clone (serves the local page from apps/web/dist)
 pnpm lint && pnpm typecheck
-pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist
+pnpm build          # web → apps/web/dist, bridge → apps/bridge/dist (no type check: that's pnpm typecheck / lint)
 pnpm app            # the standalone bridge app for this OS → apps/bridge/release (after pnpm build)
+docker build -t lg-dev-manager:dev .   # the Docker image (Dockerfile; compose.yaml runs it in LAN mode)
+node apps/bridge/scripts/docker-smoke.mjs lg-dev-manager:dev http://<this machine's IP>:5199   # with the mock TV running
 # Release: see PLAN.md §11 (npm package bundles apps/web/dist as the local page; prepack copies it + LICENSE/NOTICE;
 # a bridge-v* tag publishes npm and the GitHub release with the apps)
 ```
@@ -85,6 +102,11 @@ pnpm app            # the standalone bridge app for this OS → apps/bridge/rele
   (same idea as the original's message-trace dialog).
 - **Commits:** Conventional Commits (`feat(apps): …`, `fix(bridge): …`). Small, focused PRs per milestone item.
 - **Accessibility:** keyboard reachable, visible focus ring (`--primary-ring`), labelled form fields.
+- **Translations (planned) — keep text translatable:** user-facing text belongs in `apps/web` only. The bridge's errors
+  carry a stable `code` (the UI shows its English `message` for now; translations will key on the code), so never make
+  the UI depend on a message's wording. Sizes, numbers and counted nouns go through `apps/web/src/lib/format.ts`
+  (`fmtBytes`, `fmtNumber`, `count`) — no hand-made plurals (`TV${n === 1 ? '' : 's'}`) or `toFixed` sizes — and a
+  sentence is written whole (pick between full sentences rather than gluing fragments), so it can be translated as one.
 - Keep `PLAN.md`'s checklist up to date when a feature lands.
 
 ## Testing expectations
@@ -123,18 +145,18 @@ pnpm app            # the standalone bridge app for this OS → apps/bridge/rele
 | Topic | Decision | Status |
 |---|---|---|
 | Browser↔TV transport | Local bridge over authenticated WebSocket | Decided (technical necessity) |
-| Where the bridge runs | On the user's own computer only, bound to `127.0.0.1`. No NAS / Docker / LAN mode (owner decision, Oct 2026) | Decided |
+| Where the bridge runs | On the user's own computer, bound to `127.0.0.1` (owner decision, Oct 2026). From 2.0 also on a home server / NAS in Docker, in opt-in **LAN mode**: listens on the network for browsers on the LAN, plain HTTP with a warning (HTTPS via the user's reverse proxy), paired with a link from the logs (`#/pair?token=…`), never reachable from the internet (owner decisions, 20 Oct 2026; plan in the project doc `docker-2.0.0-plan.md`) | Decided (2.0) |
 | Bridge distribution | Three ways: `npx lg-dev-manager-bridge` (Node 22.12+), `pnpm bridge` from a clone, or the **standalone app** — a Node.js single executable per OS from the GitHub release (no Node.js needed; `release-app.yml`, PLAN.md §11). All serve the web app at http://localhost:5199 (the "local page"). Still a terminal program: no tray app, installers or running the bridge on the TV (owner decisions, Oct 2026; the standalone app added for 1.0.2) | Decided |
 | Recommended connection | **Rooted (Homebrew Channel SSH)** is listed first and preselected in the wizard; Developer Mode is for TVs that aren't rooted (owner decision, Oct 2026) | Decided |
 | UI framework | React 19 + Vite + TypeScript | Decided |
 | v1 scope | **Full parity** with the desktop app (all of PLAN.md §3, incl. Debug tools) before the public release | Decided |
-| Device/key storage | **Browser only** (IndexedDB + export/import); bridge is stateless and never writes device details to disk | Decided (owner, Oct 2026) |
+| Device/key storage | **Browser** (IndexedDB + export/import) by default; the bridge is stateless (owner, Oct 2026). From 2.0, opt-in **bridge storage** (`--store`, on in Docker): TVs with logins, custom repositories and screenshots in the bridge's data folder, shared by every paired browser; logins never go back to browsers; plain files protected by permissions (no encryption); a browser's own TVs can be moved there (owner, 20 Oct 2026) | Decided |
 | Repo license | Apache-2.0 — free use, attribution via NOTICE (owner, Oct 2026) | Decided |
 | Hosting | GitHub Pages with custom domain **lg.scoty.uk** (Cloudflare DNS), public preview from now, v1.0 at M10 | Decided |
 | Repository | **github.com/Scoty/lg-dev-manager** | Decided |
 | Test devices | Owner tests on both Dev Mode (SSH 9922) and rooted (SSH 22) TVs | Decided |
 | Milestone order | M8 Litefin repo (all webOS variants of the last 5 releases), M9 phone research (skipped for now), M10 ship (owner, Oct 2026) | Decided |
-| Phones and tablets | Not supported. A notice (`shell/PhoneNotice.tsx`) explains that phone workarounds are risky and asks for a desktop or laptop (owner, Oct 2026) | Decided |
+| Phones and tablets | Supported from 2.0 through a bridge on the network (LAN mode / Docker): every page fits a phone (`e2e/phone.spec.ts`), the terminal gets a bar of the keys phone keyboards lack (`TermKeys`), text fields are 16px on touch screens (no iOS zoom). Elsewhere (lg.scoty.uk, the local page) a notice (`shell/PhoneNotice.tsx`) says a phone can't run the bridge and points to Docker (owner, Oct 2026; 2.0 decision 20 Oct 2026) | Decided |
 | Litefin repo (M8) | The **bridge** reads Litefin's GitHub releases and installs a build chosen by tag + variant; the browser never sends a URL | Decided (M8) |
 | Homebrew repo access | The **bridge** fetches repo.webosbrew.org (index, descriptions, icons, IPKs) so the site's CSP needs no new hosts; descriptions are rendered from an allow-list, never as raw HTML | Decided (M4) |
 | Custom repositories | Users can add other Homebrew-format repositories (Setup → Custom repos, owner request Oct 2026). The list lives in the browser; the browser sends a repository's `apps.json` address (the one exception to "the browser never sends a URL"), which the bridge only fetches over **https from public addresses** — never loopback/LAN — for every request and redirect hop (manifests, icons, IPKs included). Installs from them: confirmed each time in the UI, IPK downloaded and checked by the bridge (never handed to the TV as a URL), the IPK must install only the listed app (`untrustedIpkProblem` in `apps/ipk.ts`: one control paragraph whose `Package` is the id, app/package folders and metadata ids equal to it, services `id.*`, no `..` paths or links out), Homebrew Channel's ids (and their prefixes) refused, and the confirm says when it replaces an app with the same id. Backups add them only after a confirm. Always shown with an "unofficial, may contain malware" warning. `LGDM_TEST_ALLOW_LOCAL_REPOS` is for the test rig only | Decided (1.0.5) |

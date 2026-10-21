@@ -12,6 +12,7 @@ import { saveBlob } from '../files/transfer';
 import { MonitorCapture, monitorMatches, parseMonitorLine, parseMonitorQuery, type CallEntry, type MonitorItem } from './parse';
 import { useLogStream } from './useLogStream';
 import { VirtualList } from './VirtualList';
+import { fmtNumber } from '../../lib/format';
 
 /** Raw lines kept for "Save", by size (the calls list keeps its own 20 000 calls). */
 const MAX_RAW_BYTES = 32 * 1024 * 1024;
@@ -184,7 +185,7 @@ function Monitor({ device }: { device: SavedDevice }) {
       {state.phase === 'error' && source === 'live' && <ErrorAlert error={state.error} title="The capture stopped" />}
       {state.dropped > 0 && (
         <Alert kind="warning" title="Some messages were skipped">
-          The bus was busier than the bridge forwards ({state.dropped.toLocaleString()} lines skipped). Filtering doesn’t reduce this — it happens before.
+          The bus was busier than the bridge forwards ({fmtNumber(state.dropped)} lines skipped). Filtering doesn’t reduce this — it happens before.
         </Alert>
       )}
 
@@ -222,7 +223,7 @@ function Monitor({ device }: { device: SavedDevice }) {
       </div>
       <div className="data-foot">
         <span>
-          {rows.length.toLocaleString()} of {total.toLocaleString()} calls
+          {fmtNumber(rows.length)} of {fmtNumber(total)} calls
         </span>
         <span className="muted">Filter: words, sender:…, destination:…, put - in front to exclude.</span>
       </div>
@@ -252,7 +253,7 @@ function CallDetails({ entry, onClose }: { entry: CallEntry; onClose: () => void
           <Icon name="x" />
         </button>
       </div>
-      {entry.skipped ? <p className="muted small">{entry.skipped.toLocaleString()} older replies not kept.</p> : null}
+      {entry.skipped ? <p className="muted small">{fmtNumber(entry.skipped)} older replies not kept.</p> : null}
       <ol className="monitor-messages">
         {entry.messages.map((m, i) => (
           <li key={i}>

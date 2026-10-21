@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BridgeProvider, useBridge } from './bridge/BridgeProvider';
 import { FeedbackProvider } from './components/Feedback';
 import { Layout } from './shell/Layout';
+import { PairRoute } from './features/bridge/PairPage';
 import { BridgePage } from './features/bridge/BridgePage';
 import { DevicesPage } from './features/devices/DevicesPage';
 import { AddDevicePage } from './features/devices/AddDevicePage';
@@ -44,6 +45,7 @@ export function App() {
               <Route element={<Layout />}>
                 <Route index element={<Home />} />
                 <Route path="bridge" element={<BridgePage />} />
+                <Route path="pair" element={<PairRoute />} />
                 <Route path="devices" element={<DevicesPage />} />
                 <Route path="devices/new" element={<AddDeviceRoute />} />
                 <Route path="apps" element={<Navigate to="/apps/installed" replace />} />

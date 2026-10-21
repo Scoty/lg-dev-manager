@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 const [version, tag] = process.argv.slice(2);
 if (!version || !tag) throw new Error('usage: release-notes.mjs <version> <tag>');
 const changelog = readFileSync(fileURLToPath(new URL('../../../CHANGELOG.md', import.meta.url)), 'utf8');
-const start = changelog.search(new RegExp(`^## ${version.replaceAll('.', '\\.')}\\b.*$`, 'm'));
+// "## 2.0.0 — 2026-10-21", not "## 2.0.0-rc.1": the version is followed by a space or the end of the line.
+const start = changelog.search(new RegExp(`^## ${version.replaceAll('.', '\\.')}(?=\\s|$).*$`, 'm'));
 if (start < 0) throw new Error(`CHANGELOG.md has no "## ${version}" section`);
 const rest = changelog.slice(start).split('\n').slice(1).join('\n');
 const next = rest.search(/^## /m);
@@ -20,9 +21,9 @@ process.stdout.write(`${section}
 
 ## ⬇️ The bridge app — no Node.js needed
 
-Download the one for your computer, open it, and paste the pairing token it shows on the **Bridge** page of
-https://lg.scoty.uk (it opens in your browser) or of the local page the bridge serves, http://localhost:5199. Keep its
-window open while you use the app.
+Download the one for your computer and open it. Its window shows the pairing token and a pairing link: use them on
+the local page the bridge serves, http://localhost:5199, or on https://lg.scoty.uk (it opens in your browser, ready to
+pair). Keep the window open while you use the app.
 
 | Computer | Download |
 |---|---|
@@ -40,4 +41,11 @@ The first time:
 
 Prefer Node.js? \`npx lg-dev-manager-bridge@${version}\` runs the same bridge. Check a download against
 \`SHA256SUMS.txt\` with \`shasum -a 256\` (macOS, Linux) or \`Get-FileHash\` (Windows).
+
+## 🐳 On a NAS or home server
+
+Run it once for every computer, phone and tablet on your network: \`ghcr.io/scoty/lg-dev-manager:${version}\` (amd64,
+arm64) with [compose.yaml](https://github.com/Scoty/lg-dev-manager/blob/${tag}/compose.yaml), or the
+[Ugreen NAS example](https://github.com/Scoty/lg-dev-manager/blob/${tag}/examples/ugreen-nas/compose.yaml). See
+[Run it on a NAS or home server](https://github.com/Scoty/lg-dev-manager#docker) in the read me.
 `);

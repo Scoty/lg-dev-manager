@@ -7,6 +7,7 @@ import { expect, setTheme, test } from './fixtures';
  */
 const PAGES: [path: string, heading: RegExp][] = [
   ['/bridge', /Connect the\s*bridge/],
+  ['/pair', /Pair this\s*browser/],
   ['/devices', /^Devices/],
   ['/devices/new', /Add a\s*TV/],
   ['/repos', /Custom\s*repositories/],

@@ -13,8 +13,9 @@ import { useRpc } from '../../bridge/useRpc';
 import { useDevices } from '../../devices/useDevices';
 import { toTarget, type SavedDevice } from '../../devices/store';
 import { saveBlob } from '../files/transfer';
-import { fmtBytes } from '../info/shots';
+import { count, fmtBytes } from '../../lib/format';
 import { parseCrashName } from './parse';
+import { copyText } from '../../lib/secureContext';
 
 /** Crash reports (CrashesComponent + crash DetailsComponent). Works for Developer Mode logins too. */
 export function CrashesPage() {
@@ -88,7 +89,7 @@ function Crashes({ device }: { device: SavedDevice }) {
           {q.data?.dir && <span className="muted mono small">{q.data.dir}</span>}
         </div>
         <div className="data-toolbar-right">
-          {q.data && <span className="muted count-label">{reports.length} {reports.length === 1 ? 'report' : 'reports'}</span>}
+          {q.data && <span className="muted count-label">{count(reports.length, 'report', 'reports')}</span>}
           <button type="button" className="btn btn--icon btn--ghost" onClick={() => q.refetch()} disabled={!ready || q.isFetching} aria-label="Reload">
             <Icon name="refresh" />
           </button>
@@ -173,7 +174,7 @@ function CrashDialog({
   });
   const copy = () =>
     q.data &&
-    navigator.clipboard.writeText(q.data.text).then(
+    copyText(q.data.text).then(
       () => toast({ kind: 'success', title: 'Crash report copied' }),
       () => toast({ kind: 'danger', title: 'Couldn’t copy' }),
     );

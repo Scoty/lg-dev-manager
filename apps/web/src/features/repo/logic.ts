@@ -78,5 +78,3 @@ export function stateOf(pkg: RepoPackage, installedVersion: string | undefined):
   return hasUpdate(pkg.manifest?.version, installedVersion) ? 'update' : 'installed';
 }
 
-export const fmtSize = (n?: number) =>
-  n === undefined ? undefined : n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;

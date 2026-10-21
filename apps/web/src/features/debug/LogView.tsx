@@ -11,9 +11,11 @@ import { saveBlob } from '../files/transfer';
 import { LOG_LEVELS, levelRank, shortTime, type LogEntry, type LogLevel } from './parse';
 import { useLogStream } from './useLogStream';
 import { VirtualList } from './VirtualList';
+import { copyText } from '../../lib/secureContext';
+import { fmtNumber } from '../../lib/format';
 
 /** Lines kept in the browser per log (LogReaderComponent.retainLogs). */
-export const RETAIN = 10_000;
+const RETAIN = 10_000;
 const ROW = 24;
 
 const LEVEL_LABEL: Record<LogLevel, string> = {
@@ -27,7 +29,7 @@ const LEVEL_LABEL: Record<LogLevel, string> = {
   debug: 'DEBUG',
 };
 
-export interface LogColumn {
+interface LogColumn {
   key: string;
   label: string;
   /** CSS grid track. */
@@ -209,7 +211,7 @@ export function LogView({
       {state.phase === 'error' && <ErrorAlert error={state.error} title="Couldn’t follow the log" action={<button type="button" className="btn btn--sm btn--ghost" onClick={restart}>Try again</button>} />}
       {state.dropped > 0 && (
         <Alert kind="warning" title="Some lines were skipped">
-          The log was busier than the bridge forwards ({state.dropped.toLocaleString()} lines skipped). Save it on the TV instead if you need every line.
+          The log was busier than the bridge forwards ({fmtNumber(state.dropped)} lines skipped). Save it on the TV instead if you need every line.
         </Alert>
       )}
 
@@ -243,7 +245,7 @@ export function LogView({
       />
       <div className="data-foot">
         <span>
-          {shown.length.toLocaleString()} of {entries.length.toLocaleString()} lines{entries.length >= RETAIN ? ` (the newest ${RETAIN.toLocaleString()} are kept)` : ''}
+          {fmtNumber(shown.length)} of {fmtNumber(entries.length)} lines{entries.length >= RETAIN ? ` (the newest ${fmtNumber(RETAIN)} are kept)` : ''}
         </span>
         <span className="muted">Click a line for details.</span>
       </div>
@@ -276,7 +278,7 @@ function LogDetails({ entry, onClose }: { entry: LogEntry; onClose: () => void }
         <button
           type="button"
           className="btn btn--sm btn--ghost"
-          onClick={() => navigator.clipboard.writeText(entry.raw).then(() => toast({ kind: 'success', title: 'Line copied' }), () => toast({ kind: 'danger', title: 'Couldn’t copy' }))}
+          onClick={() => copyText(entry.raw).then(() => toast({ kind: 'success', title: 'Line copied' }), () => toast({ kind: 'danger', title: 'Couldn’t copy' }))}
         >
           <Icon name="copy" /> Copy line
         </button>

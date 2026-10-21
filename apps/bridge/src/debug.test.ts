@@ -1,10 +1,9 @@
-import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { CRASH_DIR, SYSLOG, startMockTv, type MockTv } from '@lgdm/mock-tv';
-import { PROTOCOL_VERSION } from '@lgdm/protocol';
 import { startServer } from './server.js';
+import { connect, type TestClient } from './testing/rpcClient.js';
 import { SshPool } from './ssh/pool.js';
 import { RepoClient } from './repo/repo.js';
 import { LineBatcher } from './debug/debug.js';
@@ -15,22 +14,10 @@ let server: Server;
 let root: MockTv;
 let dev: MockTv;
 let ws: WebSocket;
-let nextId = 1;
-const frames: any[] = [];
+let client: TestClient;
+let frames: any[] = [];
 
-function call(method: string, params?: unknown): Promise<any> {
-  const id = nextId++;
-  return new Promise((resolve) => {
-    ws.on('message', function onMsg(raw) {
-      const msg = JSON.parse(raw.toString());
-      if (msg.id === id) {
-        ws.off('message', onMsg);
-        resolve(msg);
-      }
-    });
-    ws.send(JSON.stringify({ id, method, params }));
-  });
-}
+const call = (method: string, params?: unknown): Promise<any> => client.call(method, params);
 const lines = (opId: string) => frames.filter((m) => m.event === 'logs.lines' && m.data.opId === opId).flatMap((m) => m.data.lines as string[]);
 const until = async (fn: () => boolean, ms = 5000) => {
   const end = Date.now() + ms;
@@ -44,10 +31,9 @@ beforeAll(async () => {
   [root, dev] = await Promise.all([startMockTv({ username: 'root', password: 'alpine' }), startMockTv()]);
   root.state.debug.every = 100;
   server = await startServer({ host: '127.0.0.1', port: 0, allowedOrigins: [ORIGIN], token: TOKEN, dev: true }, new SshPool(), new RepoClient('http://127.0.0.1:1/api'));
-  ws = new WebSocket(`ws://127.0.0.1:${(server.address() as AddressInfo).port}/rpc`, { headers: { Origin: ORIGIN } });
-  ws.on('message', (raw) => frames.push(JSON.parse(raw.toString())));
-  await new Promise((r) => ws.once('open', r));
-  await call('system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
+  client = await connect(server, { origin: ORIGIN, token: TOKEN });
+  ws = client.ws;
+  frames = client.messages;
 });
 afterAll(async () => {
   ws.close();

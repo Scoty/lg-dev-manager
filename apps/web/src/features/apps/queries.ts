@@ -4,8 +4,8 @@ import { useRpc } from '../../bridge/useRpc';
 import { toTarget, type SavedDevice } from '../../devices/store';
 
 /** Query keys include `updatedAt` so editing a TV's address or login refetches everything. */
-export const appsKey = (d: SavedDevice) => ['apps', d.id, d.updatedAt] as const;
-export const storageKey = (d: SavedDevice) => ['storage', d.id, d.updatedAt] as const;
+const appsKey = (d: SavedDevice) => ['apps', d.id, d.updatedAt] as const;
+const storageKey = (d: SavedDevice) => ['storage', d.id, d.updatedAt] as const;
 
 export function useInstalledApps(device: SavedDevice | null) {
   const { ready, call } = useRpc();

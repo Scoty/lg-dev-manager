@@ -3,7 +3,8 @@ import { isIP } from 'node:net';
 import { RepoErrorCodes } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
 import { bridgeUploadBudget, type UploadBudget } from '../rpc/uploads.js';
-import { finalUrl, isNonPublicAddress, RepoClient, type HttpTrace } from './repo.js';
+import { RepoClient } from './repo.js';
+import { finalUrl, isNonPublicAddress, type HttpTrace } from '../net/fetch.js';
 
 const noTrace: HttpTrace = (_host, _what, run) => run();
 

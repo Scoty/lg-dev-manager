@@ -21,6 +21,7 @@ import { useHbChannel, useRepoIndex } from '../repo/queries';
 import { saveBlob } from '../files/transfer';
 import { ScreenshotCard } from './ScreenshotCard';
 import { fmtCountdown, parseRemaining, renewScript, resetUrl } from './renewScript';
+import { copyText } from '../../lib/secureContext';
 
 /** Device info (InfoComponent in the original): the TV, its Developer Mode session, screenshots and Homebrew Channel. */
 export function InfoPage() {
@@ -214,7 +215,7 @@ function CopyBox({ text, label }: { text: string; label: string }) {
         aria-label={`Copy ${label}`}
         title="Copy"
         onClick={() =>
-          navigator.clipboard.writeText(text).then(
+          copyText(text).then(
             () => toast({ kind: 'success', title: `${label} copied` }),
             () => toast({ kind: 'warning', title: 'Copy failed', text: 'Select the text and copy it by hand.' }),
           )
@@ -277,7 +278,7 @@ function AutoRenewDialog({ open, onClose, device, token }: { open: boolean; onCl
                   type="button"
                   className="btn btn--ghost"
                   onClick={() =>
-                    navigator.clipboard.writeText(script).then(
+                    copyText(script).then(
                       () => toast({ kind: 'success', title: 'Script copied' }),
                       () => toast({ kind: 'warning', title: 'Copy failed' }),
                     )
@@ -292,8 +293,9 @@ function AutoRenewDialog({ open, onClose, device, token }: { open: boolean; onCl
             </>
           ) : (
             <Alert kind="info">
-              The script needs the TV’s SSH key in the usual PEM / OpenSSH form, and an address and user name the add-TV form accepts. This TV’s
-              saved settings don’t have that — edit the TV, or use the renew URL instead.
+              {device.auth
+                ? 'The script needs the TV’s SSH key in the usual PEM / OpenSSH form, and an address and user name the add-TV form accepts. This TV’s saved settings don’t have that — edit the TV, or use the renew URL instead.'
+                : 'This TV is stored on the bridge, which never sends its key back to a browser, so the script (which holds the key) can’t be made here. Use the renew URL instead.'}
             </Alert>
           ))}
         {tab === 'ifttt' && (

@@ -38,7 +38,8 @@ export const HIDDEN_PASSPHRASE = '[passphrase hidden]';
  * shows until the user asks to see the key (screens get shared and recorded). Copy / download use the real one.
  */
 export function renewScript(device: SavedDevice, opts: { redact?: boolean } = {}): string | null {
-  if (device.auth.kind !== 'key') return null;
+  // A TV stored on the bridge has no key here: the bridge never sends logins back.
+  if (device.auth?.kind !== 'key') return null;
   const target = sshTarget(device);
   if (!target) return null;
   const key = device.auth.privateKey.replace(/\r\n?/g, '\n').trim();

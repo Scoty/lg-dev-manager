@@ -13,7 +13,7 @@ import { useDevices } from '../../devices/useDevices';
 import type { SavedDevice } from '../../devices/store';
 import { useAppOperations } from '../apps/operations';
 import { useInstalledApps } from '../apps/queries';
-import { fmtBytes } from '../info/shots';
+import { fmtBytes } from '../../lib/format';
 import { compareVersions, suggestedVariant, variantColumns, variantInfo } from './variants';
 
 const KEY = ['litefin-releases'];

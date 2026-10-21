@@ -33,7 +33,9 @@ jobs:
         include:
           - { target: windows-x64, runner: windows-2025 }
           - { target: macos-arm64, runner: macos-15 }
-          - { target: macos-x64, runner: macos-15-intel }
+          # Built on Apple Silicon (GitHub's Intel macOS runners took ~4 minutes for what takes one here): the app is
+          # made from nodejs.org's x64 node binary, and tested under Rosetta.
+          - { target: macos-x64, runner: macos-15, arch: x64 }
           - { target: linux-x64, runner: ubuntu-24.04 }
           - { target: linux-arm64, runner: ubuntu-24.04-arm }
     runs-on: ${{ matrix.runner }}
@@ -54,15 +56,33 @@ jobs:
         run: |
           version=$(node -p "require('./apps/bridge/package.json').version")
           test "$TAG" = "bridge-v$version" || { echo "Tag $TAG doesn't match apps/bridge/package.json version $version"; exit 1; }
-      - run: pnpm build
-      - run: node apps/bridge/scripts/build-app.mjs
+      # Only the web page: the app bundles the bridge from its source.
+      - run: pnpm --filter @lgdm/web build
+      # Another CPU than the runner's (macos-x64 on Apple Silicon): that CPU's node binary of the same version, from
+      # nodejs.org and checked against its published SHA-256.
+      - name: Node.js for ${{ matrix.target }}
+        if: matrix.arch
+        shell: bash
+        run: |
+          v="v$(cat .nvmrc)"
+          f="node-$v-darwin-${{ matrix.arch }}.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "https://nodejs.org/dist/$v/$f"
+          curl -fsSL "https://nodejs.org/dist/$v/SHASUMS256.txt" | grep " $f\$" | shasum -a 256 -c -
+          tar -xzf "$f"
+          echo "TARGET_NODE=$RUNNER_TEMP/${f%.tar.gz}/bin/node" >> "$GITHUB_ENV"
+      - shell: bash
+        run: node apps/bridge/scripts/build-app.mjs ${TARGET_NODE:+--target-node "$TARGET_NODE" --arch ${{ matrix.arch }}}
+      - name: Built for ${{ matrix.target }}
+        shell: bash
+        run: ls apps/bridge/release/*-${{ matrix.target }}.* # the name carries the platform and CPU the app was built for
       # The built executable against the mock TVs: local page, pairing, SSH with a password and with a Dev Mode key.
       - name: Test the app
         shell: bash
         run: |
           app="$PWD/apps/bridge/release/bin/lg-dev-manager-bridge"
           [ "$RUNNER_OS" = Windows ] && app="$app.exe"
-          LGDM_APP="$app" pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
+          LGDM_APP="$app" pnpm --filter lg-dev-manager-bridge test:app
       - uses: actions/upload-artifact@v7
         with:
           name: app-${{ matrix.target }}
@@ -103,5 +123,6 @@ jobs:
             gh release edit "$TAG" --title "LG Dev Manager $version" --notes-file notes.md
             gh release upload "$TAG" dist/* --clobber
           else
-            gh release create "$TAG" dist/* --title "LG Dev Manager $version" --notes-file notes.md --verify-tag --latest
+            case "$version" in *-*) latest=--prerelease ;; *) latest=--latest ;; esac
+            gh release create "$TAG" dist/* --title "LG Dev Manager $version" --notes-file notes.md --verify-tag "$latest"
           fi

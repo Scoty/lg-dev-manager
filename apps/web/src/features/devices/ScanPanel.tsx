@@ -13,7 +13,7 @@ export function tvLabel(tv: ScanResult): string {
 }
 
 /** Same address, ignoring case and IPv6 brackets. */
-export const sameHost = (a: string, b: string) => a.trim().replace(/^\[|\]$/g, '').toLowerCase() === b.trim().replace(/^\[|\]$/g, '').toLowerCase();
+const sameHost = (a: string, b: string) => a.trim().replace(/^\[|\]$/g, '').toLowerCase() === b.trim().replace(/^\[|\]$/g, '').toLowerCase();
 
 /** Saved TVs at this address. */
 export const savedAt = (saved: readonly SavedDevice[], host: string) => saved.filter((d) => sameHost(d.host, host));

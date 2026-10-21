@@ -1,11 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BridgeClient, BridgeError } from './client';
 import { bridgeUrlProblem, loadSettings, saveSettings, type BridgeSettings } from './settings';
+import { BridgeFeatures } from '@lgdm/protocol';
+import { resetStorage, setStorageBridge } from '../storage/backend';
 
-export type BridgeStatus =
+type BridgeStatus =
   | { state: 'unpaired' }
   | { state: 'connecting' }
-  | { state: 'connected'; bridgeVersion: string; platform: string; distribution?: 'app' | 'npm' | 'source'; features?: string[] }
+  | {
+      state: 'connected';
+      bridgeVersion: string;
+      platform: string;
+      distribution?: 'app' | 'npm' | 'source' | 'docker';
+      features?: string[];
+      /** LAN mode: the bridge is shared on the local network (the Docker image). */
+      lan?: boolean;
+    }
   /** `retrying`: the provider keeps trying in the background and switches to `connected` by itself when it works. */
   | { state: 'error'; code: string; message: string; retrying?: boolean };
 
@@ -46,16 +56,20 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       if (gen !== generation.current) return c.close();
       attempt.current = 0;
       setClient(c);
+      // Where the TVs live: on this bridge if it stores them (2.0, --store), else in this browser.
+      setStorageBridge(c, !!hello.features?.includes(BridgeFeatures.ServerStore));
       setStatus({
         state: 'connected',
         bridgeVersion: hello.bridgeVersion,
         platform: hello.platform,
         distribution: hello.distribution,
         features: hello.features,
+        lan: hello.lan,
       });
       c.onClose = (reason) => {
         if (gen !== generation.current) return;
         setClient(null);
+        setStorageBridge(null);
         if (reason === 'unauthorized') {
           setStatus({ state: 'error', code: 'unauthorized', message: 'The bridge rejected the pairing token.' });
           return;
@@ -68,7 +82,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
       if (gen !== generation.current) return;
       const err = e instanceof BridgeError ? e : new BridgeError('unknown', String(e));
       setClient(null);
-      const retrying = err.code !== 'unauthorized' && err.code !== 'protocol_mismatch';
+      const retrying = err.code !== 'unauthorized' && err.code !== 'protocol_mismatch' && err.code !== 'rate_limited';
       setStatus((prev) =>
         prev.state === 'error' && prev.code === err.code && prev.message === err.message && !!prev.retrying === retrying
           ? prev // same as before: no re-render, nothing on screen changes
@@ -110,6 +124,9 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
         const problem = bridgeUrlProblem(s.url);
         if (problem) throw new BridgeError('bad_url', problem);
         client?.close();
+        // close() doesn't report the old connection closing: let go of its storage now, so nothing reads from a closed
+        // client (or from the old bridge) until the new one says what it stores.
+        setStorageBridge(null);
         saveSettings(s);
         setSettings(s);
         await connect(s);
@@ -125,6 +142,7 @@ export function BridgeProvider({ children }: { children: ReactNode }) {
         saveSettings(null);
         setSettings(null);
         setClient(null);
+        resetStorage();
         setStatus({ state: 'unpaired' });
       },
     }),

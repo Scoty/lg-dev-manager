@@ -60,4 +60,6 @@ export const DeviceErrorCodes = {
   CommandFailed: 'command_failed',
   /** The operation needs a different login (root, or Developer Mode's prisoner). */
   WrongLogin: 'wrong_login',
+  /** A TV stored on the bridge answered with another host key than the one it had: not the same TV (or it was reset). */
+  HostKeyChanged: 'ssh_host_key_changed',
 } as const;

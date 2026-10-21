@@ -1,10 +1,9 @@
-import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { fakeIpk, startMockRepo, startMockTv, type MockRepo, type MockTv } from '@lgdm/mock-tv';
-import { PROTOCOL_VERSION } from '@lgdm/protocol';
 import { startServer } from './server.js';
+import { connect, type TestClient } from './testing/rpcClient.js';
 import { SshPool } from './ssh/pool.js';
 import { RepoClient } from './repo/repo.js';
 
@@ -14,31 +13,18 @@ let server: Server;
 let tv: MockTv;
 let repo: MockRepo;
 let ws: WebSocket;
-let nextId = 1;
-const frames: string[] = [];
+let client: TestClient;
+let frames: string[] = [];
 
-function call(method: string, params?: unknown): Promise<any> {
-  const id = nextId++;
-  return new Promise((resolve) => {
-    ws.on('message', function onMsg(raw) {
-      frames.push(raw.toString());
-      const msg = JSON.parse(raw.toString());
-      if (msg.id === id) {
-        ws.off('message', onMsg);
-        resolve(msg);
-      }
-    });
-    ws.send(JSON.stringify({ id, method, params }));
-  });
-}
+const call = (method: string, params?: unknown): Promise<any> => client.call(method, params);
 
 beforeAll(async () => {
   tv = await startMockTv({ username: 'root', password: 'S3cr3t-pa55' });
   repo = await startMockRepo();
   server = await startServer({ host: '127.0.0.1', port: 0, allowedOrigins: [ORIGIN], token: TOKEN, dev: true }, new SshPool(), new RepoClient(repo.url));
-  ws = new WebSocket(`ws://127.0.0.1:${(server.address() as AddressInfo).port}/rpc`, { headers: { Origin: ORIGIN } });
-  await new Promise((r) => ws.once('open', r));
-  await call('system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
+  client = await connect(server, { origin: ORIGIN, token: TOKEN });
+  ws = client.ws;
+  frames = client.frames;
 });
 afterAll(async () => {
   ws.close();

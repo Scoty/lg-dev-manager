@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.0.0 — 2026-10-21
+
+- 🔗 **Pairing links.** The bridge prints a link that pairs a browser with one click (`…/#/pair?token=…`); the app
+  opens lg.scoty.uk ready to pair. The token stays in the browser (it's after `#`), is removed from the address bar,
+  and is checked with the bridge before it's saved.
+- 🏠 **LAN mode** (for running the bridge on a home server or NAS, as the Docker image does): `--listen` and
+  `--public-url` share the bridge with browsers on your network, which open the page it serves. Off unless asked for.
+  Only devices on your local network get in, nothing forwarded from the internet (e.g. a Cloudflare Tunnel), pairing
+  attempts are rate-limited per device, and the page warns that plain HTTP isn't encrypted. Only the bridge's own page
+  (at the addresses you set) may connect: lg.scoty.uk isn't allowed in this mode, as it can't reach another machine.
+- ☁️ **From outside, through Cloudflare Access** (advanced, opt-in — use with caution): a LAN-mode bridge behind a
+  Cloudflare Tunnel lets in requests that passed Cloudflare Access (Google with two-step verification, a one-time PIN,
+  the WARP client or a service token). The bridge checks Access's signed token itself — team, application, expiry and
+  an allow list of emails or service tokens — so a hostname without Access or a too-broad policy gets nothing, and
+  connections through it are re-checked at least hourly. It has no login of its
+  own: Access is the only one. `LGDM_CF_ACCESS_TEAM`, `LGDM_CF_ACCESS_AUD`, `LGDM_CF_ACCESS_ALLOW`.
+- 🐳 **Docker image** `ghcr.io/scoty/lg-dev-manager` (amd64, arm64) and a `compose.yaml`: the bridge and the web app
+  on a home server, in LAN mode, as a non-root user on a read-only filesystem with a health check. `docker compose
+  up -d`, open the pairing link from the logs, done. The update notice says to `docker compose pull`.
+- 🗄️ **TVs stored on the bridge** (`--store`, on in the Docker image): the TVs with their logins, the custom
+  repositories and the screenshots live in the bridge's data folder, so every browser and phone paired with it sees
+  the same ones, and changes show up everywhere at once. A TV's password or key goes to the bridge once and is never
+  sent back to a browser, and the bridge sends it only to that TV (it checks the TV's SSH host key first). TVs saved in a browser before can be moved there in one click (Devices page).
+- 📱 **Phones and tablets**, through a bridge on your network: every page fits a phone screen, the terminal has a bar
+  with the keys a phone keyboard lacks (Esc, Tab, Ctrl+C/D/Z/L/R, arrows, `| ~ / -`), bigger touch targets, no zooming
+  into text fields on iPhone, and TVs are listed as cards. Elsewhere the phone notice points to Docker.
+- Copy buttons, the terminal and screenshots also work on pages served over plain HTTP.
+- The bridge stops at once on SIGTERM (`docker stop`).
+- README: running it on a NAS or home server, with an example for Ugreen NAS
+  (`examples/ugreen-nas/compose.yaml`); the local page is suggested first, lg.scoty.uk second. The bridge prints them
+  in that order too.
+- Fixed: after an install, the dialog said “Installed by Homebrew Channel” on rooted TVs, even for apps from a custom
+  repository or Litefin. It now says where the app came from.
+- Update badges on the Installed page say they're the official Homebrew build, and updating from there asks first:
+  the TV doesn't record where an app came from, so it may replace a build from a custom repository or an IPK file.
+
 ## 1.0.5 — 2026-10-20
 
 - 🧩 **Custom repositories.** Add other webOS Homebrew repositories under **Setup → Custom repos**, using the same

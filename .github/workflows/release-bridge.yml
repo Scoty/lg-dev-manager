@@ -39,6 +39,7 @@ jobs:
         run: |
           version=$(node -p "require('./apps/bridge/package.json').version")
           test "$TAG" = "bridge-v$version" || { echo "Tag $TAG doesn't match apps/bridge/package.json version $version"; exit 1; }
+      - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
       # pnpm pack runs prepack (bundles the web app, LICENSE, NOTICE) and resolves workspace: versions.
@@ -51,8 +52,12 @@ jobs:
           mkdir "$RUNNER_TEMP/npx" && cd "$RUNNER_TEMP/npx" && npm init -y >/dev/null
           npm install --no-audit --no-fund "$GITHUB_WORKSPACE"/apps/bridge/lg-dev-manager-bridge-*.tgz
           cd "$GITHUB_WORKSPACE"
-          LGDM_APP="$RUNNER_TEMP/npx/node_modules/lg-dev-manager-bridge/dist/cli.js" pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
+          LGDM_APP="$RUNNER_TEMP/npx/node_modules/lg-dev-manager-bridge/dist/cli.js" pnpm --filter lg-dev-manager-bridge test:app
       # npm publish authenticates with the workflow's OIDC identity.
       - name: Publish
         working-directory: apps/bridge
-        run: npm publish ./lg-dev-manager-bridge-*.tgz --access public --provenance
+        # A prerelease (2.1.0-rc.1) goes to the "next" tag, so `npx lg-dev-manager-bridge@latest` stays on the release.
+        run: |
+          version=$(node -p "require('./package.json').version")
+          case "$version" in *-*) tag=next ;; *) tag=latest ;; esac
+          npm publish ./lg-dev-manager-bridge-*.tgz --access public --provenance --tag "$tag"

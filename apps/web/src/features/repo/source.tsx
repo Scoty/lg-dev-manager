@@ -5,7 +5,7 @@ import type { CustomRepo } from '../../repos/store';
  * Which repository a repo page shows: the official webOS Homebrew repository (no `custom`), or one the user added.
  * The repo queries, icons, descriptions and installs read it, so the same page and dialog serve every repository.
  */
-export interface RepoSource {
+interface RepoSource {
   custom?: CustomRepo;
 }
 

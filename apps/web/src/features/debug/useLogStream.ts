@@ -3,9 +3,9 @@ import { LOG_LINES_EVENT, LogLines, type LogSource } from '@lgdm/protocol';
 import { newOpId, useRpc } from '../../bridge/useRpc';
 import { toTarget, type SavedDevice } from '../../devices/store';
 
-export type StreamPhase = 'idle' | 'running' | 'stopped' | 'ended' | 'error';
+type StreamPhase = 'idle' | 'running' | 'stopped' | 'ended' | 'error';
 
-export interface StreamState {
+interface StreamState {
   phase: StreamPhase;
   error?: unknown;
   /** Lines the bridge skipped because they came too fast. */

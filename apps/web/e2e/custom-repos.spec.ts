@@ -69,6 +69,9 @@ test('add a custom repository after checking it, browse and install from it, rem
   await ask.getByRole('button', { name: 'Install', exact: true }).click();
   const progress = page.getByRole('dialog', { name: 'Installing Custom Player' });
   await expect(progress.getByText('Custom Player v3.1.0 is installed')).toBeVisible({ timeout: 30_000 });
+  // Says where it came from: this repository, not the Homebrew one.
+  await expect(progress).toContainText(/Installed on .+ from Friends’ apps\./);
+  await expect(progress).not.toContainText('Homebrew');
   await progress.getByRole('button', { name: 'Done' }).click();
   await expect(card(page, 'Custom Player').getByRole('button', { name: 'Launch Custom Player' })).toBeVisible();
 

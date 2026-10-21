@@ -6,7 +6,8 @@ import { BridgeUpdateNotice } from '../../shell/BridgeUpdateNotice';
 import { Card } from '../../components/Card';
 import { Icon } from '../../shell/icons';
 import { useBridge } from '../../bridge/BridgeProvider';
-import { bridgeUrlProblem, defaultBridgeUrl } from '../../bridge/settings';
+import { bridgeUrlProblem, defaultBridgeUrl, servedByLanBridge } from '../../bridge/settings';
+import { LanNotice } from '../../shell/LanNotice';
 import { BridgeError } from '../../bridge/client';
 import { Alert } from '../../components/Alert';
 
@@ -60,6 +61,8 @@ export function BridgePage() {
   };
 
   const origin = window.location.origin;
+  // This page comes from a bridge shared on the network (LAN mode, e.g. the Docker image on a NAS).
+  const lanPage = servedByLanBridge();
 
   return (
     <>
@@ -67,12 +70,32 @@ export function BridgePage() {
         eyebrow="Setup"
         title="Connect the"
         accent="bridge"
-        sub="Browsers can't open SSH connections to your TV, so a small helper runs on your computer and does it for this page. It only accepts this website and needs a pairing token."
+        sub={
+          lanPage
+            ? `This page comes from a bridge on your network (${window.location.host}). It does the SSH work for this page and needs a pairing token.`
+            : "Browsers can't open SSH connections to your TV, so a small helper runs on your computer and does it for this page. It only accepts this website and needs a pairing token."
+        }
       />
       {/* On the setup page the phone warning can't be dismissed: this is where people try to make it work. */}
       <PhoneNotice always />
       <BridgeUpdateNotice always />
+      <LanNotice always />
       <div className="grid">
+        {lanPage ? (
+          <Card eyebrow="Step 1" title="Get the pairing link" className="col-6">
+            <div className="stack">
+              <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                The bridge prints a <strong>pairing link</strong> when it starts. Open it in this browser and you’re paired —
+                or paste the token from the same place below. With Docker, on the server:
+              </p>
+              <div className="codeblock">docker compose logs lg-dev-manager</div>
+              <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                Each browser and device is paired once. Keep the link to yourself: anyone on your network who has it can
+                use your TVs.
+              </p>
+            </div>
+          </Card>
+        ) : (
         <Card eyebrow="Step 1" title="Run the bridge" className="col-6">
           <div className="stack">
             <div>
@@ -81,8 +104,8 @@ export function BridgePage() {
             </div>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
               It prints a <strong>pairing token</strong> — paste it below. Keep the terminal open while you use the app; Ctrl+C
-              stops the bridge. It also serves this app at <span className="mono">http://localhost:{DEFAULT_BRIDGE_PORT}</span> if
-              you’d rather not use the website.
+              stops the bridge. It also serves this app at <span className="mono">http://localhost:{DEFAULT_BRIDGE_PORT}</span>, the
+              local page — it always matches your bridge’s version and works offline.
             </p>
             <div className="bridge-app">
               <div className="eyebrow">No Node.js? Download the app instead</div>
@@ -111,8 +134,19 @@ pnpm bridge`}</div>
                 <span className="mono">pnpm build</span>, then <span className="mono">pnpm bridge</span> again.
               </p>
             </details>
+            <details className="muted bridge-from-repo">
+              <summary>Or run it on a NAS or home server (Docker)</summary>
+              <p style={{ margin: 0 }}>
+                One bridge for every computer, phone and tablet on your network, with your TVs kept on the server. The{' '}
+                <a href={`${REPO_URL}#docker`} target="_blank" rel="noopener noreferrer">
+                  read me
+                </a>{' '}
+                has the compose file and a Ugreen NAS example; then open the page the server serves, at its address.
+              </p>
+            </details>
             {/* Once connected the bridge evidently accepts this site. */}
             {status.state !== 'connected' &&
+              !lanPage &&
               !([...DEFAULT_ALLOWED_ORIGINS, ...DEV_ALLOWED_ORIGINS] as string[]).includes(origin) &&
               !origin.endsWith(`:${DEFAULT_BRIDGE_PORT}`) && (
                 <Alert kind="warning">
@@ -122,6 +156,7 @@ pnpm bridge`}</div>
               )}
           </div>
         </Card>
+        )}
 
         <Card eyebrow="Step 2" title="Pair this browser" className="col-6">
           <form className="stack" onSubmit={onSubmit}>
@@ -137,7 +172,10 @@ pnpm bridge`}</div>
                 aria-describedby="bridge-url-help"
                 required
               />
-              <span className="field-help" id="bridge-url-help">Default: {defaultBridgeUrl()}. Always on this computer (ws://127.0.0.1 or ws://localhost).</span>
+              <span className="field-help" id="bridge-url-help">
+                Default: {defaultBridgeUrl()}.{' '}
+                {lanPage ? 'The bridge that serves this page, or one on this computer.' : 'Always on this computer (ws://127.0.0.1 or ws://localhost).'}
+              </span>
             </div>
             <div className="field">
               <label className="field-label" htmlFor="bridge-token">Pairing token</label>

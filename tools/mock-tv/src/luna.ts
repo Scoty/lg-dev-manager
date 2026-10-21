@@ -3,9 +3,9 @@ import { get } from 'node:http';
 import { addApp, addFile, devApp, makeIconPng, readControl, type MockState } from './state.js';
 
 /** Canned luna-send responses. Keep payload shapes close to real webOS. */
-export type LunaHandler = (params: Record<string, unknown>, state: MockState) => Record<string, unknown>;
+type LunaHandler = (params: Record<string, unknown>, state: MockState) => Record<string, unknown>;
 /** A subscription (`luna-send -i`): yields responses until done. `signal` aborts when the client closes. */
-export type LunaSubscription = (
+type LunaSubscription = (
   params: Record<string, unknown>,
   state: MockState,
   signal: AbortSignal,

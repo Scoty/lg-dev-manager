@@ -24,7 +24,9 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Type checks (all of them: `pnpm build` doesn't type-check) once: the types don't depend on the Node.js version.
       - run: pnpm typecheck
+        if: matrix.node == '24'
       - run: pnpm test
       - run: pnpm build
       # The npm package exactly as npx runs it: packed, installed from the tarball, started, paired, SSH to mock TVs.
@@ -34,7 +36,7 @@ jobs:
           mkdir "$RUNNER_TEMP/npx" && cd "$RUNNER_TEMP/npx" && npm init -y >/dev/null
           npm install --no-audit --no-fund "$RUNNER_TEMP"/pkg/lg-dev-manager-bridge-*.tgz
           cd "$GITHUB_WORKSPACE"
-          LGDM_APP="$RUNNER_TEMP/npx/node_modules/lg-dev-manager-bridge/dist/cli.js" pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
+          LGDM_APP="$RUNNER_TEMP/npx/node_modules/lg-dev-manager-bridge/dist/cli.js" pnpm --filter lg-dev-manager-bridge test:app
 
   # The standalone app, built and tested on every OS and CPU it is released for (release-app.yml uses the same
   # runners), so a change that breaks it shows up before a release.
@@ -46,7 +48,9 @@ jobs:
         include:
           - { target: windows-x64, runner: windows-2025 }
           - { target: macos-arm64, runner: macos-15 }
-          - { target: macos-x64, runner: macos-15-intel }
+          # Built on Apple Silicon (GitHub's Intel macOS runners took ~4 minutes for what takes one here): the app is
+          # made from nodejs.org's x64 node binary, and tested under Rosetta.
+          - { target: macos-x64, runner: macos-15, arch: x64 }
           - { target: linux-x64, runner: ubuntu-24.04 }
           - { target: linux-arm64, runner: ubuntu-24.04-arm }
     runs-on: ${{ matrix.runner }}
@@ -58,14 +62,80 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: node apps/bridge/scripts/build-app.mjs
+      # Only the web page: the app bundles the bridge from its source.
+      - run: pnpm --filter @lgdm/web build
+      # Another CPU than the runner's (macos-x64 on Apple Silicon): that CPU's node binary of the same version, from
+      # nodejs.org and checked against its published SHA-256.
+      - name: Node.js for ${{ matrix.target }}
+        if: matrix.arch
+        shell: bash
+        run: |
+          v="v$(cat .nvmrc)"
+          f="node-$v-darwin-${{ matrix.arch }}.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "https://nodejs.org/dist/$v/$f"
+          curl -fsSL "https://nodejs.org/dist/$v/SHASUMS256.txt" | grep " $f\$" | shasum -a 256 -c -
+          tar -xzf "$f"
+          echo "TARGET_NODE=$RUNNER_TEMP/${f%.tar.gz}/bin/node" >> "$GITHUB_ENV"
+      - shell: bash
+        run: node apps/bridge/scripts/build-app.mjs ${TARGET_NODE:+--target-node "$TARGET_NODE" --arch ${{ matrix.arch }}}
+      - name: Built for ${{ matrix.target }}
+        shell: bash
+        run: ls apps/bridge/release/*-${{ matrix.target }}.* # the name carries the platform and CPU the app was built for
       - name: Test the app
         shell: bash
         run: |
           app="$PWD/apps/bridge/release/bin/lg-dev-manager-bridge"
           [ "$RUNNER_OS" = Windows ] && app="$app.exe"
-          LGDM_APP="$app" pnpm --filter lg-dev-manager-bridge exec vitest run src/app.smoke.test.ts
+          LGDM_APP="$app" pnpm --filter lg-dev-manager-bridge test:app
+
+  # The Docker image (Dockerfile, compose.yaml) built and run as compose runs it: host networking, read-only, no
+  # capabilities. apps/bridge/scripts/docker-smoke.mjs checks pairing, LAN mode, its refusals and a mock TV.
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # the test image of a pull request (below)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: docker/setup-buildx-action@v4
+      # The image's Node.js is the one in .nvmrc (the Dockerfile's default is only for building by hand).
+      - id: node
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          build-args: NODE_VERSION=${{ steps.node.outputs.version }}
+          load: true
+          tags: lg-dev-manager:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run it like compose does
+        run: |
+          pnpm --filter @lgdm/mock-tv start > "$RUNNER_TEMP/mock-tv.log" 2>&1 &
+          for i in $(seq 60); do (echo > /dev/tcp/127.0.0.1/9922) 2>/dev/null && break; sleep 1; done
+          # The runner's own address on its (private) network: what a browser on the LAN would open.
+          ip=$(hostname -I | awk '{print $1}')
+          node apps/bridge/scripts/docker-smoke.mjs lg-dev-manager:ci "http://$ip:5199"
+      # A pull request from this repository gets a test image, so it can be tried on a real server before a release:
+      # ghcr.io/scoty/lg-dev-manager:pr-<number> (amd64 only). Releases are tagged X.Y.Z / X / latest (release-docker.yml).
+      - name: Push the test image
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          IMAGE: ghcr.io/scoty/lg-dev-manager:pr-${{ github.event.pull_request.number }}
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker tag lg-dev-manager:ci "$IMAGE"
+          docker push "$IMAGE"
+          echo "Test image: \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
 
   e2e:
     runs-on: ubuntu-latest

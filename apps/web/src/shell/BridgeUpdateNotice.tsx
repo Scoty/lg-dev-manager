@@ -63,6 +63,11 @@ export function BridgeUpdateNotice({ always = false }: { always?: boolean }) {
             In the repository run <span className="mono">git pull</span>, <span className="mono">pnpm install</span>,{' '}
             <span className="mono">pnpm build</span> and <span className="mono">pnpm bridge</span>.
           </>
+        ) : status.distribution === 'docker' ? (
+          <>
+            Where its compose file is, run <span className="mono">docker compose pull</span> and{' '}
+            <span className="mono">docker compose up -d</span>.
+          </>
         ) : status.distribution === 'npm' ? (
           <>
             Stop it (Ctrl+C) and start it again with <span className="mono">npx lg-dev-manager-bridge@latest</span>.

@@ -6,6 +6,8 @@ import { Icon } from '../../shell/icons';
 import { useFeedback } from '../../components/Feedback';
 import { Alert } from '../../components/Alert';
 import { AUTH_LABELS, authProblems, emptyAuth, type AuthDraft, type AuthKind } from './auth';
+import { copyText } from '../../lib/secureContext';
+import { useStoredOnBridge } from '../../storage/backend';
 
 type KeyCheck =
   | { state: 'idle' }
@@ -48,7 +50,7 @@ function useKeyCheck(privateKey: string, passphrase: string): KeyCheck {
 }
 
 /** True when a key draft can be saved (verified, or the bridge couldn't be asked). */
-export function keyDraftUsable(check: KeyCheck) {
+function keyDraftUsable(check: KeyCheck) {
   return check.state === 'ok' || check.state === 'offline';
 }
 
@@ -173,6 +175,7 @@ function PrivateKeyFields({
   problem?: string;
   onKeyCheck?: (usable: boolean) => void;
 }) {
+  const onBridge = useStoredOnBridge();
   const id = useId();
   const fileRef = useRef<HTMLInputElement>(null);
   const check = useKeyCheck(value.privateKey, value.passphrase);
@@ -224,8 +227,8 @@ function PrivateKeyFields({
         {!problem && !fileError && (
           <span className="field-help">
             {value.fileName ? <>Loaded from <span className="mono">{value.fileName}</span>. </> : null}
-            Usually <span className="mono">~/.ssh/id_ed25519</span> or <span className="mono">id_rsa</span> on your computer. It is
-            saved only in this browser.
+            Usually <span className="mono">~/.ssh/id_ed25519</span> or <span className="mono">id_rsa</span> on your computer.{' '}
+            {onBridge ? 'It goes to the bridge, which keeps it and never sends it back.' : 'It is saved only in this browser.'}
           </span>
         )}
         <KeyCheckLine check={check} />
@@ -278,12 +281,20 @@ function KeyCheckLine({ check }: { check: KeyCheck }) {
  * the next restart — for every tool, not just this one. Said before the key is made, so it's a choice.
  */
 function PasswordOffWarning() {
+  const onBridge = useStoredOnBridge();
   return (
     <Alert kind="warning" title="Adding a key turns off password login">
       Once <span className="mono">/home/root/.ssh/authorized_keys</span> exists, Homebrew Channel stops setting the{' '}
       <span className="mono">alpine</span> password: from the TV’s next restart, root can log in only with a key in that file —
-      in this app and in any other tool (the desktop Dev Manager, WinSCP, ssh). That’s safer, but keep the key: it’s saved
-      only in this browser, so use <strong>Export backup</strong> on the Devices page. Prefer the password? Choose{' '}
+      in this app and in any other tool (the desktop Dev Manager, WinSCP, ssh). That’s safer, but keep the key:{' '}
+      {onBridge ? (
+        <>it’s kept only on the bridge, so back up the bridge’s data folder.</>
+      ) : (
+        <>
+          it’s saved only in this browser, so use <strong>Export backup</strong> on the Devices page.
+        </>
+      )}{' '}
+      Prefer the password? Choose{' '}
       <strong>Password</strong> above instead.
     </Alert>
   );
@@ -303,6 +314,7 @@ function GeneratedKey({
   /** A rooted TV (Homebrew Channel): adding a key turns password login off. */
   rooted: boolean;
 }) {
+  const onBridge = useStoredOnBridge();
   const { ready, call } = useRpc();
   const { toast } = useFeedback();
   const [busy, setBusy] = useState(false);
@@ -322,8 +334,8 @@ function GeneratedKey({
     return (
       <div className="field">
         <span className="field-help">
-          The bridge makes a new ed25519 key pair. The private key is saved only in this browser; you add the public key to the
-          TV once.
+          The bridge makes a new ed25519 key pair. The private key is saved only {onBridge ? 'on the bridge' : 'in this browser'}; you add the
+          public key to the TV once.
         </span>
         {rooted && <PasswordOffWarning />}
         <div>
@@ -352,7 +364,7 @@ function GeneratedKey({
           type="button"
           className="btn btn--sm btn--ghost"
           onClick={() =>
-            navigator.clipboard.writeText(value.publicKey).then(
+            copyText(value.publicKey).then(
               () => toast({ kind: 'success', title: 'Public key copied' }),
               () => toast({ kind: 'warning', title: 'Copy failed', text: 'Select the key and copy it by hand.' }),
             )

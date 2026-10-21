@@ -9,7 +9,9 @@ import { useFeedback } from '../../components/Feedback';
 import { Icon } from '../../shell/icons';
 import { useRpc } from '../../bridge/useRpc';
 import { useBridgeFeature } from '../../bridge/BridgeProvider';
-import { addCustomRepo, MAX_CUSTOM_REPOS, removeCustomRepo, renameCustomRepo, useCustomRepos, type CustomRepo } from '../../repos/store';
+import { addCustomRepo, MAX_CUSTOM_REPOS, removeCustomRepo, renameCustomRepo, useCustomRepos, useCustomReposLoaded, type CustomRepo } from '../../repos/store';
+import { count } from '../../lib/format';
+import { useStoredOnBridge } from '../../storage/backend';
 
 /** Whether the address the bridge found is on the site the user typed (no short link or redirect to elsewhere). */
 function sameSite(typed: string, found: string): boolean {
@@ -46,7 +48,9 @@ function checkHint(e: unknown) {
  * Not in the original Dev Manager.
  */
 export function CustomReposPage() {
+  const onBridge = useStoredOnBridge();
   const repos = useCustomRepos();
+  const loaded = useCustomReposLoaded();
   const { ready, call } = useRpc();
   const supported = useBridgeFeature(BridgeFeatures.CustomRepos);
   const { confirm, toast } = useFeedback();
@@ -57,7 +61,8 @@ export function CustomReposPage() {
   const [error, setError] = useState<unknown>(null);
   const [showErrors, setShowErrors] = useState(false);
 
-  const canCheck = ready && supported === true && !busy;
+  // On the bridge, the list loads after connecting: nothing is added before it's known.
+  const canCheck = ready && supported === true && !busy && loaded;
   const full = repos.length >= MAX_CUSTOM_REPOS;
 
   const onSubmit = async (e: FormEvent) => {
@@ -83,11 +88,11 @@ export function CustomReposPage() {
         });
         if (!ok) return;
       }
-      const repo = addCustomRepo({ name: name.trim() || new URL(res.url).host, url: res.url, apps: res.apps });
+      const repo = await addCustomRepo({ name: name.trim() || new URL(res.url).host, url: res.url, apps: res.apps });
       toast({
         kind: 'success',
         title: `${repo.name} added`,
-        text: `${res.apps} app${res.apps === 1 ? '' : 's'}${res.sample.length ? `, like ${res.sample.join(', ')}` : ''}. It’s under Apps in the sidebar.`,
+        text: `${count(res.apps, 'app')}${res.sample.length ? `, like ${res.sample.join(', ')}` : ''}. It’s under Apps in the sidebar.`,
       });
       setName('');
       setUrl('');
@@ -113,8 +118,12 @@ export function CustomReposPage() {
       danger: true,
     });
     if (!ok) return;
-    removeCustomRepo(r.id);
-    toast({ kind: 'success', title: `${r.name} removed` });
+    try {
+      await removeCustomRepo(r.id);
+      toast({ kind: 'success', title: `${r.name} removed` });
+    } catch (e) {
+      toast({ kind: 'danger', title: `Couldn’t remove ${r.name}`, text: (e as Error).message });
+    }
   };
 
   return (
@@ -126,7 +135,10 @@ export function CustomReposPage() {
         sub={
           <>
             Add webOS Homebrew repositories besides the official one — the same addresses Homebrew Channel’s “Add
-            repository” takes. They’re saved in this browser and appear under Apps.
+            repository” takes.{' '}
+            {onBridge
+              ? 'They’re saved on the bridge, for every paired browser, and appear under Apps.'
+              : 'They’re saved in this browser and appear under Apps.'}
           </>
         }
       />
@@ -193,7 +205,7 @@ export function CustomReposPage() {
           </form>
         </Card>
 
-        <Card eyebrow="Saved in this browser" title="Your repositories" className="col-7">
+        <Card eyebrow={onBridge ? 'Saved on the bridge' : 'Saved in this browser'} title="Your repositories" className="col-7">
           {repos.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon"><Icon name="box" /></div>
@@ -238,10 +250,10 @@ function RepoRow({ repo: r, onRemove }: { repo: CustomRepo; onRemove: () => void
     setProblem(null);
     setEditing(true);
   };
-  const save = () => {
+  const save = async () => {
     if (draft.trim() === r.name) return setEditing(false);
     try {
-      const updated = renameCustomRepo(r.id, draft);
+      const updated = await renameCustomRepo(r.id, draft);
       setEditing(false);
       toast({ kind: 'success', title: `Renamed to ${updated.name}` });
     } catch (e) {
@@ -257,7 +269,7 @@ function RepoRow({ repo: r, onRemove }: { repo: CustomRepo; onRemove: () => void
             className="custom-repo-rename"
             onSubmit={(e) => {
               e.preventDefault();
-              save();
+              void save();
             }}
           >
             <input

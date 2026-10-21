@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from '../../shell/icons';
+import { fmtNumber } from '../../lib/format';
 
 /** First index whose key is >= `key` (items are sorted by increasing key). */
 function lowerBound<T>(items: readonly T[], keyOf: (item: T) => number, key: number): number {
@@ -130,7 +131,7 @@ export function VirtualList<T>({
             toBottom();
           }}
         >
-          <Icon name="updown" /> {unseen > 0 ? `${unseen.toLocaleString()} new — jump to latest` : 'Jump to latest'}
+          <Icon name="updown" /> {unseen > 0 ? `${fmtNumber(unseen)} new — jump to latest` : 'Jump to latest'}
         </button>
       )}
     </div>

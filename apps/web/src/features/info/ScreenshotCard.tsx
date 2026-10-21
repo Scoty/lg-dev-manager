@@ -7,8 +7,10 @@ import { Icon } from '../../shell/icons';
 import { useRpc } from '../../bridge/useRpc';
 import { toTarget, type SavedDevice } from '../../devices/store';
 import { saveBlob } from '../files/transfer';
-import { addShot, deleteShots, fmtBytes, shotFileName, useObjectUrls, useShots, type Shot } from './shots';
+import { addShot, deleteShots, shotFileName, useObjectUrls, useShots, type Shot } from './shots';
 import { zip } from './zip';
+import { count, fmtBytes } from '../../lib/format';
+import { useStoredOnBridge } from '../../storage/backend';
 
 const METHODS = [
   { id: 'DISPLAY', label: 'Everything' },
@@ -21,9 +23,10 @@ const when = (at: number) => new Date(at).toLocaleString(undefined, { dateStyle:
 
 /**
  * Take screenshots and browse the ones taken of this TV: older ones to the left, newer to the right. They are kept
- * in this browser only (the TV's copy is deleted as soon as it is read), and can be downloaded or deleted here.
+ * in this browser or on the bridge that stores the TVs (the TV's copy is deleted as soon as it is read), and can be downloaded or deleted here.
  */
 export function ScreenshotCard({ device, className }: { device: SavedDevice; className: string }) {
+  const onBridge = useStoredOnBridge();
   const { ready, call } = useRpc();
   const { confirm, toast } = useFeedback();
   const [method, setMethod] = useState<Shot['method']>('DISPLAY');
@@ -117,7 +120,12 @@ export function ScreenshotCard({ device, className }: { device: SavedDevice; cla
     if (!items.length) return;
     const ok = await confirm({
       title: items.length === 1 ? 'Delete this screenshot?' : items.length === list.length ? `Delete all ${items.length} screenshots?` : `Delete ${items.length} screenshots?`,
-      message: <p>They are removed from this browser. Download any you want to keep first. Nothing on the TV is affected.</p>,
+      message: (
+        <p>
+          They are removed from {onBridge ? 'the bridge, for every paired browser' : 'this browser'}. Download any you want to keep first.
+          Nothing on the TV is affected.
+        </p>
+      ),
       confirmText: 'Delete',
       danger: true,
     });
@@ -227,7 +235,7 @@ export function ScreenshotCard({ device, className }: { device: SavedDevice; cla
                 <span>{chosen.length ? `${chosen.length} selected` : 'Select all'}</span>
               </label>
               <span className="muted">
-                {list.length} {list.length === 1 ? 'screenshot' : 'screenshots'} · {fmtBytes(total)}, kept in this browser
+                {count(list.length, 'screenshot', 'screenshots')} · {fmtBytes(total)} · {onBridge ? 'Kept on the bridge' : 'Kept in this browser'}
               </span>
               <span className="spacer" />
               <button type="button" className="btn btn--sm btn--ghost" onClick={() => download(chosen.length ? chosen : list)}>
@@ -245,7 +253,8 @@ export function ScreenshotCard({ device, className }: { device: SavedDevice; cla
             <div className="screenshot screenshot--empty">
               <Icon name="image" />
               <span>
-                “Everything” is what’s on screen; “Video only” and “UI only” capture one layer. Screenshots are kept in this browser, not on the TV.
+                “Everything” is what’s on screen; “Video only” and “UI only” capture one layer.{' '}
+                {onBridge ? 'Screenshots are kept on the bridge, not on the TV.' : 'Screenshots are kept in this browser, not on the TV.'}
               </span>
             </div>
           )

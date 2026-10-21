@@ -14,7 +14,8 @@ function BridgePill() {
     connected: { cls: ' is-connected', text: 'Bridge connected' },
     error: { cls: ' is-error', text: 'Bridge offline' },
   } as const;
-  const { cls, text } = map[status.state];
+  const { cls } = map[status.state];
+  const text = status.state === 'connected' && status.lan ? 'Bridge on your network' : map[status.state].text;
   // While the provider retries in the background, the dot pulses; the text stays put (no flicker on each attempt).
   const retrying = status.state === 'error' && status.retrying;
   return (

@@ -73,6 +73,28 @@ describe('bridge server', () => {
     ws.close();
   });
 
+  it('before pairing: little data, nothing binary, and a limited number of connections', async () => {
+    // Cut off (no close handshake) once more than 16 KB has been read, before a big message is even complete.
+    const big = await open();
+    big.on('error', () => {}); // the connection is reset
+    const closed = new Promise<number>((r) => big.once('close', (code) => r(code)));
+    big.send(JSON.stringify({ id: 1, method: 'system.hello', params: { token: 'x'.repeat(4_000_000), protocolVersion: PROTOCOL_VERSION } }));
+    expect(await closed).toBe(1006);
+    const binary = await open();
+    binary.on('error', () => {});
+    const binaryClosed = new Promise<number>((r) => binary.once('close', (code) => r(code)));
+    binary.send(Buffer.alloc(16));
+    expect(await binaryClosed).toBe(1006);
+    // Eight unpaired connections from one client at a time; the ninth is turned away before the upgrade, a paired one
+    // frees a place.
+    const waiting = await Promise.all(Array.from({ length: 8 }, () => open()));
+    await expect(open()).rejects.toThrow(/503/);
+    await call(waiting[0]!, 1, 'system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
+    const tenth = await open();
+    expect((await call(tenth, 1, 'system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION })).result).toBeDefined();
+    for (const ws of [...waiting, tenth]) ws.close();
+  });
+
   it('reports unknown methods', async () => {
     const ws = await open();
     await call(ws, 1, 'system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
