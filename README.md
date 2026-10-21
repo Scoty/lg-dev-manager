@@ -122,7 +122,8 @@ On a Ugreen NAS (UGOS Pro), with the address you open it at being either the NAS
    ```yaml
    services:
      lg-dev-manager:
-       image: ghcr.io/scoty/lg-dev-manager:2
+       image: ghcr.io/scoty/lg-dev-manager:latest
+       pull_policy: always   # the newest release every time it's started or redeployed
        container_name: lg-dev-manager
        network_mode: host
        environment:
@@ -143,7 +144,7 @@ On a Ugreen NAS (UGOS Pro), with the address you open it at being either the NAS
 
 If the log says the bridge can't write to `/data`, the folder isn't writable by the container's user (1000): over SSH,
 `sudo chown 1000:1000 /volume1/docker/lg-dev-manager`, or set `user:` to your own ids (the example file explains). To
-update, pull the image again and recreate the project (in Dockhand or Portainer: pull and redeploy the stack).
+update, redeploy the project (in Dockhand or Portainer: redeploy the stack): it fetches the newest release each time.
 
 ### Keep it on your network
 
