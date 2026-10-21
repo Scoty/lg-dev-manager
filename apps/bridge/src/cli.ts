@@ -1,10 +1,11 @@
+import { pathToFileURL } from 'node:url';
 import { parseArgs } from './config.js';
 import { startServer } from './server.js';
 import { PUBLIC_WEB_ORIGIN } from '@lgdm/protocol';
 import { BRIDGE_VERSION } from './version.js';
 import { isStandalone, licenseText } from './standalone.js';
 import { openInBrowser } from './open.js';
-import { oneTimePairRedirect, pairLink } from './pairing.js';
+import { pairingPage, pairLink } from './pairing.js';
 
 const HELP = `lg-dev-manager-bridge ${BRIDGE_VERSION}
 
@@ -98,18 +99,42 @@ async function main() {
   // says how to stop.
   if (isStandalone()) {
     console.log('  Keep this window open while you use the app. Close it (or press Ctrl+C) to stop the bridge.\n');
-    // Through a one-time redirect, so the token never appears in a command line (pairing.ts).
-    const nonce = oneTimePairRedirect(pairLink(PUBLIC_WEB_ORIGIN, config.token, config.port));
-    if (!argv.includes('--no-open')) openInBrowser(`http://localhost:${config.port}/pair/${nonce}`);
+    // Through a page only this user can read, so the token never appears in a command line (pairing.ts). Not on
+    // Linux: snap and flatpak browsers (Ubuntu's Firefox) can't read another app's temporary files, so there the site
+    // opens unpaired and the window shows the pairing link to open instead.
+    if (!argv.includes('--no-open')) {
+      let opened = false;
+      if (process.platform !== 'linux') {
+        try {
+          openInBrowser(pathToFileURL(pairingPage(pairLink(PUBLIC_WEB_ORIGIN, config.token, config.port)).path).href);
+          opened = true;
+        } catch {
+          /* no temporary folder */
+        }
+      }
+      if (!opened) {
+        openInBrowser(PUBLIC_WEB_ORIGIN);
+        console.log(`  ${PUBLIC_WEB_ORIGIN} opened unpaired: paste the pairing token on its Bridge page, or open the pair link above.\n`);
+      }
+    }
   }
 }
 
+/** Why the bridge can't start, in words that say what to do. */
+function startProblem(e: NodeJS.ErrnoException): string {
+  if (e.code === 'EADDRINUSE') {
+    return `port ${/:(\d+)$/.exec(e.message)?.[1] ?? ''} is already in use. Is the bridge already running in another window? Close that one, or start this one with --port <another port>.`;
+  }
+  if (e.code === 'EACCES' || e.code === 'EPERM' || e.code === 'EROFS') {
+    // Usually the data folder: in Docker, a folder on the server the container's user (1000) can't write.
+    const where = e.path ? ` ${e.path}` : '';
+    return `it can't write to its data folder (${e.code}${where}). In Docker, the folder mounted at /data must be writable by the container's user (1000): sudo chown 1000:1000 <that folder>, or set user: to your own ids. Elsewhere, check the permissions of ${process.env.LGDM_STATE_DIR ?? '~/.lg-dev-manager'}.`;
+  }
+  return e.message;
+}
+
 main().catch((e: NodeJS.ErrnoException) => {
-  console.error(
-    e.code === 'EADDRINUSE'
-      ? `[bridge] failed to start: port ${/:(\d+)$/.exec(e.message)?.[1] ?? ''} is already in use. Is the bridge already running in another window? Close that one, or start this one with --port <another port>.`
-      : `[bridge] failed to start: ${e.message}`,
-  );
+  console.error(`[bridge] failed to start: ${startProblem(e)}`);
   // A window opened by a double-click would vanish with the message; keep it until the user has read it.
   if (isStandalone() && process.stdin.isTTY) {
     console.error('\nPress Enter to close this window.');

@@ -1,3 +1,6 @@
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { request as httpRequest } from 'node:http';
@@ -6,7 +9,7 @@ import WebSocket from 'ws';
 import { PROTOCOL_VERSION } from '@lgdm/protocol';
 import { forwardedProblem, isLanClient, limiterKey, PairingLimiter, parseNetworks } from './lan.js';
 import { parseArgs } from './config.js';
-import { oneTimePairRedirect, pairLink, takePairRedirect } from './pairing.js';
+import { pairingPage, pairLink } from './pairing.js';
 import { canOpen } from './open.js';
 import { startServer } from './server.js';
 
@@ -70,15 +73,20 @@ describe('LAN mode building blocks', () => {
     expect(pairLink('https://lg.scoty.uk', 'abc', 5200)).toBe('https://lg.scoty.uk/#/pair?token=abc&port=5200');
     expect(pairLink('https://lg.scoty.uk', 'abc', 5199)).toBe('https://lg.scoty.uk/#/pair?token=abc');
     expect(canOpen('https://lg.scoty.uk')).toBe(true);
-    // The app opens the site through a one-time redirect: no token in the browser's command line.
+    // The app opens the site through a page only this user can read: no token in the browser's command line.
     const target = pairLink('https://lg.scoty.uk', 'aB3_-x', 5200);
-    const nonce = oneTimePairRedirect(target);
-    expect(canOpen(`http://localhost:5200/pair/${nonce}`)).toBe(true);
-    expect(takePairRedirect(`/pair/${nonce}`)).toBe(target);
-    expect(takePairRedirect(`/pair/${nonce}`)).toBeNull(); // once only
-    expect(takePairRedirect(`/pair/${oneTimePairRedirect(target, -1)}`)).toBeNull(); // expired
-    expect(takePairRedirect('/pair/../../etc')).toBeNull();
-    for (const bad of [target, 'http://lg.scoty.uk', 'https://lg.scoty.uk/x', 'file:///etc/passwd', 'http://evil.example:5199/pair/aaaaaaaaaaaaaaaaaaaa']) {
+    const page = pairingPage(target);
+    const fileUrl = pathToFileURL(page.path).href;
+    expect(canOpen(fileUrl)).toBe(true);
+    expect(fileUrl).not.toContain('aB3_-x');
+    expect(readFileSync(page.path, 'utf8')).toContain(JSON.stringify(target));
+    if (process.platform !== 'win32') {
+      expect(statSync(page.path).mode & 0o777).toBe(0o600);
+      expect(statSync(dirname(page.path)).mode & 0o777).toBe(0o700);
+    }
+    page.remove();
+    expect(existsSync(page.path)).toBe(false);
+    for (const bad of [target, 'http://lg.scoty.uk', 'https://lg.scoty.uk/x', 'file:///etc/passwd', 'file:///tmp/lgdm-pair-abcdef/other.html', 'http://evil.example:5199/pair/aaaaaaaaaaaaaaaaaaaa']) {
       expect(canOpen(bad), bad).toBe(false);
     }
   });

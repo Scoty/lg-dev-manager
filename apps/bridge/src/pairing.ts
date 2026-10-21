@@ -1,4 +1,6 @@
-import { randomBytes } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DEFAULT_BRIDGE_PORT } from '@lgdm/protocol';
 
 /**
@@ -14,23 +16,27 @@ export function pairLink(page: string, token: string, port?: number): string {
 
 /**
  * The app opens the site already paired. Handing the browser the pairing link itself would put the token in a command
- * line (`open`, `xdg-open`, `rundll32`) that other users of this computer can see in their process list, so the
- * browser gets `http://localhost:<port>/pair/<nonce>` instead: the bridge answers that once, within two minutes, with
- * a redirect to the link — and never again.
+ * line (`open`, `xdg-open`, `rundll32`) that other users of this computer can see in their process list, and so would
+ * any other secret in that line. So the app writes a small page that forwards to the link into a folder of its own
+ * (0700, file 0600: readable by this user only) and opens that file: the command line names only the file. The folder
+ * is removed after two minutes, or when the bridge stops.
  */
-const redirects = new Map<string, { target: string; until: number }>();
-
-export function oneTimePairRedirect(target: string, ttlMs = 120_000): string {
-  const nonce = randomBytes(18).toString('base64url');
-  redirects.set(nonce, { target, until: Date.now() + ttlMs });
-  return nonce;
-}
-
-/** The link a `/pair/<nonce>` request redirects to (used up by this call), or null. */
-export function takePairRedirect(path: string): string | null {
-  const m = /^\/pair\/([A-Za-z0-9_-]{16,64})$/.exec(path);
-  if (!m) return null;
-  const hit = redirects.get(m[1]!);
-  redirects.delete(m[1]!);
-  return hit && hit.until > Date.now() ? hit.target : null;
+export function pairingPage(link: string, ttlMs = 120_000): { path: string; remove: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), 'lgdm-pair-'));
+  const path = join(dir, 'pair.html');
+  const href = JSON.stringify(link).replace(/</g, '\\u003c');
+  const html = `<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>LG Dev Manager</title><script>location.replace(${href})</script>`;
+  writeFileSync(path, html, { mode: 0o600, flag: 'wx' });
+  let removed = false;
+  const remove = () => {
+    if (removed) return;
+    removed = true;
+    clearTimeout(timer);
+    process.off('exit', remove);
+    rmSync(dir, { recursive: true, force: true });
+  };
+  const timer = setTimeout(remove, ttlMs);
+  timer.unref();
+  process.once('exit', remove);
+  return { path, remove };
 }

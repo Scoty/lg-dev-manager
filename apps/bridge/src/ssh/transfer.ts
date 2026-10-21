@@ -72,16 +72,25 @@ async function putStream(pool: SshRunner, device: DeviceTarget, path: string, da
   const errOut: Buffer[] = [];
   stream.stderr.on('data', (c: Buffer) => errOut.push(c));
   stream.on('data', () => {});
-  const exit = new Promise<number | null>((resolve) => stream.on('close', (code: number | null) => resolve(typeof code === 'number' ? code : null)));
+  let closed = false;
+  const exit = new Promise<number | null>((resolve) =>
+    stream.on('close', (code: number | null) => {
+      closed = true;
+      resolve(typeof code === 'number' ? code : null);
+    }),
+  );
   try {
-    for (let offset = 0; offset < data.length; offset += STREAM_CHUNK) {
+    for (let offset = 0; offset < data.length && !closed; offset += STREAM_CHUNK) {
       const chunk = data.subarray(offset, offset + STREAM_CHUNK);
-      if (!stream.write(chunk)) await new Promise<void>((r) => stream.once('drain', () => r()));
+      // The TV can close the channel while a write waits for room (`cat` failed: read-only, missing folder, disk
+      // full) — then no 'drain' ever comes, so the close ends the wait too.
+      if (!stream.write(chunk)) await Promise.race([new Promise<void>((r) => stream.once('drain', () => r())), exit]);
       onProgress?.(Math.min(data.length, offset + chunk.length));
     }
-    stream.end();
+    if (!closed) stream.end();
+    const early = closed; // the TV closed it before everything was sent
     const code = await exit;
-    if (code !== 0) throw transferError(`Could not write ${path} on the TV.`, Buffer.concat(errOut).toString('utf8').trim());
+    if (code !== 0 || early) throw transferError(`Could not write ${path} on the TV.`, Buffer.concat(errOut).toString('utf8').trim());
   } finally {
     ch.close();
   }

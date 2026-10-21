@@ -66,6 +66,24 @@ export interface RunningCommand {
   cancel(): void;
 }
 
+/**
+ * A running command that can be stopped, and a promise that settles (null) as soon as it is — the call then answers at
+ * once, even if the TV is slow to confirm the channel closed (or has gone offline).
+ */
+function stoppable(): { run: RunningCommand; stopped: Promise<null> } {
+  let onStop: () => void = () => {};
+  const stopped = new Promise<null>((resolve) => (onStop = () => resolve(null)));
+  const run: RunningCommand = {
+    cancelled: false,
+    cancel() {
+      this.cancelled = true;
+      this.ch?.close();
+      onStop();
+    },
+  };
+  return { run, stopped };
+}
+
 /** The SSH pool as this client sees it: everything it runs shows up in its console (`cmd.log`). */
 const sshFor = (session: Session, ctx: Context, quiet = false) =>
   new LoggedSsh(ctx.pool, (e: CmdLog) => session.emit(CMD_LOG_EVENT, e), quiet);
@@ -205,13 +223,7 @@ export const handlers: HandlerMap = {
 
   'cmd.stream': async ({ device, command, opId }, session, { pool }) => {
     startStream(session, opId);
-    const run: RunningCommand = {
-      cancelled: false,
-      cancel() {
-        this.cancelled = true;
-        this.ch?.close();
-      },
-    };
+    const { run, stopped } = stoppable();
     // Registered before the channel opens, so a quick Stop isn't lost.
     session.streams.set(opId, run);
     try {
@@ -242,7 +254,7 @@ export const handlers: HandlerMap = {
       const exit = new Promise<number | null>((resolve) => ch.stream.on('close', (code: number | null) => resolve(typeof code === 'number' ? code : null)));
       // stdin stays open (luna-send quits on EOF); a command that waits for input runs until Stop.
       if (run.cancelled) ch.close();
-      const exitCode = await exit;
+      const exitCode = await Promise.race([exit, stopped]);
       return { exitCode: run.cancelled ? null : exitCode, cancelled: run.cancelled };
     } finally {
       session.streams.delete(opId);
@@ -252,21 +264,7 @@ export const handlers: HandlerMap = {
   'logs.stream': async ({ device, source, opId, lines }, session, ctx) => {
     requireRoot(device, source === 'lsmonitor' ? 'The luna monitor' : source === 'dmesg' ? 'dmesg' : 'The system log');
     startStream(session, opId);
-    const run: RunningCommand = {
-      cancelled: false,
-      cancel() {
-        this.cancelled = true;
-        this.ch?.close();
-      },
-    };
-    // Stopping answers at once, even if the TV is slow to confirm the channel closed (or has gone offline).
-    let onCancel: () => void = () => {};
-    const cancelled = new Promise<null>((resolve) => (onCancel = () => resolve(null)));
-    const cancel = run.cancel.bind(run);
-    run.cancel = () => {
-      cancel();
-      onCancel();
-    };
+    const { run, stopped } = stoppable();
     session.streams.set(opId, run);
     const batch = new LineBatcher(
       (l, dropped) => session.emit(LOG_LINES_EVENT, { opId, lines: l, ...(dropped ? { dropped } : {}) } satisfies LogLines),
@@ -284,7 +282,7 @@ export const handlers: HandlerMap = {
       ch.stream.stderr.on('data', (c: Buffer) => stderr.length < 64 && stderr.push(c));
       const exit = new Promise<number | null>((resolve) => ch.stream.on('close', (code: number | null) => resolve(typeof code === 'number' ? code : null)));
       if (run.cancelled) ch.close();
-      const exitCode = await Promise.race([exit, cancelled]);
+      const exitCode = await Promise.race([exit, stopped]);
       batch.flush(true);
       if (!run.cancelled && exitCode !== 0 && !batch.sawOutput) {
         const detail = Buffer.concat(stderr).toString('utf8').trim();

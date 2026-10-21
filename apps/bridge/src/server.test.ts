@@ -73,6 +73,21 @@ describe('bridge server', () => {
     ws.close();
   });
 
+  it('before pairing: small frames only, and a limited number of connections', async () => {
+    const big = await open();
+    const closed = new Promise<number>((r) => big.once('close', (code) => r(code)));
+    big.send(JSON.stringify({ id: 1, method: 'system.hello', params: { token: 'x'.repeat(9000), protocolVersion: PROTOCOL_VERSION } }));
+    expect(await closed).toBe(1009);
+    // Eight unpaired connections from one client at a time; the ninth is turned away, a paired one frees a place.
+    const waiting = await Promise.all(Array.from({ length: 8 }, () => open()));
+    const ninth = await open();
+    expect(await new Promise<number>((r) => ninth.once('close', (code) => r(code)))).toBe(1013);
+    await call(waiting[0]!, 1, 'system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });
+    const tenth = await open();
+    expect((await call(tenth, 1, 'system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION })).result).toBeDefined();
+    for (const ws of [...waiting, tenth]) ws.close();
+  });
+
   it('reports unknown methods', async () => {
     const ws = await open();
     await call(ws, 1, 'system.hello', { token: TOKEN, protocolVersion: PROTOCOL_VERSION });

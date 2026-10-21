@@ -98,8 +98,9 @@ accounts of its own, so the docs present it as "use with caution" (owner request
 - the bridge prints a pairing link, `<url>/#/pair?token=…` (also for the local page). The fragment never leaves the
   browser; the page removes it from the address bar, and only on a click checks it with its own bridge (a link can name
   another port on this computer, never another host; the page then says it replaces the current bridge) before saving
-  it. The app opens lg.scoty.uk paired through a one-time redirect (`http://localhost:<port>/pair/<nonce>`, 2 minutes),
-  so the token never appears in a command line other users can see;
+  it. The app opens lg.scoty.uk ready to pair through a page that forwards to the link, written to a temporary folder
+  only this user can read (`pairing.ts` `pairingPage`, removed after 2 minutes), so no secret appears in a command line
+  other users can see (a one-time localhost redirect did, as its nonce, in 2.0 betas);
 - plain HTTP: the page warns once that keys and passwords cross the LAN unencrypted (HTTPS through the user's own
   reverse proxy works: the page then uses `wss://` to its own origin). Browser features that need a secure context
   (`crypto.randomUUID`, the Clipboard API, COOP) have fallbacks (`apps/web/src/lib/secureContext.ts`).

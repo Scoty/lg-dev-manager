@@ -205,6 +205,8 @@ describe('a stored password', () => {
       // A browser that has the password and sends it itself is checked the same way.
       const direct = await call('cmd.exec', { device: { ...record, port: trapPort, auth: { kind: 'password', password: PASSWORD } }, command: 'id' });
       expect(direct.error.code).toBe('ssh_host_key_changed');
+      // A terminal runs on a connection of its own: checked the same way.
+      expect((await call('shell.open', { device: { stored: 'tv-p' }, rows: 24, cols: 80 })).error.code).toBe('ssh_host_key_changed');
       expect(heard).toEqual([]);
     } finally {
       ws.close();

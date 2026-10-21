@@ -14,16 +14,22 @@ import { LitefinClient } from './litefin/litefin.js';
 import { ShellSessions } from './shell/shells.js';
 import { forwardedProblem, isLanClient, limiterKey, PairingLimiter, viaCloudflare } from './lan.js';
 import { CfAccess, type AccessIdentity } from './cfaccess.js';
+import { BridgeStore } from './store/store.js';
+import { STORE_CHANGED_EVENT } from '@lgdm/protocol';
+import { ErrorCodes } from '@lgdm/protocol';
 
 /**
  * A connection let in by Cloudflare Access lasts at most this long (or until the Access token expires): revoking
  * someone in Access stops new requests at Cloudflare's edge, and the page reconnects through it, checked again.
  */
 const ACCESS_CONNECTION_MS = 60 * 60_000;
-import { takePairRedirect } from './pairing.js';
-import { BridgeStore } from './store/store.js';
-import { STORE_CHANGED_EVENT } from '@lgdm/protocol';
-import { ErrorCodes } from '@lgdm/protocol';
+/**
+ * Before pairing, a connection may only send small frames (a system.hello is a few hundred bytes) — so nobody can make
+ * the bridge read and parse 16 MB messages without the token — and only so many unpaired connections may be open.
+ */
+const UNPAIRED_FRAME_MAX = 8 * 1024;
+const UNPAIRED_MAX = 64;
+const UNPAIRED_PER_CLIENT_MAX = 8;
 
 const RPC_PATH = '/rpc';
 
@@ -113,6 +119,9 @@ export function startServer(
       return { problem: `it came through Cloudflare without a valid Access token: ${(e as Error).message}` };
     }
   };
+  /** Unpaired connections open now, in all and per client (UNPAIRED_MAX, UNPAIRED_PER_CLIENT_MAX). */
+  let unpairedTotal = 0;
+  const unpaired = new Map<string, number>();
   /** Who Cloudflare Access let in, per upgrade request, for the WebSocket that follows. */
   const accessOf = new WeakMap<import('node:http').IncomingMessage, AccessIdentity>();
   const refusedLog = throttledWarn();
@@ -134,11 +143,6 @@ export function startServer(
     }
     if (!hostAllowed(req.headers.host, listeningPort(), publicHosts)) {
       res.writeHead(421, { 'content-type': 'text/plain' }).end(lan ? `Wrong host. Open the bridge at ${lan.publicUrls.join(' or ')}.` : 'Wrong host.');
-      return;
-    }
-    const redirect = req.method === 'GET' ? takePairRedirect((req.url ?? '').split('?')[0]!) : null;
-    if (redirect) {
-      res.writeHead(302, { location: redirect, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' }).end();
       return;
     }
     if (req.url === '/healthz') {
@@ -213,6 +217,24 @@ export function startServer(
     // end the connection when their Access session does.
     const who = accessOf.get(req);
     const key = who ? `access:${who.who.toLowerCase()}` : limiterKey(client);
+    // A bad frame (too big, invalid UTF-8) ends this connection — without a listener it would end the process.
+    ws.on('error', () => ws.terminate());
+    // Unpaired connections, all together and from this client: past the limit, this one is turned away.
+    if (unpairedTotal >= UNPAIRED_MAX || (unpaired.get(key) ?? 0) >= UNPAIRED_PER_CLIENT_MAX) {
+      ws.close(1013, 'too many unpaired connections');
+      return;
+    }
+    unpairedTotal++;
+    unpaired.set(key, (unpaired.get(key) ?? 0) + 1);
+    let counted = true;
+    const uncount = () => {
+      if (!counted) return;
+      counted = false;
+      unpairedTotal--;
+      const n = (unpaired.get(key) ?? 1) - 1;
+      if (n > 0) unpaired.set(key, n);
+      else unpaired.delete(key);
+    };
     if (who) {
       const expiry = setTimeout(() => ws.close(4401, 'Cloudflare Access: sign in again'), Math.max(0, Math.min(who.expiresAt - Date.now(), ACCESS_CONNECTION_MS)));
       ws.once('close', () => clearTimeout(expiry));
@@ -220,8 +242,6 @@ export function startServer(
     // One pairing attempt at a time per connection, and a wrong one ends it: frames that arrive together can't each
     // try a token.
     let attempting = false;
-    // A bad frame (too big, invalid UTF-8) ends this connection — without a listener it would end the process.
-    ws.on('error', () => ws.terminate());
     let alive = true;
     ws.on('pong', () => (alive = true));
     const heartbeat = setInterval(() => {
@@ -259,6 +279,11 @@ export function startServer(
     ws.on('message', async (data, isBinary) => {
       if (isBinary) return;
       if (!session.authed && attempting) return; // dropped; the connection closes when the attempt fails
+      const size = Array.isArray(data) ? data.reduce((n, b) => n + b.byteLength, 0) : data.byteLength;
+      if (!session.authed && size > UNPAIRED_FRAME_MAX) {
+        ws.close(1009, 'pair first');
+        return;
+      }
       // Too many pairing attempts from this device: it waits before it may try again.
       const wait = session.authed || !limited ? 0 : limiter.waitFor(key);
       if (wait) {
@@ -283,6 +308,7 @@ export function startServer(
       const res = await dispatch(data.toString(), session, { token: config.token, pool, repos, litefin, lgeUrl: config.lgeUrl, dev: config.dev, lan: !!lan, store });
       if (res && ws.readyState === ws.OPEN) ws.send(JSON.stringify(res));
       if (unauthed && session.authed) {
+        uncount();
         if (limited) limiter.succeeded(key);
       } else if (unauthed) {
         if (res && 'error' in res && res.error.code === 'unauthorized') refusedLog(`a wrong pairing token from ${client}`);
@@ -290,6 +316,7 @@ export function startServer(
       }
     });
     ws.on('close', () => {
+      uncount();
       sessions.delete(session);
       clearTimeout(authTimer);
       clearInterval(heartbeat);

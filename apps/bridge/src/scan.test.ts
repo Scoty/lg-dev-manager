@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startMockTv, type MockTv } from '@lgdm/mock-tv';
 import { createServer, type AddressInfo, type Server } from 'node:net';
-import { parseDescription, parseSsdpResponse, probeSsap, scanNetwork } from './devices/scan.js';
+import { parseDescription, parseSsdpResponse, probeSsap, scanNetwork, SKIP_IFACE } from './devices/scan.js';
 import { checkConnection } from './devices/ports.js';
 import { sshBanner } from './devices/webos.js';
 
@@ -39,6 +39,15 @@ describe('SSDP parsing', () => {
 });
 
 describe('scan', () => {
+  it('leaves out virtual and VPN adapters, not the real network', () => {
+    for (const skip of ['lo', 'lo0', 'docker0', 'vboxnet0', 'VirtualBox Host-Only Network', 'VMware Network Adapter VMnet8', 'utun3', 'tailscale0']) {
+      expect(SKIP_IFACE.test(skip), skip).toBe(true);
+    }
+    for (const keep of ['eth0', 'en0', 'wlan0', 'Wi-Fi', 'Ethernet', 'Local Area Connection', 'vEthernet (External)']) {
+      expect(SKIP_IFACE.test(keep), keep).toBe(false);
+    }
+  });
+
   const ports = () => ({ ssh22: 1, ssh9922: tv.sshPort, keyServer: tv.keyServerPort, webos: [tv.ssapPort!] });
 
   it('finds a TV by its second-screen port and checks its SSH ports', async () => {

@@ -121,6 +121,14 @@ function keyOf(t: DeviceTarget): string {
   return createHash('sha256').update(JSON.stringify([t.host, t.port, t.username, t.auth])).digest('hex');
 }
 
+/**
+ * ssh2's exec() and sftp() throw at once ('Not connected') when the connection went away in the meantime (a queued
+ * command resuming after a drop): that's the TV being unreachable, not a bridge error.
+ */
+function lostConnection(e: unknown): RpcError {
+  return new RpcError(DeviceErrorCodes.Unreachable, 'The connection to the TV was lost. Check that it is on, then try again.', (e as Error)?.message);
+}
+
 function mapConnectError(e: Error & { level?: string; code?: string }, t: DeviceTarget): RpcError {
   const where = `${t.username}@${t.host}:${t.port}`;
   if (e.level === 'client-authentication') {
@@ -152,10 +160,14 @@ export class SshPool implements SshRunner {
     return this.entries.size;
   }
 
-  private connect(t: DeviceTarget): Entry {
+  /**
+   * Every SSH connection the bridge makes starts here (pooled or dedicated), so none can skip the host-key check: for a
+   * stored TV's login (HostKeyPolicy) the TV's key is checked during the handshake, before the login is sent, and the
+   * first connection records it. `onError` runs once if the connection fails before it's ready.
+   */
+  private startConnection(t: DeviceTarget, onError?: () => void): { client: Client; ready: Promise<Client> } {
     const config = configFor(t);
     const client = new Client();
-    const key = keyOf(t);
     const pin = this.hostKeys?.forTarget(t);
     let seen: string | undefined;
     let mismatch = false;
@@ -175,7 +187,7 @@ export class SshPool implements SshRunner {
         resolve(client);
       });
       client.once('error', (e) => {
-        this.forget(entry);
+        onError?.();
         reject(
           mismatch
             ? new RpcError(
@@ -190,10 +202,17 @@ export class SshPool implements SshRunner {
         client.on('keyboard-interactive', (_n, _i, _l, prompts, finish) => finish(prompts.map(() => pw)));
       }
     });
-    const entry: Entry = { key, client, ready, busy: 0, channels: 0, waiting: [], streams: 0 };
+    client.connect(config);
+    return { client, ready };
+  }
+
+  private connect(t: DeviceTarget): Entry {
+    const key = keyOf(t);
+    let entry: Entry;
+    const { client, ready } = this.startConnection(t, () => this.forget(entry));
+    entry = { key, client, ready, busy: 0, channels: 0, waiting: [], streams: 0 };
     client.on('close', () => this.forget(entry));
     client.on('error', () => {}); // later errors surface on the in-flight operation / close
-    client.connect(config);
     return entry;
   }
 
@@ -294,42 +313,47 @@ export class SshPool implements SshRunner {
     const remaining = Math.max(1_000, timeoutMs - (Date.now() - queued));
     try {
       return await new Promise<RawExecResult>((resolve, reject) => {
-        client.exec(command, (err, stream) => {
-          if (err) {
-            reject(new RpcError(DeviceErrorCodes.CommandFailed, 'The TV did not accept the command.', err.message));
-            return;
-          }
-          const out: Buffer[] = [];
-          const errOut: Buffer[] = [];
-          let size = 0;
-          let overflow = false;
-          const timer = setTimeout(() => {
-            stream.close();
-            reject(new RpcError(DeviceErrorCodes.Timeout, `Command timed out after ${timeoutMs} ms.`));
-          }, remaining);
-          const push = (arr: Buffer[]) => (c: Buffer) => {
-            size += c.length;
-            if (size > limit) {
-              overflow = true;
+        try {
+          client.exec(command, (err, stream) => {
+            if (err) {
+              reject(new RpcError(DeviceErrorCodes.CommandFailed, 'The TV did not accept the command.', err.message));
+              return;
+            }
+            const out: Buffer[] = [];
+            const errOut: Buffer[] = [];
+            let size = 0;
+            let overflow = false;
+            const timer = setTimeout(() => {
               stream.close();
-              return;
-            }
-            arr.push(c);
-          };
-          stream.on('data', push(out));
-          stream.stderr.on('data', push(errOut));
-          stream.on('close', (code: number | null) => {
-            clearTimeout(timer);
-            if (overflow) {
-              reject(new RpcError(DeviceErrorCodes.CommandFailed, `The command printed more than ${limit} bytes.`));
-              return;
-            }
-            resolve({ stdout: Buffer.concat(out), stderr: Buffer.concat(errOut), exitCode: typeof code === 'number' ? code : null });
+              reject(new RpcError(DeviceErrorCodes.Timeout, `Command timed out after ${timeoutMs} ms.`));
+            }, remaining);
+            const push = (arr: Buffer[]) => (c: Buffer) => {
+              size += c.length;
+              if (size > limit) {
+                overflow = true;
+                stream.close();
+                return;
+              }
+              arr.push(c);
+            };
+            stream.on('data', push(out));
+            stream.stderr.on('data', push(errOut));
+            stream.on('close', (code: number | null) => {
+              clearTimeout(timer);
+              if (overflow) {
+                reject(new RpcError(DeviceErrorCodes.CommandFailed, `The command printed more than ${limit} bytes.`));
+                return;
+              }
+              resolve({ stdout: Buffer.concat(out), stderr: Buffer.concat(errOut), exitCode: typeof code === 'number' ? code : null });
+            });
+            // Only close stdin when we have input to send (like dev-manager-desktop's execute_command). Some
+            // commands watch stdin and quit on EOF — luna-send exits silently before the TV has answered.
+            if (opts.stdin !== undefined) stream.end(opts.stdin);
           });
-          // Only close stdin when we have input to send (like dev-manager-desktop's execute_command). Some
-          // commands watch stdin and quit on EOF — luna-send exits silently before the TV has answered.
-          if (opts.stdin !== undefined) stream.end(opts.stdin);
-        });
+        } catch (e) {
+          this.forget(entry);
+          reject(lostConnection(e));
+        }
       });
     } finally {
       freeChannel();
@@ -388,9 +412,13 @@ export class SshPool implements SshRunner {
 
   private async execChannel(client: Client, command: string): Promise<{ stream: ClientChannel; close: () => void }> {
     const stream = await new Promise<ClientChannel>((resolve, reject) => {
-      client.exec(command, (err, s) =>
-        err ? reject(new RpcError(DeviceErrorCodes.CommandFailed, 'The TV did not accept the command.', err.message)) : resolve(s),
-      );
+      try {
+        client.exec(command, (err, s) =>
+          err ? reject(new RpcError(DeviceErrorCodes.CommandFailed, 'The TV did not accept the command.', err.message)) : resolve(s),
+        );
+      } catch (e) {
+        reject(lostConnection(e));
+      }
     });
     return { stream, close: () => stream.close() };
   }
@@ -401,16 +429,28 @@ export class SshPool implements SshRunner {
    */
   async sftp(t: DeviceTarget): Promise<{ sftp: SFTPWrapper | null; release: () => void }> {
     const { client, entry: e, release } = await this.acquire(t);
-    e.sftp ??= new Promise<SFTPWrapper | null>((resolve) => {
-      client.sftp((err, s) => {
-        if (err || !s) return resolve(null);
-        s.on('close', () => {
-          if (e.sftp) e.sftp = undefined;
+    e.sftp ??= new Promise<SFTPWrapper | null>((resolve, reject) => {
+      try {
+        client.sftp((err, s) => {
+          if (err || !s) return resolve(null);
+          s.on('close', () => {
+            if (e.sftp) e.sftp = undefined;
+          });
+          resolve(s);
         });
-        resolve(s);
-      });
+      } catch (err) {
+        this.forget(e);
+        reject(lostConnection(err));
+      }
     });
-    return { sftp: await e.sftp, release };
+    const pending = e.sftp;
+    try {
+      return { sftp: await pending, release };
+    } catch (err) {
+      if (e.sftp === pending) e.sftp = undefined; // not kept: the next call tries again
+      release();
+      throw err;
+    }
   }
 
   traceOp<T>(_t: DeviceTarget, _kind: TraceKind, _label: string, fn: () => Promise<T>): Promise<T> {
@@ -423,22 +463,11 @@ export class SshPool implements SshRunner {
    * The caller ends it.
    */
   async dedicated(t: DeviceTarget): Promise<Client> {
-    const config = configFor(t);
-    const client = new Client();
-    return new Promise<Client>((resolve, reject) => {
-      client.once('ready', () => {
-        client.setNoDelay(true);
-        client.removeAllListeners('error');
-        client.on('error', () => {}); // surfaces as 'close' on the shell
-        resolve(client);
-      });
-      client.once('error', (e) => reject(mapConnectError(e, t)));
-      if (t.auth.kind === 'password') {
-        const pw = t.auth.password;
-        client.on('keyboard-interactive', (_n, _i, _l, prompts, finish) => finish(prompts.map(() => pw)));
-      }
-      client.connect(config);
-    });
+    const { client, ready } = this.startConnection(t);
+    await ready;
+    client.removeAllListeners('error');
+    client.on('error', () => {}); // surfaces as 'close' on the shell
+    return client;
   }
 
   /** Close the pooled connection for one device, or all of them. Returns how many were closed. */

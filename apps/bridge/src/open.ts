@@ -23,9 +23,9 @@ export function openInBrowser(url: string): void {
 }
 
 /**
- * The only URLs openInBrowser opens: an https site's root, or the bridge's own one-time pairing redirect on this
- * computer (pairing.ts) — never a token.
+ * The only URLs openInBrowser opens: an https site's root, or the app's own pairing page in a temporary folder
+ * (pairing.ts) — never a token.
  */
 export function canOpen(url: string): boolean {
-  return /^https:\/\/[a-z0-9.-]+\/?$/i.test(url) || /^http:\/\/localhost:\d{1,5}\/pair\/[A-Za-z0-9_-]{16,64}$/.test(url);
+  return /^https:\/\/[a-z0-9.-]+\/?$/i.test(url) || /^file:\/\/\/[^?#\s]*\/lgdm-pair-[A-Za-z0-9]{6}\/pair\.html$/.test(url);
 }
