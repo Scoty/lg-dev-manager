@@ -1,0 +1,54 @@
+# A pull request from this repository gets a test image, ghcr.io/scoty/lg-dev-manager:pr-<number> (ci.yml's docker
+# job). When the pull request is closed — merged or not — this removes it again. Run it by hand for a pull request that
+# was closed before this workflow existed.
+#
+# Only the image version tagged exactly pr-<number> is removed: never one that carries another tag too, and never an
+# untagged one (the per-platform parts of a release image are untagged).
+name: Remove a pull request's test image
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number (its pr-<number> image is removed)
+        required: true
+        type: number
+
+permissions:
+  packages: write
+
+concurrency:
+  group: remove-pr-image-${{ github.event.pull_request.number || inputs.pr }}
+
+jobs:
+  remove:
+    # Pull requests from forks never get a test image (and their token can't remove one).
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove pr-${{ github.event.pull_request.number || inputs.pr }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          TAG: pr-${{ github.event.pull_request.number || inputs.pr }}
+        run: |
+          versions="/users/$OWNER/packages/container/lg-dev-manager/versions"
+          if ! list=$(gh api --paginate "$versions" --jq ".[] | select(.metadata.container.tags | index(\"$TAG\")) | [.id, (.metadata.container.tags | join(\",\"))] | @tsv" 2>&1); then
+            echo "::error::Couldn't list the image's versions: $list"
+            echo "::error::In the package's settings on GitHub (Manage Actions access), give this repository the Admin role."
+            exit 1
+          fi
+          if [ -z "$list" ]; then
+            echo "No $TAG image: nothing to remove."
+            exit 0
+          fi
+          while IFS=$'\t' read -r id tags; do
+            if [ "$tags" != "$TAG" ]; then
+              echo "::warning::Version $id is also tagged $tags: left as it is."
+              continue
+            fi
+            gh api -X DELETE "$versions/$id"
+            echo "Removed ghcr.io/$OWNER/lg-dev-manager:$TAG (version $id)." | tee -a "$GITHUB_STEP_SUMMARY"
+          done <<< "$list"

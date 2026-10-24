@@ -124,7 +124,8 @@ jobs:
           ip=$(hostname -I | awk '{print $1}')
           node apps/bridge/scripts/docker-smoke.mjs lg-dev-manager:ci "http://$ip:5199"
       # A pull request from this repository gets a test image, so it can be tried on a real server before a release:
-      # ghcr.io/scoty/lg-dev-manager:pr-<number> (amd64 only). Releases are tagged X.Y.Z / X / latest (release-docker.yml).
+      # ghcr.io/scoty/lg-dev-manager:pr-<number> (amd64 only), removed when the pull request is closed
+      # (remove-pr-image.yml). Releases are tagged X.Y.Z / X / latest (release-docker.yml).
       - name: Push the test image
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:
