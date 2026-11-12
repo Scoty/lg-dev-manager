@@ -61,6 +61,8 @@ test('add a custom repository after checking it, browse and install from it, rem
   // An entry in the other repository style (manifestUrl, relative addresses, HTML in its short description).
   await expect(card(page, 'Stream Client')).toContainText('v1.3.0');
   await expect(card(page, 'Stream Client')).toContainText('Game streaming, 4K & HDR');
+  // A manifest whose host doesn't answer: the page says so instead of quietly showing no version or update.
+  await expect(page.getByText('Couldn’t check 1 app for updates')).toBeVisible();
 
   await card(page, 'Custom Player').getByRole('button', { name: 'Install Custom Player' }).click();
   // Every install from an unofficial repository asks first, with the warning.
@@ -74,6 +76,17 @@ test('add a custom repository after checking it, browse and install from it, rem
   await expect(progress).not.toContainText('Homebrew');
   await progress.getByRole('button', { name: 'Done' }).click();
   await expect(card(page, 'Custom Player').getByRole('button', { name: 'Launch Custom Player' })).toBeVisible();
+
+  // A package with another app of the same publisher: the bridge finds it in the IPK, and it's installed only once agreed.
+  await card(page, 'Custom Suite').getByRole('button', { name: 'Install Custom Suite' }).click();
+  await page.getByRole('dialog', { name: 'Install Custom Suite from Friends’ apps?' }).getByRole('button', { name: 'Install', exact: true }).click();
+  const more = page.getByRole('dialog', { name: 'Custom Suite comes with more apps' });
+  await expect(more).toContainText('org.example.custom.helper', { timeout: 30_000 });
+  await more.getByRole('button', { name: 'Install all' }).click();
+  const suite = page.getByRole('dialog', { name: 'Installing Custom Suite' });
+  await expect(suite.getByText('Custom Suite v1.0.0 is installed')).toBeVisible({ timeout: 30_000 });
+  await expect(suite).toContainText('The package also installed org.example.custom.helper.');
+  await suite.getByRole('button', { name: 'Done' }).click();
 
   // Details come from the custom repository too.
   await card(page, 'Custom Tool').getByRole('button', { name: 'Details for Custom Tool' }).click();

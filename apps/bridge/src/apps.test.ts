@@ -6,7 +6,7 @@ import { appIcon, installIpk, launchApp, listApps, removeApp } from './apps/apps
 import { deviceInfo, generateKey, storageInfo } from './devices/info.js';
 import { powerStateOf, tvPower } from './devices/power.js';
 import { RpcError } from './rpc/errors.js';
-import { readIpkControl, untrustedIpkProblem } from './apps/ipk.js';
+import { checkUntrustedIpk, readIpkControl, siblingNamespace, untrustedIpkProblem } from './apps/ipk.js';
 import { SshPool } from './ssh/pool.js';
 import { putFile, readFile } from './ssh/transfer.js';
 
@@ -240,8 +240,9 @@ describe('IPK control', () => {
     expect(await untrustedIpkProblem(fakeIpk(id, '1.0.0', id, 0, { alsoApps: ['org.webosbrew.hbchannel'] }), id)).toMatch(
       /also installs org\.webosbrew\.hbchannel/,
     );
-    // A second app, even one named like it, isn't (only services may be id.<something>).
-    expect(await untrustedIpkProblem(fakeIpk(id, '1.0.0', id, 0, { alsoApps: [`${id}.second`] }), id)).toMatch(/also installs org\.example\.nice\.second/);
+    // A second app only in the id's namespace (org.example.*), and listed for the user to agree to.
+    expect(await checkUntrustedIpk(fakeIpk(id, '1.0.0', id, 0, { alsoApps: [`${id}.second`] }), id)).toEqual({ problem: null, also: [`${id}.second`] });
+    expect(await untrustedIpkProblem(fakeIpk(id, '1.0.0', id, 0, { alsoApps: ['org.other.second'] }), id)).toMatch(/also installs org\.other\.second/);
 
     const json = (o: unknown) => Buffer.from(JSON.stringify(o));
     const ipk = (control: string, data: { name: string; data: Buffer; type?: string; link?: string }[], extra: { name: string; data: Buffer }[] = []) =>
@@ -286,6 +287,52 @@ describe('IPK control', () => {
     expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, link('../org.webosbrew.hbchannel')), id)).toMatch(/points outside/);
     expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, link('/media/developer')), id)).toMatch(/points outside/);
     expect(await untrustedIpkProblem(ipk(`Package: ${id}\n`, link('lib/x.so.1')), id)).toBeNull();
+  });
+
+  it('lets a package bring its publisher’s other apps along (listed for the user), and ignores metadata deep in a folder', async () => {
+    const json = (o: unknown) => Buffer.from(JSON.stringify(o));
+    const ipk = (id: string, data: { name: string; data: Buffer }[]) =>
+      buildAr([
+        { name: 'debian-binary', data: Buffer.from('2.0\n') },
+        { name: 'control.tar.gz', data: gzipSync(buildTar([{ name: './control', data: Buffer.from(`Package: ${id}\n`) }])) },
+        { name: 'data.tar.gz', data: gzipSync(buildTar(data)) },
+      ]);
+    // Like com.cleanyourtv.manager: two more apps and a service, all com.vendor.*.
+    const id = 'com.vendor.manager';
+    const app = (name: string) => ({ name: `./usr/palm/applications/${name}/appinfo.json`, data: json({ id: name }) });
+    const multi = [
+      app(id),
+      app('com.vendor.notify'),
+      app('com.vendor.picker'),
+      { name: `./usr/palm/packages/${id}/packageinfo.json`, data: json({ id, app: id, services: ['com.vendor.manager.service'] }) },
+      { name: './usr/palm/services/com.vendor.manager.service/services.json', data: json({ id: 'com.vendor.manager.service' }) },
+    ];
+    expect(await checkUntrustedIpk(ipk(id, multi), id)).toEqual({ problem: null, also: ['com.vendor.notify', 'com.vendor.picker'] });
+    // Never another publisher's app, the TV's or Homebrew's namespaces, or a code host's shared one.
+    expect(await untrustedIpkProblem(ipk(id, [app(id), app('com.other.thing')]), id)).toMatch(/also installs com\.other\.thing/);
+    expect(await untrustedIpkProblem(ipk(id, [app(id), { name: './usr/palm/applications/com.vendor.x/appinfo.json', data: json({ id: 'com.webos.app.browser' }) }]), id)).toMatch(
+      /also installs com\.webos\.app\.browser \(named in appinfo\.json\)/,
+    );
+    for (const [own, other] of [
+      ['com.webos.app.mine', 'com.webos.app.browser'],
+      ['org.webosbrew.mine', 'org.webosbrew.hbchannel'],
+      ['io.github.app', 'io.github.other'],
+    ]) {
+      expect(siblingNamespace(own!)).toBeNull();
+      expect(await untrustedIpkProblem(ipk(own!, [app(own!), app(other!)]), own!)).toMatch(/also installs/);
+    }
+    // A user's namespace on a code host is theirs.
+    expect(siblingNamespace('io.github.someone.tv')).toBe('io.github.someone');
+    expect(siblingNamespace('com.vendor')).toBeNull();
+
+    // Like io.github.….nativetv: a bundled web app's own appinfo.json files deep inside the app's folder install nothing.
+    const tvId = 'io.github.someone.tv';
+    const nested = [
+      app(tvId),
+      { name: `./usr/palm/applications/${tvId}/payload/assets/home-app/appinfo.json`, data: json({ id: 'com.tvweb.home' }) },
+      { name: `./usr/palm/applications/${tvId}/payload/assets/splash-app/appinfo.json`, data: json({ id: 'com.tvweb.splash' }) },
+    ];
+    expect(await checkUntrustedIpk(ipk(tvId, nested), tvId)).toEqual({ problem: null, also: [] });
   });
 
   it('returns null for anything else', () => {

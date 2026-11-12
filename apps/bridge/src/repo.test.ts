@@ -1,11 +1,11 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { makeIconPng, MOCK_CUSTOM_REPO_APPS, startMockRepo, startMockTv, type MockRepo, type MockTv } from '@lgdm/mock-tv';
 import type { DeviceTarget, OpProgress } from '@lgdm/protocol';
 import { findInstallLocation, hbChannelConfig, installFromRepo, listApps } from './apps/apps.js';
 import { imgSources, normalizePackage, plainText, RepoClient } from './repo/repo.js';
-import { finalUrl, isNonPublicAddress, safeGet } from './net/fetch.js';
+import { clearDnsCache, finalUrl, isNonPublicAddress, resolveHost, safeGet } from './net/fetch.js';
 import { sniffImage } from './net/image.js';
 import { githubRaw, RepoRegistry } from './repo/registry.js';
 import { RpcError } from './rpc/errors.js';
@@ -310,6 +310,19 @@ describe('install from the repository', () => {
 });
 
 describe('pinned connections', () => {
+  it('share one lookup per host, IPv4 first, and don’t keep a failed one', async () => {
+    clearDnsCache();
+    const a = resolveHost('localhost');
+    expect(resolveHost('localhost')).toBe(a); // a burst of requests asks the resolver once
+    const list = await a;
+    expect(list.length).toBeGreaterThan(0);
+    expect(list.map((x) => x.family)).toEqual([...list.map((x) => x.family)].sort());
+    expect(await resolveHost('192.0.2.7')).toEqual([{ address: '192.0.2.7', family: 4 }]);
+    const missing = resolveHost('no-such-host.invalid');
+    await expect(missing).rejects.toThrow();
+    expect(resolveHost('no-such-host.invalid')).not.toBe(missing);
+  });
+
   it('refuse a host name that resolves to this computer at connect time', async () => {
     const { publicLookup } = await import('./net/fetch.js');
     const err = await new Promise<NodeJS.ErrnoException | null>((r) => publicLookup('localhost', {}, (e) => r(e)));
@@ -385,7 +398,7 @@ describe('custom repositories', () => {
     try {
       const reg = local();
       const index = `${third.url}/repo.json`;
-      expect(await reg.check(index)).toMatchObject({ url: index, apps: 3, installable: 3 });
+      expect(await reg.check(index)).toMatchObject({ url: index, apps: 5, installable: 4 });
       // Just the folder: apps.json comes first when both exist…
       expect((await reg.check(third.url)).url).toBe(`${third.url}/apps.json`);
       const pkg = (await reg.for(index).list()).packages.find((p) => p.id === 'org.example.custom.stream')!;
@@ -443,6 +456,67 @@ describe('custom repositories', () => {
     // What a custom repository points at (manifests, icons, IPKs) is fetched over https only, every hop.
     await expect(safeGet('http://192.0.2.1/app.ipk', 5_000, undefined, undefined, true)).rejects.toThrow(/Only https/);
     expect(await code(reg.check('https://192.0.2.10/s/repo'))).toBe('repo_bad_url');
+  });
+
+  it('tries manifests that didn’t arrive again — once at once, and later without reading the index again', async () => {
+    const flaky = await startMockRepo({
+      apps: [
+        // Answers on the second try: fine in one load.
+        { id: 'org.example.once', title: 'Once', version: '1.0.0', manifestByUrl: true, manifestErrors: [503] },
+        // Fails both tries: unchecked, then fine on a later load.
+        { id: 'org.example.twice', title: 'Twice', version: '1.0.0', manifestByUrl: true, manifestErrors: [502, 503] },
+        // Not found: final, never counted as unchecked.
+        { id: 'org.example.gone', title: 'Gone', version: '1.0.0', manifestByUrl: true, manifestErrors: [404, 404, 404, 404] },
+      ],
+    });
+    const now = Date.now;
+    try {
+      const client = local().for(`${flaky.url}/repo.json`);
+      const manifests = () => flaky.requests.filter((r) => r.endsWith('/manifest.json')).length;
+      let list = await client.list();
+      const version = (id: string) => list.packages.find((p) => p.id === id)?.manifest?.version;
+      expect([version('org.example.once'), version('org.example.twice'), version('org.example.gone')]).toEqual(['1.0.0', undefined, undefined]);
+      expect(list.unchecked).toBe(1);
+      expect(manifests()).toBe(5);
+      // Straight away: from the cache, no retry yet.
+      list = await client.list();
+      expect(manifests()).toBe(5);
+      // Half a minute later: just the missing one again, not the index.
+      const indexReads = flaky.requests.filter((r) => r.endsWith('/repo.json')).length;
+      vi.spyOn(Date, 'now').mockImplementation(() => now() + 31_000);
+      list = await client.list();
+      expect(version('org.example.twice')).toBe('1.0.0');
+      expect(list.unchecked).toBeUndefined();
+      expect(manifests()).toBe(6);
+      expect(flaky.requests.filter((r) => r.endsWith('/repo.json')).length).toBe(indexReads);
+    } finally {
+      vi.restoreAllMocks();
+      await flaky.close();
+    }
+  });
+
+  it('installs a package with its publisher’s other apps only once the user agrees to them', async () => {
+    const multi = await startMockRepo({
+      apps: [{ id: 'com.vendor.manager', title: 'Manager', version: '1.0.0', ipkAlsoApps: ['com.vendor.notify'] }],
+    });
+    try {
+      const client = local().for(`${multi.url}/apps.json`);
+      const err = await installFromRepo(pool, client, devmode(devTv), 'com.vendor.manager', 'stable').catch((e: RpcError) => e);
+      expect(err).toMatchObject({ code: 'repo_also_installs', detail: 'com.vendor.notify' });
+      expect(devTv.state.apps.some((a) => a.id === 'com.vendor.manager')).toBe(false);
+      // Agreeing to other apps than the IPK has isn't enough.
+      expect(await installFromRepo(pool, client, devmode(devTv), 'com.vendor.manager', 'stable', undefined, undefined, ['com.vendor.other']).catch((e: RpcError) => e.code)).toBe(
+        'repo_also_installs',
+      );
+      expect(await installFromRepo(pool, client, devmode(devTv), 'com.vendor.manager', 'stable', undefined, undefined, ['com.vendor.notify'])).toEqual({
+        appId: 'com.vendor.manager',
+        version: '1.0.0',
+        via: 'devmode',
+        also: ['com.vendor.notify'],
+      });
+    } finally {
+      await multi.close();
+    }
   });
 
   it('installs from a custom repository only what it says, and never Homebrew Channel', async () => {

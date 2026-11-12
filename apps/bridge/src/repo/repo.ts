@@ -36,6 +36,10 @@ const CUSTOM_IMAGE_CACHE_BYTES = 8 * 1024 * 1024;
 const MAX_MANIFEST_FETCHES = 200;
 const MANIFEST_FETCHES_AT_ONCE = 6;
 const MANIFEST_MAX_BYTES = 256 * 1024;
+/** One try at a manifest (a second follows a timeout, a dropped connection or a 5xx answer). */
+const MANIFEST_TRY_MS = 15_000;
+/** Manifests that couldn't be read are tried again on a later load once this has passed, without reading the index again. */
+const RETRY_MISSING_MS = 30_000;
 
 interface Index {
   at: number;
@@ -44,6 +48,10 @@ interface Index {
   images: Set<string>;
   /** Description URLs by app id, resolved against the page they came from. */
   descriptions: Map<string, string>;
+  /** Apps whose separate manifest couldn't be read (their address), tried again after RETRY_MISSING_MS. */
+  missing: Map<RepoPackage, string>;
+  /** When those were last tried. */
+  triedAt: number;
 }
 
 interface RepoClientOptions {
@@ -109,9 +117,9 @@ export class RepoClient {
   }
 
   /** All apps, from cache when fresh. */
-  async list(opts: { refresh?: boolean; trace?: HttpTrace } = {}): Promise<{ packages: RepoPackage[]; fetchedAt: number }> {
+  async list(opts: { refresh?: boolean; trace?: HttpTrace } = {}): Promise<{ packages: RepoPackage[]; fetchedAt: number; unchecked?: number }> {
     const idx = await this.load(opts.refresh ?? false, opts.trace ?? untraced);
-    return { packages: idx.packages, fetchedAt: idx.at };
+    return { packages: idx.packages, fetchedAt: idx.at, ...(idx.missing.size ? { unchecked: idx.missing.size } : {}) };
   }
 
   /** One app, from an index no older than the cache time. */
@@ -202,7 +210,13 @@ export class RepoClient {
   }
 
   private load(refresh: boolean, trace: HttpTrace): Promise<Index> {
-    if (!refresh && this.index && Date.now() - this.index.at < CACHE_MS) return Promise.resolve(this.index);
+    const idx = this.index;
+    if (!refresh && idx && Date.now() - idx.at < CACHE_MS) {
+      if (this.loading || !idx.missing.size || Date.now() - idx.triedAt < RETRY_MISSING_MS) return this.loading ?? Promise.resolve(idx);
+      // Some manifests didn't arrive last time (a slow or flaky connection): try just those again.
+      this.loading = this.retryMissing(idx, trace).finally(() => (this.loading = undefined));
+      return this.loading;
+    }
     this.loading ??= this.fetchIndex(trace)
       .then((idx) => (this.index = idx))
       .finally(() => (this.loading = undefined));
@@ -245,8 +259,14 @@ export class RepoClient {
         else pkg.package.hasDescription = false;
       }
     }
-    await this.fillManifests(manifestUrls, trace, deadline);
-    return { at: Date.now(), packages, descriptions, images };
+    const missing = await this.fillManifests(manifestUrls, trace, deadline);
+    return { at: Date.now(), packages, descriptions, images, missing, triedAt: Date.now() };
+  }
+
+  private async retryMissing(idx: Index, trace: HttpTrace): Promise<Index> {
+    idx.missing = await this.fillManifests(idx.missing, trace, this.custom ? Date.now() + CUSTOM_INDEX_MS : Infinity);
+    idx.triedAt = Date.now();
+    return idx;
   }
 
   /**
@@ -255,28 +275,68 @@ export class RepoClient {
    * or doesn't match its entry leaves that app without one (shown, not installable). Same public-address rules as
    * icons and IPKs for anything outside the trusted repository.
    */
-  private async fillManifests(todo: Map<RepoPackage, string>, trace: HttpTrace, deadline = Infinity) {
+  private async fillManifests(todo: Map<RepoPackage, string>, trace: HttpTrace, deadline = Infinity): Promise<Map<RepoPackage, string>> {
     const queue = [...todo].slice(0, MAX_MANIFEST_FETCHES);
+    const missing = new Map(queue);
     const worker = async () => {
       for (let next = queue.shift(); next && Date.now() < deadline; next = queue.shift()) {
         const [pkg, manifestUrl] = next;
         try {
-          const res = await trace(new URL(manifestUrl).host, `GET ${manifestUrl}`, () => safeGet(manifestUrl, 30_000, this.trusted, undefined, this.httpsOnly));
-          if (!res.ok) {
-            await res.body?.cancel().catch(() => {});
-            continue;
-          }
-          const manifest = parseManifest(JSON.parse(jsonText(await readBody(res, MANIFEST_MAX_BYTES))), pkg.id, manifestUrl);
-          if (manifest && manifest.id === pkg.id) {
+          const manifest = await this.fetchManifest(pkg, manifestUrl, trace, deadline);
+          missing.delete(pkg);
+          if (manifest) {
             pkg.manifest = manifest;
             if (!pkg.shortDescription && manifest.appDescription) pkg.shortDescription = plainText(manifest.appDescription).slice(0, 500) || undefined;
           }
         } catch {
-          /* unreachable, not JSON, too big: no manifest for this app */
+          /* unreachable or timed out (shown in the console): tried again on a later load */
         }
       }
     };
     await Promise.all(Array.from({ length: Math.min(MANIFEST_FETCHES_AT_ONCE, queue.length) }, worker));
+    return missing;
+  }
+
+  /**
+   * One app's manifest: a parsed manifest for this app, `null` when the answer is final but unusable (HTTP 404, not
+   * JSON, another app's), or throws when it may work later (no answer in time, a dropped connection, a 5xx answer).
+   * Each try waits MANIFEST_TRY_MS at most, and never past the index's deadline; a failed one is tried once more.
+   */
+  private async fetchManifest(pkg: RepoPackage, manifestUrl: string, trace: HttpTrace, deadline: number): Promise<RepoManifest | null> {
+    for (let attempt = 1; ; attempt++) {
+      const timeout = Math.min(MANIFEST_TRY_MS, deadline - Date.now());
+      if (timeout < 1_000) throw new Error('out of time');
+      try {
+        return await trace(new URL(manifestUrl).host, `GET ${manifestUrl}${attempt > 1 ? ' (again)' : ''}`, async () => {
+          let res: Response;
+          try {
+            res = await safeGet(manifestUrl, timeout, this.trusted, undefined, this.httpsOnly);
+          } catch (e) {
+            if (e instanceof RpcError) throw new FinalError(e.message);
+            const name = (e as Error).name;
+            throw new Error(name === 'TimeoutError' || name === 'AbortError' ? `no answer in ${Math.round(timeout / 1000)} s` : (e as Error).message);
+          }
+          if (!res.ok) {
+            await res.body?.cancel().catch(() => {});
+            throw res.status >= 500 || res.status === 429 ? new Error(`HTTP ${res.status}`) : new FinalError(`HTTP ${res.status}`);
+          }
+          let json: unknown;
+          try {
+            json = JSON.parse(jsonText(await readBody(res, MANIFEST_MAX_BYTES)));
+          } catch (e) {
+            if (e instanceof RpcError) throw new FinalError(e.message);
+            if (e instanceof SyntaxError) throw new FinalError('not JSON');
+            throw e;
+          }
+          const manifest = parseManifest(json, pkg.id, manifestUrl);
+          if (!manifest || manifest.id !== pkg.id) throw new FinalError(`not a manifest for ${pkg.id}`);
+          return manifest;
+        });
+      } catch (e) {
+        if (e instanceof FinalError) return null;
+        if (attempt >= 2) throw e;
+      }
+    }
   }
 
   private async request(url: string, timeoutMs: number): Promise<Response> {
@@ -306,6 +366,9 @@ export class RepoClient {
     return readBody(res, maxBytes);
   }
 }
+
+/** A manifest that won't get better by asking again (the console shows why). */
+class FinalError extends Error {}
 
 /** Most images a description may add to the allowed list. */
 const MAX_DESCRIPTION_IMAGES = 100;

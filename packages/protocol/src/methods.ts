@@ -349,10 +349,12 @@ export const Methods = {
    * The Homebrew repository's apps (all pages of `apps.json`). The bridge fetches it — only from the
    * configured repository — and keeps it in memory for a few minutes; `refresh` fetches it again. With `repo`, a
    * custom repository the user added instead (the same applies to repo.image, repo.description, installFromRepo).
+   * `unchecked`: apps whose separate manifest (`manifestUrl`) couldn't be read this time — their version and updates
+   * are unknown; the bridge tries them again on a later call (2.0.1, optional).
    */
   'repo.list': {
     params: z.object({ refresh: z.boolean().optional(), repo: CustomRepoUrl.optional() }),
-    result: z.object({ packages: z.array(RepoPackage), fetchedAt: z.number() }),
+    result: z.object({ packages: z.array(RepoPackage), fetchedAt: z.number(), unchecked: z.number().int().nonnegative().optional() }),
   },
   /**
    * An icon or screenshot from the repository, fetched by the bridge (so the page needs no third-party image
@@ -383,8 +385,10 @@ export const Methods = {
       channel: z.enum(['stable', 'beta']).default('stable'),
       opId: z.string().max(64),
       repo: CustomRepoUrl.optional(),
+      /** Other apps the custom repository's IPK may install along (RepoErrorCodes.AlsoInstalls), as the user agreed. */
+      alsoInstall: z.array(AppId).max(32).optional(),
     }),
-    result: z.object({ appId: z.string(), version: z.string(), via: z.enum(['devmode', 'hbchannel']) }),
+    result: z.object({ appId: z.string(), version: z.string(), via: z.enum(['devmode', 'hbchannel']), also: z.array(z.string()).optional() }),
   },
   /**
    * Is this a webOS Homebrew repository? Takes what the user typed (an `apps.json` address, or the folder or site it

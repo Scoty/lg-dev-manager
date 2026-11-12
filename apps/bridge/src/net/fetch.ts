@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from 'node:dns';
-import { request as httpRequest } from 'node:http';
-import { request as httpsRequest } from 'node:https';
+import type { LookupAddress, LookupOptions } from 'node:dns';
+import { Agent as HttpAgent, request as httpRequest } from 'node:http';
+import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { BlockList, isIP } from 'node:net';
 import { Readable } from 'node:stream';
 import { AppsErrorCodes, MAX_UPLOAD_BYTES, RepoErrorCodes } from '@lgdm/protocol';
@@ -170,25 +170,79 @@ export async function downloadIpk(
 
 type LookupCallback = (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
 
+/** How long a host's addresses are reused — a repository load asks for the same few hosts many times. */
+const DNS_TTL_MS = 60_000;
+const DNS_CACHE_MAX = 256;
+const dnsCache = new Map<string, { at: number; result: Promise<LookupAddress[]> }>();
+
+/**
+ * A host's addresses, IPv4 first, shared by the public-address check and the connection itself (so both see the same
+ * answer, and a page of manifests on one host costs one lookup instead of two per request). Concurrent asks for one host
+ * share a lookup: the system resolver runs on a small thread pool, and a burst of lookups queued on it is what made
+ * manifests time out on some NAS (issue #8).
+ */
+export function resolveHost(host: string): Promise<LookupAddress[]> {
+  const family = isIP(host);
+  if (family) return Promise.resolve([{ address: host, family }]);
+  const now = Date.now();
+  const hit = dnsCache.get(host);
+  if (hit && now - hit.at < DNS_TTL_MS) return hit.result;
+  // A failed lookup isn't kept (only shared while it runs): the next try asks again.
+  const result = lookup(host, { all: true }).then(
+    (list) => [...list].sort((a, b) => a.family - b.family),
+    (e: unknown) => {
+      if (dnsCache.get(host)?.result === result) dnsCache.delete(host);
+      throw e;
+    },
+  );
+  result.catch(() => {});
+  if (dnsCache.size >= DNS_CACHE_MAX) dnsCache.delete(dnsCache.keys().next().value!);
+  dnsCache.set(host, { at: now, result });
+  return result;
+}
+
+/** Tests: forget cached lookups. */
+export function clearDnsCache() {
+  dnsCache.clear();
+}
+
 /** dns.lookup for outgoing connections that refuses loopback, LAN and link-local answers. */
 export function publicLookup(hostname: string, options: LookupOptions, callback: LookupCallback) {
-  dnsLookup(hostname, { ...options, all: true }, (err, addresses) => {
-    if (err) return callback(err, '');
-    const list = addresses as LookupAddress[];
-    if (!list.length || list.some((a) => isNonPublicAddress(a.address))) {
-      return callback(Object.assign(new Error(`Refusing to connect to a local or private network address for ${hostname}.`), { code: 'EPRIVATE' }), '');
-    }
-    if (options.all) callback(null, list);
-    else callback(null, list[0]!.address, list[0]!.family);
-  });
+  resolveHost(hostname).then(
+    (all) => {
+      const list = options.family === 4 || options.family === 6 ? all.filter((a) => a.family === options.family) : all;
+      if (!list.length || all.some((a) => isNonPublicAddress(a.address))) {
+        return callback(Object.assign(new Error(`Refusing to connect to a local or private network address for ${hostname}.`), { code: 'EPRIVATE' }), '');
+      }
+      if (options.all) callback(null, list);
+      else callback(null, list[0]!.address, list[0]!.family);
+    },
+    (err: NodeJS.ErrnoException) => callback(err, ''),
+  );
 }
+
+/**
+ * Connections kept open for a few seconds after a request, so a repository's manifests and icons on one host (often
+ * github.com and its download host) reuse them instead of a new TCP + TLS handshake each. Only ever on a public
+ * address: the agents connect through publicLookup.
+ */
+const agentOptions = { keepAlive: true, maxSockets: 8, maxFreeSockets: 8, timeout: 5_000, lookup: publicLookup as never };
+const httpAgent = new HttpAgent(agentOptions);
+const httpsAgent = new HttpsAgent(agentOptions);
 
 /** A GET whose connection may only go to a public address. Answers like fetch (no redirects followed). */
 function pinnedGet(url: URL, signal: AbortSignal): Promise<Response> {
   return new Promise((resolve, reject) => {
-    const req = (url.protocol === 'https:' ? httpsRequest : httpRequest)(
+    const https = url.protocol === 'https:';
+    const req = (https ? httpsRequest : httpRequest)(
       url,
-      { method: 'GET', headers: { accept: '*/*', 'user-agent': 'lg-dev-manager-bridge' }, lookup: publicLookup as never, signal },
+      {
+        method: 'GET',
+        headers: { accept: '*/*', 'user-agent': 'lg-dev-manager-bridge' },
+        agent: https ? httpsAgent : httpAgent,
+        lookup: publicLookup as never,
+        signal,
+      },
       (msg) => {
         const status = msg.statusCode ?? 0;
         const headers = new Headers();
@@ -207,7 +261,7 @@ function pinnedGet(url: URL, signal: AbortSignal): Promise<Response> {
 
 async function assertPublicHost(url: URL) {
   const host = url.hostname.replace(/^\[|\]$/g, '');
-  const addresses = isIP(host) ? [host] : (await lookup(host, { all: true }).catch(() => [])).map((a) => a.address);
+  const addresses = (await resolveHost(host).catch(() => [])).map((a) => a.address);
   if (!addresses.length) throw new RpcError(RepoErrorCodes.Unreachable, `Couldn’t find ${host}.`, url.href);
   if (addresses.some(isNonPublicAddress)) {
     throw new RpcError(RepoErrorCodes.BadResponse, 'Refusing to fetch from a local or private network address.', url.href);

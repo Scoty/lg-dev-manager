@@ -16,7 +16,8 @@ function useRepo() {
     queryKey: ['repo', repoKey(source)],
     queryFn: () => call('repo.list', { ...repoParam(source) }, 60_000),
     enabled: ready,
-    staleTime: 5 * 60_000,
+    // Some apps' manifests didn't arrive (repo.list `unchecked`): ask again sooner, the bridge retries just those.
+    staleTime: (q) => (q.state.data?.unchecked ? 30_000 : 5 * 60_000),
     retry: false,
   });
 }

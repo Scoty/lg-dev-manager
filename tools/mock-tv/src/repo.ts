@@ -41,6 +41,8 @@ export interface MockRepoApp {
    * whose `ipkUrl` is relative to the manifest itself; a relative icon; HTML in shortDescription.
    */
   manifestByUrl?: boolean;
+  /** With manifestByUrl: HTTP statuses the manifest answers with first, one per request (then it works) — a flaky host. */
+  manifestErrors?: number[];
 }
 
 /** The default catalogue: covers the states the UI has to show. Ids that the mock TV has installed are noted. */
@@ -93,6 +95,10 @@ export const MOCK_CUSTOM_REPO_APPS: MockRepoApp[] = [
   },
   { id: 'org.example.custom.tool', title: 'Custom Tool', version: '0.9.2', short: 'A tool from a custom repository' },
   { id: 'org.example.custom.stream', title: 'Stream Client', version: '1.3.0', short: 'Game streaming, <b>4K</b> &amp; HDR', manifestByUrl: true },
+  // One package with two apps of the same publisher (like com.cleanyourtv.manager): installed only once the user agrees.
+  { id: 'org.example.custom.suite', title: 'Custom Suite', version: '1.0.0', short: 'Comes with a helper app', ipkAlsoApps: ['org.example.custom.helper'] },
+  // Its manifest's host never answers properly (like a slow GitHub download for a NAS): shown, but not checked.
+  { id: 'org.example.custom.flaky', title: 'Flaky Host App', version: '1.0.0', short: 'Its manifest host is down', manifestByUrl: true, manifestErrors: Array<number>(10_000).fill(503) },
 ];
 
 export interface MockRepo {
@@ -119,6 +125,7 @@ export async function startMockRepo(
   const pageSize = opts.pageSize ?? 9;
   const host = opts.host ?? '127.0.0.1';
   const requests: string[] = [];
+  const manifestTries = new Map<string, number>();
   const ipks = new Map<string, Buffer>();
   const ipkFor = (app: MockRepoApp, version: string) => {
     const key = `${app.id}@${version}`;
@@ -222,6 +229,10 @@ export async function startMockRepo(
     if ((m = path.match(/^\/api\/apps\/([\w.-]+)\/manifest\.json$/))) {
       const app = apps.find((a) => a.id === m![1] && a.manifestByUrl);
       if (!app) return notFound();
+      const tries = (manifestTries.get(app.id) ?? 0) + 1;
+      manifestTries.set(app.id, tries);
+      const status = app.manifestErrors?.[tries - 1];
+      if (status) return res.writeHead(status, { 'content-type': 'text/plain' }).end(`HTTP ${status}`);
       // The IPK address relative to this manifest, as in a GitHub release (…/download/<name>.ipk).
       return json({ ...manifest(app, app.version, 'stable'), ipkUrl: `../../../apps/${app.id}/releases/stable-${app.version}.ipk` });
     }

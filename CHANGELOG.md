@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Custom repositories whose apps keep their details elsewhere** (a `manifestUrl` on GitHub releases, for example)
+  load more reliably on slow networks and NAS boxes (#8). The bridge looks up each site once and reuses its
+  connections; it tries a manifest that doesn't arrive again; and it stops at the repository's time limit instead of
+  running past it. Apps whose manifest still didn't arrive are tried again later, without reading the whole repository
+  again. The page now says “Couldn’t check N apps for updates” (with Try again) instead of quietly showing no update.
+  The console shows why each one failed.
+- **Packages with several apps** from a custom repository (like Clean Your TV's manager with its notifier and picker)
+  can be installed. The other apps must be from the same publisher: the id's own namespace, never the TV's, LG's,
+  Homebrew's or a shared one like `io.github`. They are listed for you to agree to first, and never replace a built-in
+  or store app.
+- The strict IPK check no longer refuses apps that bundle a web app with its own `appinfo.json` files deep inside their
+  folder (only the files webOS reads are checked).
+
 ## 2.0.0 — 2026-10-21
 
 - 🔗 **Pairing links.** The bridge prints a link that pairs a browser with one click (`…/#/pair?token=…`); the app

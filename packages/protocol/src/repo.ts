@@ -99,6 +99,12 @@ export const RepoErrorCodes = {
    * repository), or an IPK that installs a different app than the entry says.
    */
   Refused: 'repo_refused',
+  /**
+   * `apps.installFromRepo` from a custom repository: the IPK also installs other apps of the same publisher (one
+   * package with several apps, all in the id's namespace). `detail` lists their ids, comma-separated; the call is
+   * repeated with them in `alsoInstall` once the user agrees (2.0.1).
+   */
+  AlsoInstalls: 'repo_also_installs',
 } as const;
 
 /** Features a bridge supports beyond the protocol version, reported in `system.hello`. */
