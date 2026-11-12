@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **More filters and a sort order** (#6), behind one **More** button next to the tabs, so the toolbar stays as it was.
+  Repository pages can filter by Not installed, Needs root or Works without root, Should work or May not work on this
+  TV, and Web or Native apps, and sort by name (A–Z or Z–A), updates first or installed first. The Installed page can
+  filter by Updates available and app type, and sort by name or updates first. Each choice shows how many apps it
+  matches, the button shows how many filters are set, and Reset (or Clear the filters, when nothing matches) puts them
+  back.
 - **Custom repositories whose apps keep their details elsewhere** (a `manifestUrl` on GitHub releases, for example)
   load more reliably on slow networks and NAS boxes (#8). The bridge looks up each site once and reuses its
   connections; it tries a manifest that doesn't arrive again; and it stops at the repository's time limit instead of

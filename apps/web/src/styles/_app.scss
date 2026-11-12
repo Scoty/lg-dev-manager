@@ -1080,3 +1080,13 @@ button.log-row:hover { background: var(--bg-hover); }
   .devices-table .cell-sub { white-space: normal; }
   .devices-table .cell-sub.mono { white-space: nowrap; }
 }
+
+/* "More" filters menu next to a list's filter tabs (features/apps/MoreFilters.tsx) */
+.more-filters-btn.is-set { color: var(--primary); }
+.more-filters-btn .tab-count { margin-left: 2px; background: var(--primary-soft); color: var(--primary); }
+.dd-menu.more-filters { min-width: 240px; padding: 6px 0; max-height: min(70vh, 560px); overflow-y: auto; }
+.more-filters-group + .more-filters-group { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
+.more-filters-label { padding: 6px 14px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--t-muted); }
+.more-filters-check { width: 16px; display: inline-flex; justify-content: center; color: var(--primary); }
+.more-filters .dd-menu-item .tab-count { margin-left: auto; }
+.more-filters-foot { border-top: 1px solid var(--border); margin-top: 4px; padding: 8px 10px 4px; display: flex; justify-content: flex-end; }

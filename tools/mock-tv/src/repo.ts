@@ -41,6 +41,8 @@ export interface MockRepoApp {
    * whose `ipkUrl` is relative to the manifest itself; a relative icon; HTML in shortDescription.
    */
   manifestByUrl?: boolean;
+  /** The manifest's app type (default web). */
+  appType?: string;
   /** With manifestByUrl: HTTP statuses the manifest answers with first, one per request (then it works) — a flaky host. */
   manifestErrors?: number[];
 }
@@ -72,7 +74,7 @@ export const MOCK_REPO_APPS: MockRepoApp[] = [
   // Installed at 0.4.6 on the mock TV → update available.
   { id: 'youtube.leanback.v4', title: 'YouTube AdFree', version: '0.5.0', short: 'YouTube TV without ads' },
   // Installed at the same version → nothing to update.
-  { id: 'com.limelight.webos', title: 'Moonlight', version: '1.2.1', short: 'Game streaming client' },
+  { id: 'com.limelight.webos', title: 'Moonlight', version: '1.2.1', short: 'Game streaming client', appType: 'native' },
   { id: 'com.example.rootonly', title: 'Root Only Tool', version: '2.0.0', short: 'Needs a rooted TV', rootRequired: true },
   { id: 'com.example.future', title: 'Future App', version: '1.0.0', short: 'Needs a newer webOS', webosRelease: '>=99.0' },
   // Installed from the "LG Content Store" on the mock TV → conflict.
@@ -144,7 +146,7 @@ export async function startMockRepo(
     return {
       id: app.id,
       version,
-      type: 'web',
+      type: app.appType ?? 'web',
       title: app.title,
       appDescription: app.short ?? app.title,
       iconUri: `${base.replace(/\/api$/, '')}/apps/icons/${app.id}.png`,

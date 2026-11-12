@@ -137,7 +137,7 @@ export const MOCK_APPS: MockApp[] = [
   devApp('com.example.hello', 'Hello World', '1.0.0', 'Example Inc.'),
   devApp('org.webosbrew.hbchannel', 'Homebrew Channel', '0.7.2'),
   devApp('youtube.leanback.v4', 'YouTube AdFree', '0.4.6'),
-  devApp('com.limelight.webos', 'Moonlight', '1.2.1'),
+  { ...devApp('com.limelight.webos', 'Moonlight', '1.2.1'), type: 'native' },
 ];
 
 export function addFile(state: MockState, path: string, data: Buffer) {

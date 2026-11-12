@@ -16,8 +16,29 @@ import { useRepoSource } from './source';
 import { Link } from 'react-router-dom';
 import { Alert } from '../../components/Alert';
 import { count } from '../../lib/format';
+import { MoreFilters, type MoreGroup } from '../apps/MoreFilters';
 
 type Filter = 'all' | 'installed' | 'updates';
+
+/** The "More" menu's choices (MoreFilters): more ways to narrow the list, and its order. */
+type More = { show: 'any' | 'not-installed'; root: 'any' | 'needs' | 'without'; fit: 'any' | 'works' | 'may-not'; type: 'any' | 'web' | 'native'; sort: 'name' | 'name-desc' | 'updates' | 'installed' };
+const MORE_DEFAULTS: More = { show: 'any', root: 'any', fit: 'any', type: 'any', sort: 'name' };
+
+const needsRoot = (v: RepoAppView) => v.pkg.manifest?.rootRequired === true;
+const appType = (v: RepoAppView) => v.pkg.manifest?.type;
+const mayNotWork = (v: RepoAppView) => !!v.incompatible?.length;
+
+function matchesMore(v: RepoAppView, m: More): boolean {
+  if (m.show === 'not-installed' && v.installed) return false;
+  if (m.root === 'needs' && !needsRoot(v)) return false;
+  if (m.root === 'without' && (needsRoot(v) || !v.pkg.manifest)) return false;
+  if (m.fit === 'works' && mayNotWork(v)) return false;
+  if (m.fit === 'may-not' && !mayNotWork(v)) return false;
+  if (m.type !== 'any' && appType(v) !== m.type) return false;
+  return true;
+}
+
+const rank = (v: RepoAppView, sort: More['sort']) => (sort === 'updates' ? (v.state === 'update' ? 0 : 1) : sort === 'installed' ? (v.installed ? 0 : 1) : 0);
 
 /**
  * The webOS Homebrew repository (ChannelComponent in the original): every app with search and filters,
@@ -33,6 +54,7 @@ export function RepoPage() {
   const { toast } = useFeedback();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  const [more, setMore] = useState<More>(MORE_DEFAULTS);
   const [openId, setOpenId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -47,8 +69,9 @@ export function RepoPage() {
   );
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return all
+    const list = all
       .filter((v) => (filter === 'installed' ? !!v.installed : filter === 'updates' ? v.state === 'update' : true))
+      .filter((v) => matchesMore(v, more))
       .filter(
         (v) =>
           !q ||
@@ -56,7 +79,64 @@ export function RepoPage() {
           v.pkg.id.toLowerCase().includes(q) ||
           (v.pkg.shortDescription ?? v.pkg.manifest?.appDescription ?? '').toLowerCase().includes(q),
       );
-  }, [all, filter, query]);
+    // `all` is A–Z already; the other orders keep A–Z within their groups.
+    if (more.sort === 'name-desc') return list.reverse();
+    if (more.sort !== 'name') return list.sort((a, b) => rank(a, more.sort) - rank(b, more.sort));
+    return list;
+  }, [all, filter, query, more]);
+
+  const moreGroups = useMemo((): MoreGroup<keyof More>[] => {
+    const n = (f: (v: RepoAppView) => boolean) => (ready ? all.filter(f).length : undefined);
+    return [
+      { key: 'show', label: 'Show', options: [{ value: 'any', label: 'Any' }, { value: 'not-installed', label: 'Not installed', count: n((v) => !v.installed) }] },
+      {
+        key: 'root',
+        label: 'Root',
+        options: [
+          { value: 'any', label: 'Any' },
+          { value: 'needs', label: 'Needs root', count: n(needsRoot) },
+          { value: 'without', label: 'Works without root', count: n((v) => !!v.pkg.manifest && !needsRoot(v)) },
+        ],
+      },
+      {
+        key: 'fit',
+        label: 'On this TV',
+        options: [
+          { value: 'any', label: 'Any' },
+          { value: 'works', label: 'Should work', count: n((v) => !mayNotWork(v)) },
+          { value: 'may-not', label: 'May not work', count: n(mayNotWork) },
+        ],
+      },
+      {
+        key: 'type',
+        label: 'App type',
+        options: [
+          { value: 'any', label: 'Any' },
+          { value: 'web', label: 'Web apps', count: n((v) => appType(v) === 'web') },
+          { value: 'native', label: 'Native apps', count: n((v) => appType(v) === 'native') },
+        ],
+      },
+      {
+        key: 'sort',
+        label: 'Sort by',
+        options: [
+          { value: 'name', label: 'Name (A–Z)' },
+          { value: 'name-desc', label: 'Name (Z–A)' },
+          { value: 'updates', label: 'Updates first' },
+          { value: 'installed', label: 'Installed first' },
+        ],
+      },
+    ];
+  }, [all, ready]);
+
+  /** Filters in More (not the sort order) narrow the list. */
+  const narrowed = (Object.keys(MORE_DEFAULTS) as (keyof More)[]).some((k) => k !== 'sort' && more[k] !== MORE_DEFAULTS[k]);
+
+  const changeMore = (key: keyof More, value: string) => {
+    setMore((m) => ({ ...m, [key]: value }));
+    // "Not installed" and the Installed / Updates tabs can't both hold: back to All.
+    if (key === 'show' && value === 'not-installed') setFilter('all');
+  };
 
   const refresh = async () => {
     setRefreshing(true);
@@ -150,13 +230,17 @@ export function RepoPage() {
                       type="button"
                       className={`tab${filter === f.id ? ' is-active' : ''}`}
                       aria-pressed={filter === f.id}
-                      onClick={() => setFilter(f.id)}
+                      onClick={() => {
+                        setFilter(f.id);
+                        if (f.id !== 'all') setMore((m) => ({ ...m, show: 'any' })); // Installed / Updates: not "Not installed"
+                      }}
                     >
                       {f.label}
                       {ready && <span className={`tab-count${f.id === 'updates' && counts.updates ? ' is-hot' : ''}`}>{counts[f.id]}</span>}
                     </button>
                   ))}
                 </div>
+                <MoreFilters groups={moreGroups} values={more} defaults={MORE_DEFAULTS} onChange={changeMore} />
               </div>
               <div className="data-toolbar-right">
                 {repo.data && <span className="muted count-label">{visible.length} of {all.length}</span>}
@@ -184,14 +268,21 @@ export function RepoPage() {
             ) : visible.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon"><Icon name="store" /></div>
-                <h3>{query ? 'No matching apps' : filter === 'updates' ? 'Everything is up to date' : 'Nothing here yet'}</h3>
+                <h3>{query || narrowed ? 'No matching apps' : filter === 'updates' ? 'Everything is up to date' : 'Nothing here yet'}</h3>
                 <p>
-                  {query
-                    ? 'Try another search.'
-                    : filter === 'updates'
-                      ? 'None of the repository apps on this TV has a newer version.'
-                      : 'No repository apps are installed on this TV.'}
+                  {narrowed
+                    ? 'No app matches the search and the filters in More.'
+                    : query
+                      ? 'Try another search.'
+                      : filter === 'updates'
+                        ? 'None of the repository apps on this TV has a newer version.'
+                        : 'No repository apps are installed on this TV.'}
                 </p>
+                {narrowed && (
+                  <button type="button" className="btn btn--sm btn--ghost" onClick={() => setMore((m) => ({ ...MORE_DEFAULTS, sort: m.sort }))}>
+                    Clear the filters
+                  </button>
+                )}
               </div>
             ) : (
               <>
