@@ -16,8 +16,8 @@ function viewportBottom() {
  * can dismiss it.
  *
  * `floating` renders the menu on top of the page (fixed, in a portal), lined up with the trigger and opening
- * upwards when there's no room below — for menus inside scrolling containers like tables, which would
- * otherwise clip it.
+ * upwards when there's no room below (scrolling when it fits neither way, never under the console) — for menus inside
+ * scrolling containers like tables, which would otherwise clip it, and long menus.
  */
 export function Dropdown({
   trigger,
@@ -45,18 +45,21 @@ export function Dropdown({
     const anchor = ref.current?.getBoundingClientRect();
     const menu = menuRef.current;
     if (!anchor || !menu) return;
-    const h = menu.offsetHeight;
+    // The menu's full height (scrollHeight, whatever height it was given last time) decides where it fits; when it
+    // fits neither way, it gets the bigger side and scrolls.
+    const h = menu.scrollHeight;
     const w = menu.offsetWidth;
     const bottom = viewportBottom();
-    const below = bottom - anchor.bottom - GAP;
-    const above = anchor.top - GAP;
-    const up = h > below - EDGE && above > below;
-    const top = up ? Math.max(EDGE, anchor.top - GAP - h) : anchor.bottom + GAP;
+    const below = bottom - anchor.bottom - GAP - EDGE;
+    const above = anchor.top - GAP - EDGE;
+    const up = h > below && above > below;
+    const maxHeight = Math.max(120, up ? above : below);
+    const top = up ? Math.max(EDGE, anchor.top - GAP - Math.min(h, maxHeight)) : anchor.bottom + GAP;
     const left =
       placement === 'down-right'
         ? Math.max(EDGE, anchor.right - w)
         : Math.min(Math.max(EDGE, anchor.left), window.innerWidth - w - EDGE);
-    setPos({ top, left });
+    setPos((p) => (p && p.top === top && p.left === left && p.maxHeight === maxHeight ? p : { top, left, maxHeight, overflowY: 'auto' }));
   }, [placement]);
 
   useLayoutEffect(() => {
@@ -64,6 +67,10 @@ export function Dropdown({
     if (!open) return setPos(null);
     place();
   }, [floating, open, place]);
+  // Again after every render while open: the menu's content (and so its height) can change as items are chosen.
+  useLayoutEffect(() => {
+    if (floating && open) place();
+  });
 
   useEffect(() => {
     if (!open) return;

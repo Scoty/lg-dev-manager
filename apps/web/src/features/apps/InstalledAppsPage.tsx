@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type DragEvent } from 'react';
 import { TvName } from '../../components/TvName';
 import { Link } from 'react-router-dom';
 import type { AppInfo } from '@lgdm/protocol';
@@ -18,7 +18,14 @@ import { useRepoApps, type RepoAppView } from '../repo/useRepoApps';
 import { RepoDetails } from '../repo/RepoDetails';
 import { copyText } from '../../lib/secureContext';
 import { fmtKilobytes } from '../../lib/format';
+import { MoreFilters, type MoreGroup } from './MoreFilters';
 
+/** The "More" menu's choices (MoreFilters): updates only, an app type, and the order. */
+type More = { show: 'any' | 'updates'; type: string; sort: 'name' | 'name-desc' | 'updates' };
+const MORE_DEFAULTS: More = { show: 'any', type: 'any', sort: 'name' };
+
+/** webOS app types (appinfo.json `type`) as the menu names them; others by their own name. */
+const TYPE_LABELS: Record<string, string> = { web: 'Web apps', native: 'Native apps', qml: 'QML apps', stub: 'Stub apps' };
 
 function StorageBar({ device }: { device: SavedDevice }) {
   const { data } = useStorage(device);
@@ -50,18 +57,56 @@ export function InstalledAppsPage() {
   const { toast } = useFeedback();
   const [query, setQuery] = useState('');
   const [showSystem, setShowSystem] = useState(false);
+  const [more, setMore] = useState<More>(MORE_DEFAULTS);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
 
   const hasSystem = !!apps?.some((a) => a.systemApp);
+  const repoView = repoApps.view;
+  const hasUpdate = useCallback((a: AppInfo) => repoView.get(a.id)?.state === 'update', [repoView]);
+  // The apps the toolbar's switch shows: what the More menu's counts are of.
+  const shown = useMemo(() => (apps ?? []).filter((a) => showSystem || !a.systemApp), [apps, showSystem]);
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (apps ?? [])
-      .filter((a) => showSystem || !a.systemApp)
+    const list = shown
       .filter((a) => !q || (a.title ?? '').toLowerCase().includes(q) || a.id.toLowerCase().includes(q))
+      .filter((a) => (more.show !== 'updates' || hasUpdate(a)) && (more.type === 'any' || a.type === more.type))
       .sort((a, b) => (a.title ?? a.id).localeCompare(b.title ?? b.id));
-  }, [apps, query, showSystem]);
+    if (more.sort === 'name-desc') return list.reverse();
+    // A stable sort: A–Z within each group.
+    if (more.sort === 'updates') return list.sort((a, b) => Number(hasUpdate(b)) - Number(hasUpdate(a)));
+    return list;
+  }, [shown, query, more, hasUpdate]);
+
+  const moreGroups = useMemo((): MoreGroup<keyof More>[] => {
+    const types = [...new Set(shown.map((a) => a.type).filter((t): t is string => !!t))].sort();
+    return [
+      {
+        key: 'show',
+        label: 'Show',
+        options: [
+          { value: 'any', label: 'Any' },
+          { value: 'updates', label: 'Updates available', count: repoApps.ready ? shown.filter(hasUpdate).length : undefined },
+        ],
+      },
+      {
+        key: 'type',
+        label: 'App type',
+        options: [{ value: 'any', label: 'Any' }, ...types.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t, count: shown.filter((a) => a.type === t).length }))],
+      },
+      {
+        key: 'sort',
+        label: 'Sort by',
+        options: [
+          { value: 'name', label: 'Name (A–Z)' },
+          { value: 'name-desc', label: 'Name (Z–A)' },
+          { value: 'updates', label: 'Updates first' },
+        ],
+      },
+    ];
+  }, [shown, hasUpdate, repoApps.ready]);
+  const narrowed = more.show !== MORE_DEFAULTS.show || more.type !== MORE_DEFAULTS.type;
 
   const onFiles = (files: FileList | null) => {
     const list = [...(files ?? [])];
@@ -146,6 +191,7 @@ export function InstalledAppsPage() {
                     System apps
                   </label>
                 )}
+                {apps && <MoreFilters groups={moreGroups} values={more} defaults={MORE_DEFAULTS} onChange={(k, v) => setMore((m) => ({ ...m, [k]: v }))} />}
               </div>
               <div className="data-toolbar-right">
                 {apps && <span className="muted count-label">{visible.length} of {apps.length}</span>}
@@ -166,10 +212,21 @@ export function InstalledAppsPage() {
             ) : visible.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon"><Icon name="apps" /></div>
-                <h3>{query ? 'No matching apps' : 'No apps installed yet'}</h3>
+                <h3>{query || narrowed ? 'No matching apps' : 'No apps installed yet'}</h3>
                 <p>
-                  {query ? 'Try another search.' : <>Install an IPK from your computer, or browse the <Link to="/apps/homebrew">Homebrew repository</Link>.</>}
+                  {narrowed ? (
+                    'No app matches the search and the filters in More.'
+                  ) : query ? (
+                    'Try another search.'
+                  ) : (
+                    <>Install an IPK from your computer, or browse the <Link to="/apps/homebrew">Homebrew repository</Link>.</>
+                  )}
                 </p>
+                {narrowed && (
+                  <button type="button" className="btn btn--sm btn--ghost" onClick={() => setMore((m) => ({ ...MORE_DEFAULTS, sort: m.sort }))}>
+                    Clear the filters
+                  </button>
+                )}
               </div>
             ) : (
               <div className="table-scroll">
