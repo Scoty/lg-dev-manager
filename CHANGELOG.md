@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.0.1 — 2026-11-12
 
 - **More filters and a sort order** (#6), behind one **More** button next to the tabs, so the toolbar stays as it was.
   Repository pages can filter by Not installed, Needs root or Works without root, Should work or May not work on this
