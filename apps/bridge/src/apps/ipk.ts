@@ -66,16 +66,52 @@ const MAX_DATA_ENTRIES = 200_000;
 const MAX_INFO_BYTES = 256 * 1024;
 
 /**
- * For an IPK from a source that isn't trusted (a custom repository): does it install only `id`? opkg and webOS read
- * an IPK differently from a quick look, so this is strict where they could disagree:
+ * For an IPK from a source that isn't trusted (a custom repository): does it install only `id` — or, besides it, other
+ * apps of the same publisher? opkg and webOS read an IPK differently from a quick look, so this is strict where they
+ * could disagree:
  * - exactly one control.tar.gz and one data.tar.gz member, no other member names twice;
  * - one `control` file with a single paragraph and a single `Package:` field, equal to `id`;
  * - in data.tar.gz, every app, service and package folder (usr/palm/applications|services|packages/<name>) and every
- *   id in their appinfo.json / packageinfo.json / services.json is `id` or `id.<something>` (webOS's own rule for a
- *   package's services), no path climbs out with `..`, and the package's own folder is there.
- * Returns why it fails, or null when it's fine.
+ *   id in their own appinfo.json / packageinfo.json / services.json (the one at the folder's top, the only one webOS
+ *   reads) is `id` or `id.<something>` (webOS's own rule for a package's services) — or, for a package that installs
+ *   several apps (com.vendor.manager with com.vendor.notify), in the id's namespace (siblingNamespace): those are
+ *   returned in `also`, for the user to agree to; no path climbs out with `..`, and the package's own folder is there.
+ * `problem` says why it fails, or is null when it's fine.
  */
+export async function checkUntrustedIpk(ipk: Buffer, id: string): Promise<{ problem: string | null; also: string[] }> {
+  const also = new Set<string>();
+  const problem = await ipkProblem(ipk, id, also);
+  return { problem, also: problem ? [] : [...also].sort() };
+}
+
+/** Is the IPK fine, installing `id` and nothing outside its namespace? (checkUntrustedIpk, without the extra apps.) */
 export async function untrustedIpkProblem(ipk: Buffer, id: string): Promise<string | null> {
+  return (await checkUntrustedIpk(ipk, id)).problem;
+}
+
+/**
+ * Namespaces nobody owns alone — the TV's and LG's own, Homebrew's, and code hosts' (io.github.<user> is someone's,
+ * io.github isn't): an app there can't bring other apps along.
+ */
+const SYSTEM_NAMESPACES = ['com.webos', 'com.lge', 'com.lg', 'com.palm', 'webos', 'org.webosbrew', 'org.webosports'];
+const SHARED_NAMESPACES = new Set([
+  'io.github', 'com.github', 'io.gitlab', 'com.gitlab', 'org.codeberg', 'io.codeberg', 'com.bitbucket', 'org.bitbucket',
+  'io.netlify', 'app.netlify', 'app.vercel', 'com.vercel',
+]);
+
+/**
+ * The namespace other apps in a package may share with `id`: everything before its last segment, when that is at least
+ * two segments (com.vendor for com.vendor.manager) and not a namespace nobody owns alone. Null: no other apps allowed.
+ */
+export function siblingNamespace(id: string): string | null {
+  const parts = id.split('.');
+  if (parts.length < 3) return null;
+  const ns = parts.slice(0, -1).join('.').toLowerCase();
+  if (SHARED_NAMESPACES.has(ns) || SYSTEM_NAMESPACES.some((s) => ns === s || ns.startsWith(`${s}.`))) return null;
+  return ns;
+}
+
+async function ipkProblem(ipk: Buffer, id: string, also: Set<string>): Promise<string | null> {
   const members = arMembers(ipk);
   if (!members) return 'it isn’t an IPK this app can read';
   const names = members.map((m) => m.name);
@@ -101,8 +137,10 @@ export async function untrustedIpkProblem(ipk: Buffer, id: string): Promise<stri
   if (packageId !== id) return `it is ${packageId || 'unnamed'}`;
 
   // The app and package folders must be the id itself; services may be the id or start with it (id.service), as
-  // webOS requires of a package's services.
-  const ours = (kind: string, name: string) => name === id || (kind === 'services' && name.startsWith(`${id}.`));
+  // webOS requires of a package's services. Other apps (and their services) only in the id's namespace, if it has one.
+  const ns = siblingNamespace(id);
+  const sibling = (name: string) => !!ns && name.toLowerCase().startsWith(`${ns}.`) && /^[\w.-]+$/.test(name) && name.length <= 255;
+  const ours = (kind: string, name: string) => name === id || (kind === 'services' && name.startsWith(`${id}.`)) || sibling(name);
   let ownFolder = false;
   try {
     for await (const entry of streamTarEntries(data[0]!.data)) {
@@ -122,7 +160,10 @@ export async function untrustedIpkProblem(ipk: Buffer, id: string): Promise<stri
       if (!m) continue;
       if (!ours(m[1]!, m[2]!)) return `it also installs ${m[2]} (its ${m[1]!.replace(/s$/, '')} folder)`;
       if (m[2] === id && (m[1] === 'applications' || m[1] === 'packages')) ownFolder = true;
-      if (entry.info) {
+      if (m[2] !== id && m[1] !== 'services') also.add(m[2]!);
+      // Only the metadata at a folder's top is what webOS reads; an app may carry other appinfo.json files in its
+      // own folder (a bundled web app's assets), which install nothing.
+      if (entry.info && parts.length === 5) {
         let info: unknown;
         try {
           info = JSON.parse(entry.info.toString('utf8').replace(/^﻿/, ''));
@@ -130,7 +171,10 @@ export async function untrustedIpkProblem(ipk: Buffer, id: string): Promise<stri
           continue; // webOS rejects a broken file itself
         }
         const file = parts.at(-1)!;
-        for (const [kind, other] of infoIds(info, file)) if (!ours(kind, other)) return `it also installs ${other} (named in ${file})`;
+        for (const [kind, other] of infoIds(info, file)) {
+          if (!ours(kind, other)) return `it also installs ${other} (named in ${file})`;
+          if (kind === 'applications' && other !== id) also.add(other);
+        }
       }
     }
   } catch (e) {
@@ -290,7 +334,10 @@ async function* streamTarEntries(gz: Buffer): AsyncGenerator<{ name: string; typ
         const link = h.type === '1' || h.type === '2' ? (longLink ?? h.link) : undefined;
         longName = null;
         longLink = null;
-        const isInfo = /(^|\/)(appinfo|packageinfo|services)\.json$/.test(name) && (h.type === '0' || h.type === '\0');
+        // Only metadata at the top of an app, service or package folder (the files webOS reads) is kept for a look.
+        const isInfo =
+          /^usr\/palm\/(applications|services|packages)\/[^/]+\/(appinfo|packageinfo|services)\.json$/.test(name.split('/').filter((p) => p && p !== '.').join('/')) &&
+          (h.type === '0' || h.type === '\0');
         if (isInfo && h.size > MAX_INFO_BYTES) throw new Error(`${name} is too big`);
         if (isInfo) {
           keep = { left: h.size, pad, parts: [], kind: 'info', name };

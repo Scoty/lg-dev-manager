@@ -29,7 +29,7 @@ interface OpState {
   phase: Phase;
   percent?: number;
   text?: string;
-  done?: { appId?: string; via?: 'devmode' | 'hbchannel'; version?: string };
+  done?: { appId?: string; via?: 'devmode' | 'hbchannel'; version?: string; also?: string[] };
   error?: unknown;
 }
 
@@ -239,7 +239,47 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
     const verb = opts.update ? 'Updating' : channel === 'beta' ? 'Installing the beta of' : 'Installing';
     const target = toTarget(device);
     const from = source.custom ? source.custom.name : 'the Homebrew repository';
-    return runWebInstall(verb, pkg.title, from, (opId) => client.call('apps.installFromRepo', { device: target, id: pkg.id, channel, opId, ...repoParam(source) }, 20 * 60_000));
+    const run = (alsoInstall?: string[]) =>
+      runWebInstall(
+        verb,
+        pkg.title,
+        from,
+        (opId) => client.call('apps.installFromRepo', { device: target, id: pkg.id, channel, opId, ...repoParam(source), ...(alsoInstall ? { alsoInstall } : {}) }, 20 * 60_000),
+        // Only the first try hands it back: the IPK installs more apps than the entry, which the user agrees to first.
+        alsoInstall ? undefined : (e) => e instanceof BridgeError && e.code === RepoErrorCodes.AlsoInstalls,
+      );
+    try {
+      return await run();
+    } catch (e) {
+      const also = ((e as BridgeError).detail ?? '').split(',').filter(Boolean);
+      const there = also.filter((a) => apps?.some((i) => i.id === a));
+      const ok = await confirm({
+        title: `${pkg.title} comes with more apps`,
+        message: (
+          <>
+            <p style={{ marginTop: 0 }}>
+              Besides <b>{pkg.title}</b> (<span className="mono">{pkg.id}</span>), the package from {from} installs these apps on{' '}
+              {device.name}:
+            </p>
+            <ul className="plain-list mono">
+              {also.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+            {there.length > 0 && (
+              <p>
+                ⚠️ {there.length === 1 ? `${there[0]} is already on the TV: this replaces it.` : `${there.join(', ')} are already on the TV: this replaces them.`}
+              </p>
+            )}
+            <p style={{ marginBottom: 0 }}>They come from the same publisher. Install them only if you trust it.</p>
+          </>
+        ),
+        confirmText: 'Install all',
+        danger: true,
+      });
+      if (!ok) return false;
+      return run(also);
+    }
   };
 
   /** Install one build of a Litefin release from GitHub (M8). */
@@ -254,7 +294,9 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
     verb: string,
     subject: string,
     from: string,
-    run: (opId: string) => Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel' }>,
+    run: (opId: string) => Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel'; also?: string[] }>,
+    /** Errors the caller handles itself: the dialog closes and the error is thrown on. */
+    handBack?: (e: unknown) => boolean,
   ) => {
     if (!device || !client) return false;
     const opId = newOpId();
@@ -270,6 +312,10 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
       refresh(device);
       return true;
     } catch (e) {
+      if (handBack?.(e)) {
+        setOp(null);
+        throw e;
+      }
       setOp((s) => (s ? { ...s, error: e } : s));
       return false;
     } finally {
@@ -406,6 +452,7 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
                   source, which read as if the app came from the Homebrew repository). */}
               Installed on {device?.name}
               {op.from ? ` from ${op.from}` : ''}.
+              {op.done.also?.length ? ` The package also installed ${op.done.also.join(', ')}.` : ''}
             </Alert>
           )}
           {op.error !== undefined && (

@@ -359,8 +359,8 @@ export const handlers: HandlerMap = {
     }
   },
 
-  'apps.installFromRepo': ({ device, id, channel, opId, repo }, session, ctx) =>
-    installFromRepo(sshFor(session, ctx), ctx.repos.for(repo), device, id, channel ?? 'stable', progressFor(session, opId), httpTraceFor(session)),
+  'apps.installFromRepo': ({ device, id, channel, opId, repo, alsoInstall }, session, ctx) =>
+    installFromRepo(sshFor(session, ctx), ctx.repos.for(repo), device, id, channel ?? 'stable', progressFor(session, opId), httpTraceFor(session), alsoInstall),
 
   'litefin.list': (params, session, { litefin }) => litefin.list({ refresh: params?.refresh, trace: httpTraceFor(session) }),
   'litefin.install': async ({ device, tag, variant, opId }, session, ctx) => {

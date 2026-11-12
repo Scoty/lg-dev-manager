@@ -15,7 +15,7 @@ import { lunaCall, lunaSubscribe, type SubscriptionStep } from '../ssh/luna.js';
 import type { SshRunner } from '../ssh/pool.js';
 import { serveToDevice } from '../ssh/serve.js';
 import { mkdirp, putFile, readFile, rmFile, sha256sum } from '../ssh/transfer.js';
-import { readIpkControl, untrustedIpkProblem } from './ipk.js';
+import { checkUntrustedIpk, readIpkControl } from './ipk.js';
 import { turnOnScreen, tvPower } from '../devices/power.js';
 import type { RepoClient } from '../repo/repo.js';
 import type { HttpTrace } from '../net/fetch.js';
@@ -315,7 +315,8 @@ export async function installFromRepo(
   channel: 'stable' | 'beta',
   progress?: Progress,
   trace?: HttpTrace,
-): Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel' }> {
+  alsoInstall: string[] = [],
+): Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel'; also?: string[] }> {
   const pkg = await repo.get(id, trace);
   const manifest = channel === 'beta' ? pkg.manifestBeta : pkg.manifest;
   if (!manifest) {
@@ -335,18 +336,38 @@ export async function installFromRepo(
     () => repo.download(manifest, progress, trace),
     progress,
     // A custom repository isn't trusted: the bridge downloads the IPK itself (https, public addresses only, checksum
-    // checked) instead of handing the address to the TV, and it must hold the app the entry names.
-    repo.custom ? { untrustedFrom: repo.name } : {},
+    // checked) instead of handing the address to the TV, and it must hold the app the entry names (and other apps of
+    // the same publisher only as the user agreed).
+    repo.custom ? { untrustedFrom: repo.name, alsoInstall } : {},
   );
 }
 
 /** Homebrew Channel and its updater: a custom repository can't replace the app that keeps the TV rooted. */
 const HOMEBREW_CHANNEL_IDS = new Set([APP_ID_HBCHANNEL, 'org.webosbrew.safeupdate']);
 
-/** The IPK must install the app the repository listed — not Homebrew Channel or another app under a friendly name. */
-async function assertInstallsOnly(data: Buffer, id: string, from: string) {
-  const problem = await untrustedIpkProblem(data, id);
+/**
+ * The IPK must install the app the repository listed — not Homebrew Channel or another app under a friendly name. Other
+ * apps of the same publisher (checkUntrustedIpk `also`) only when the user agreed to exactly those, and never over a
+ * built-in or store app. Returns the other apps it installs.
+ */
+async function assertInstallsOnly(pool: SshRunner, device: DeviceTarget, data: Buffer, id: string, from: string, alsoInstall: string[]): Promise<string[]> {
+  const { problem, also } = await checkUntrustedIpk(data, id);
   if (problem) throw new RpcError(RepoErrorCodes.Refused, `Not installed: the IPK from ${from} should install only ${id}, but ${problem}.`);
+  for (const other of also) {
+    if (HOMEBREW_CHANNEL_IDS.has(other)) throw new RpcError(RepoErrorCodes.Refused, `Not installed: the IPK from ${from} also installs ${other}.`);
+    const location = await findInstallLocation(pool, device, other).catch(() => null);
+    if (location && location !== 'developer') {
+      throw new RpcError(
+        AppsErrorCodes.Conflict,
+        `Not installed: the IPK from ${from} also installs ${other}, and a ${location === 'system' ? 'built-in' : 'store'} app with that id is on the TV.`,
+      );
+    }
+  }
+  const agreed = new Set(alsoInstall);
+  if (also.some((a) => !agreed.has(a))) {
+    throw new RpcError(RepoErrorCodes.AlsoInstalls, `Besides ${id}, the IPK from ${from} installs ${also.join(', ')}.`, also.join(','));
+  }
+  return also;
 }
 
 /**
@@ -360,8 +381,8 @@ export async function installDownloadable(
   pkg: { id: string; title: string; version: string; ipkUrl: string; sha256?: string },
   download: () => Promise<{ data: Buffer; sha256: string; done: () => void }>,
   progress?: Progress,
-  opts: { untrustedFrom?: string } = {},
-): Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel' }> {
+  opts: { untrustedFrom?: string; alsoInstall?: string[] } = {},
+): Promise<{ appId: string; version: string; via: 'devmode' | 'hbchannel'; also?: string[] }> {
   const location = await findInstallLocation(pool, device, pkg.id).catch(() => null);
   if (location && location !== 'developer') {
     throw new RpcError(
@@ -377,9 +398,9 @@ export async function installDownloadable(
     progress?.({ stage: 'upload', text: 'Downloading the IPK…' });
     const { data, done } = await download();
     try {
-      if (opts.untrustedFrom) await assertInstallsOnly(data, pkg.id, opts.untrustedFrom);
+      const also = opts.untrustedFrom ? await assertInstallsOnly(pool, device, data, pkg.id, opts.untrustedFrom, opts.alsoInstall ?? []) : [];
       const res = await installIpk(pool, device, `${pkg.id}.ipk`, data, progress);
-      return { appId: res.appId || pkg.id, version: pkg.version, via: res.via };
+      return { appId: res.appId || pkg.id, version: pkg.version, via: res.via, ...(also.length ? { also } : {}) };
     } finally {
       done();
     }

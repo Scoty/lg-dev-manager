@@ -15,6 +15,7 @@ import { useRepoApps, type RepoAppView } from './useRepoApps';
 import { useRepoSource } from './source';
 import { Link } from 'react-router-dom';
 import { Alert } from '../../components/Alert';
+import { count } from '../../lib/format';
 
 type Filter = 'all' | 'installed' | 'updates';
 
@@ -196,6 +197,22 @@ export function RepoPage() {
               <>
                 {installed.error && (
                   <ErrorAlert error={installed.error} title={`Couldn’t read the apps on ${active?.name}`} hint="Install and update buttons stay off until it works." />
+                )}
+                {!!repo.data.unchecked && (
+                  <div className="page-notice">
+                    <Alert
+                      kind="warning"
+                      title={`Couldn’t check ${count(repo.data.unchecked, 'app')} for updates`}
+                      action={
+                        <button type="button" className="btn btn--sm btn--ghost" onClick={refresh} disabled={refreshing || repo.isFetching}>
+                          Try again
+                        </button>
+                      }
+                    >
+                      The repository keeps their details on another site, which didn’t answer in time. Until it does, they show
+                      no version and can’t be installed. The bridge tries again when you come back to this page.
+                    </Alert>
+                  </div>
                 )}
                 <ul className="repo-grid">
                   {visible.map((v) => (
