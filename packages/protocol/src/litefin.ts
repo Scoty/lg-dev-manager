@@ -11,6 +11,19 @@ export const LITEFIN_RELEASES_PAGE = 'https://github.com/MoazSalem/litefin/relea
 /** Releases listed (newest first, published releases only). */
 export const LITEFIN_RELEASE_COUNT = 5;
 
+/**
+ * Where Litefin's dev builds come from (2.1.0, feature `litefinDev`): one release per commit to Litefin's `development`
+ * branch, built by the author's own pipeline. They share the version number of the release being worked on, so a build
+ * is told apart by its number and commit.
+ */
+export const LITEFIN_DEV_BUILDS_PAGE = 'https://github.com/MoazSalem/litefin-dev-builds/releases';
+/** Dev builds listed (newest first). */
+export const LITEFIN_DEV_BUILD_COUNT = 5;
+
+/** Which list: published releases, or dev builds. */
+export const LitefinChannel = z.enum(['stable', 'dev']);
+export type LitefinChannel = z.infer<typeof LitefinChannel>;
+
 /** A variant name as it appears in the file name (`Litefin-<version>-webOS-<variant>.ipk`), e.g. `Ultra-Legacy`. */
 export const LitefinVariant = z.string().min(1).max(64).regex(/^[A-Za-z0-9][\w.-]*$/, 'Not a variant name');
 
@@ -31,8 +44,23 @@ export const LitefinRelease = z.object({
   title: z.string(),
   publishedAt: z.string(),
   assets: z.array(LitefinAsset),
+  /** Dev builds only: the pipeline's build number, the source commit (short hash) and its message (plain text). */
+  build: z.object({ number: z.number().int().nonnegative(), commit: z.string(), message: z.string().optional() }).optional(),
 });
 export type LitefinRelease = z.infer<typeof LitefinRelease>;
+
+/**
+ * Which listed build is on the TV (`litefin.installed`, 2.1.0). Every file in a Litefin IPK carries the moment that
+ * build was packaged, and the TV keeps it when installing: the bridge reads the installed index.html's time and finds
+ * the release or dev build whose package says the same (to the second). Nothing is stored anywhere.
+ */
+export const LitefinInstalled = z.object({
+  /** When the installed build was packaged (ms), when the TV has Litefin and its files could be read. */
+  builtAt: z.number().optional(),
+  /** The listed release or dev build it is; `variant` when only one variant of that build matches. */
+  match: z.object({ channel: LitefinChannel, tag: z.string(), variant: LitefinVariant.optional() }).optional(),
+});
+export type LitefinInstalled = z.infer<typeof LitefinInstalled>;
 
 export const LitefinErrorCodes = {
   Unreachable: 'litefin_unreachable',

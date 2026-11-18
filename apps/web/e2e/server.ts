@@ -8,7 +8,7 @@
  *  - a fake Homebrew repository on 127.0.0.1:5298 (tools/mock-tv/src/repo.ts) the bridge uses instead of
  *    repo.webosbrew.org,
  *  - a fake LG Developer Mode session service (developer.lge.com) knowing the Dev Mode TV's token,
- *  - a fake GitHub serving Litefin's releases (tools/mock-tv/src/github.ts) on 127.0.0.1:5297,
+ *  - a fake GitHub serving Litefin's releases and dev builds (tools/mock-tv/src/github.ts) on 127.0.0.1:5297,
  *  - a second fake repository on 127.0.0.1:5296, for custom repositories (http on 127.0.0.1, so the bridge runs with
  *    the test-only LGDM_TEST_ALLOW_LOCAL_REPOS — real bridges take https repositories on the internet only),
  *  - the bridge on 127.0.0.1:5299 serving the built web UI (apps/web/dist), pairing token "e2e-token",
@@ -67,6 +67,7 @@ await startServer({
   repoUrl: repo.url,
   lgeUrl: lge.url,
   litefinUrl: github.url,
+  litefinDevUrl: github.devUrl,
   dev: true,
 });
 
@@ -80,6 +81,7 @@ await startServer({
   repoUrl: repo.url,
   lgeUrl: lge.url,
   litefinUrl: github.url,
+  litefinDevUrl: github.devUrl,
   dev: true,
   storeDir: mkdtempSync(join(tmpdir(), 'lgdm-e2e-store-')),
 });

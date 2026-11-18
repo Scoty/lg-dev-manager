@@ -3,7 +3,7 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 /** Build and read real (if tiny) IPKs: an ar archive with debian-binary, control.tar.gz and data.tar.gz. */
 
 /** A ustar archive of `files` (for tests that build unusual IPKs). */
-export function tar(files: { name: string; data: Buffer; type?: string; link?: string }[]): Buffer {
+export function tar(files: { name: string; data: Buffer; type?: string; link?: string; mtime?: number }[]): Buffer {
   const parts: Buffer[] = [];
   for (const f of files) {
     const h = Buffer.alloc(512);
@@ -12,7 +12,7 @@ export function tar(files: { name: string; data: Buffer; type?: string; link?: s
     h.write('0000000\0', 108, 'latin1');
     h.write('0000000\0', 116, 'latin1');
     h.write(`${f.data.length.toString(8).padStart(11, '0')}\0`, 124, 'latin1');
-    h.write(`${Math.floor(Date.now() / 1000).toString(8).padStart(11, '0')}\0`, 136, 'latin1');
+    h.write(`${(f.mtime ?? Math.floor(Date.now() / 1000)).toString(8).padStart(11, '0')}\0`, 136, 'latin1');
     h.write('        ', 148, 'latin1');
     h[156] = (f.type ?? '0').charCodeAt(0); // '0' regular file, '2' symlink, 'x' pax header…
     if (f.link) h.write(f.link, 157, 100, 'utf8');
@@ -39,8 +39,11 @@ export function ar(members: { name: string; data: Buffer }[]): Buffer {
   return Buffer.concat(parts);
 }
 
-/** A minimal IPK for `id`. `padBytes` adds payload so transfers have something to show progress for. */
-export function fakeIpk(id: string, version = '1.0.0', title = id, padBytes = 0, opts: { alsoApps?: string[] } = {}): Buffer {
+/**
+ * A minimal IPK for `id`. `padBytes` adds payload so transfers have something to show progress for. `builtAt`
+ * (seconds) stamps every packaged file with one time, as ares-package does with the moment of the build.
+ */
+export function fakeIpk(id: string, version = '1.0.0', title = id, padBytes = 0, opts: { alsoApps?: string[]; builtAt?: number } = {}): Buffer {
   const control = `Package: ${id}\nVersion: ${version}\nSection: misc\nPriority: optional\nArchitecture: all\nDescription: ${title}\n`;
   const json = (o: unknown) => Buffer.from(JSON.stringify(o));
   // Laid out like ares-package's output: the app and its package info under usr/palm.
@@ -51,14 +54,38 @@ export function fakeIpk(id: string, version = '1.0.0', title = id, padBytes = 0,
     {
       name: 'data.tar.gz',
       data: gzipSync(
-        tar([
-          ...apps.map((a) => ({ name: `./usr/palm/applications/${a}/appinfo.json`, data: json({ id: a, version, type: 'web', title, main: 'index.html' }) })),
-          { name: `./usr/palm/applications/${id}/payload.bin`, data: Buffer.alloc(padBytes, 0x2e) },
-          { name: `./usr/palm/packages/${id}/packageinfo.json`, data: json({ id, version, app: id }) },
-        ]),
+        tar(
+          [
+            ...apps.map((a) => ({ name: `./usr/palm/applications/${a}/appinfo.json`, data: json({ id: a, version, type: 'web', title, main: 'index.html' }) })),
+            { name: `./usr/palm/applications/${id}/index.html`, data: Buffer.from(`<!doctype html><title>${title}</title>`) },
+            { name: `./usr/palm/applications/${id}/payload.bin`, data: Buffer.alloc(padBytes, 0x2e) },
+            { name: `./usr/palm/packages/${id}/packageinfo.json`, data: json({ id, version, app: id }) },
+          ].map((f) => ({ ...f, mtime: opts.builtAt })),
+        ),
       ),
     },
   ]);
+}
+
+/** The time stamped on the first file of the IPK's data.tar.gz (seconds), which the TV keeps when installing it. */
+export function readBuildTime(data: Buffer): number | undefined {
+  try {
+    let off = 8;
+    while (off + 60 <= data.length) {
+      const header = data.subarray(off, off + 60).toString('latin1');
+      const name = header.slice(0, 16).trim().replace(/\/$/, '');
+      const size = Number.parseInt(header.slice(48, 58).trim(), 10);
+      if (name === 'data.tar.gz') {
+        const t = gunzipSync(data.subarray(off + 60, off + 60 + size));
+        const mtime = Number.parseInt(t.subarray(136, 148).toString('latin1').replace(/\0.*$/s, '').trim(), 8);
+        return Number.isFinite(mtime) ? mtime : undefined;
+      }
+      off += 60 + size + (size % 2);
+    }
+  } catch {
+    /* not an IPK */
+  }
+  return undefined;
 }
 
 /** Read Package / Version / Description the way opkg would. Null if it isn't an IPK. */

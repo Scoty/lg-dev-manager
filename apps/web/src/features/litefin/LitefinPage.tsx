@@ -1,7 +1,15 @@
 import { useMemo, useState } from 'react';
 import { TvName } from '../../components/TvName';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { LITEFIN_APP_ID, LITEFIN_RELEASE_COUNT, LITEFIN_RELEASES_PAGE, type LitefinRelease } from '@lgdm/protocol';
+import {
+  BridgeFeatures,
+  LITEFIN_APP_ID,
+  LITEFIN_DEV_BUILDS_PAGE,
+  LITEFIN_RELEASE_COUNT,
+  LITEFIN_RELEASES_PAGE,
+  type LitefinChannel,
+  type LitefinRelease,
+} from '@lgdm/protocol';
 import { PageHeader } from '../../components/PageHeader';
 import { NeedsDevice } from '../../components/NeedsDevice';
 import { ErrorAlert, describeError } from '../../components/ErrorAlert';
@@ -10,20 +18,25 @@ import { useFeedback } from '../../components/Feedback';
 import { Icon } from '../../shell/icons';
 import { useRpc } from '../../bridge/useRpc';
 import { useDevices } from '../../devices/useDevices';
-import type { SavedDevice } from '../../devices/store';
+import { toTarget, type SavedDevice } from '../../devices/store';
 import { useAppOperations } from '../apps/operations';
 import { useInstalledApps } from '../apps/queries';
-import { fmtBytes } from '../../lib/format';
+import { count, fmtBytes } from '../../lib/format';
+import { useBridgeFeature } from '../../bridge/BridgeProvider';
 import { compareVersions, suggestedVariant, variantColumns, variantInfo } from './variants';
 
 const KEY = ['litefin-releases'];
+/** The source of each dev build, in Litefin's own repository. */
+const LITEFIN_COMMIT_PAGE = 'https://github.com/MoazSalem/litefin/commit/';
 
 /**
  * Litefin repo (M8): every webOS build of the latest Litefin releases, installable straight onto the TV. The Homebrew
- * repository only carries one build per version.
+ * repository only carries one build per version. From 2.1.0 (bridge feature litefinDev) also Litefin's dev builds — one
+ * per commit to its development branch, all with the same version, so they're told apart by build number and commit.
  */
 export function LitefinPage() {
   const { active } = useDevices();
+  const devSupported = useBridgeFeature(BridgeFeatures.LitefinDev);
   return (
     <>
       <PageHeader
@@ -37,6 +50,7 @@ export function LitefinPage() {
               its GitHub releases
             </a>
             . The Homebrew repository only has one build per version.
+            {devSupported && ' Dev builds has the newest builds of its development branch, made for every change.'}
           </>
         }
       />
@@ -51,13 +65,24 @@ function Releases({ device }: { device: SavedDevice }) {
   const { ready, call } = useRpc();
   const { confirm, toast } = useFeedback();
   const qc = useQueryClient();
-  const list = useQuery({
-    queryKey: KEY,
-    queryFn: () => call('litefin.list', {}, 60_000),
-    enabled: ready,
+  const devSupported = useBridgeFeature(BridgeFeatures.LitefinDev);
+  const [picked, setChannel] = useState<LitefinChannel>('stable');
+  // An older bridge would answer a dev builds request with its releases: only ask one that knows the difference.
+  const channel: LitefinChannel = devSupported ? picked : 'stable';
+  const dev = channel === 'dev';
+  const key = [...KEY, channel];
+  const params = dev ? { channel } : {};
+  // Both lists, when the bridge has dev builds: the status line compares what's installed with either.
+  const listOf = (c: LitefinChannel, enabled: boolean) => ({
+    queryKey: [...KEY, c],
+    queryFn: () => call('litefin.list', c === 'dev' ? { channel: c } : {}, 60_000),
+    enabled: ready && enabled,
     staleTime: 5 * 60_000,
     retry: false,
   });
+  const stableList = useQuery(listOf('stable', true));
+  const devList = useQuery(listOf('dev', !!devSupported));
+  const list = dev ? devList : stableList;
   const apps = useInstalledApps(device);
   const ops = useAppOperations(device, apps.data);
   const [refreshing, setRefreshing] = useState(false);
@@ -66,13 +91,46 @@ function Releases({ device }: { device: SavedDevice }) {
   const columns = useMemo(() => variantColumns(releases), [releases]);
   const installed = apps.data?.find((a) => a.id === LITEFIN_APP_ID);
   const suggested = suggestedVariant(device.info?.osVersion);
-  const latest = releases[0];
+  const page = dev ? LITEFIN_DEV_BUILDS_PAGE : LITEFIN_RELEASES_PAGE;
+
+  // Which listed release or dev build is installed: the bridge compares the time the TV's files were packaged with
+  // each listed package's (to the second), so a build made by hand matches none.
+  const which = useQuery({
+    queryKey: ['litefin-installed', device.id, installed?.version],
+    queryFn: () => call('litefin.installed', { device: toTarget(device) }, 120_000),
+    enabled: ready && !!devSupported && !!installed,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const match = which.data?.match;
+  const builtAt = which.data?.builtAt;
+  const matched = match && (match.channel === 'dev' ? devList : stableList).data?.releases.find((r) => r.tag === match.tag);
+  const notListed = !!builtAt && !match;
+  /** Is this release (or dev build) the one on the TV? By its files when the bridge could tell, else by version. */
+  const isInstalledRow = (r: LitefinRelease) =>
+    which.data?.builtAt !== undefined ? r.tag === match?.tag : !r.build && !!installed?.version && compareVersions(installed.version, r.version) === 0;
+
+  // What's newer than the installed build: after a dev build, a release made after it (with at least its version), or a
+  // later dev build; otherwise a release with a higher version.
+  const latestRelease = stableList.data?.releases[0];
+  const newer = useMemo((): { kind: 'release' | 'dev'; release: LitefinRelease } | null => {
+    const version = installed?.version;
+    if (!version) return null;
+    if (match?.channel === 'dev' && builtAt) {
+      const release = stableList.data?.releases.find((r) => Date.parse(r.publishedAt) > builtAt && compareVersions(r.version, version) >= 0);
+      if (release) return { kind: 'release', release };
+      const latestDev = devList.data?.releases[0];
+      return latestDev?.build && matched?.build && latestDev.build.number > matched.build.number ? { kind: 'dev', release: latestDev } : null;
+    }
+    return latestRelease && compareVersions(latestRelease.version, version) > 0 ? { kind: 'release', release: latestRelease } : null;
+  }, [installed?.version, match?.channel, builtAt, stableList.data, devList.data, matched, latestRelease]);
 
   const refresh = async () => {
     setRefreshing(true);
     try {
-      qc.setQueryData(KEY, await call('litefin.list', { refresh: true }, 60_000));
+      qc.setQueryData(key, await call('litefin.list', { ...params, refresh: true }, 60_000));
       apps.refetch();
+      qc.invalidateQueries({ queryKey: ['litefin-installed', device.id] });
     } catch (e) {
       toast({ kind: 'danger', title: 'Couldn’t refresh the releases', text: describeError(e).message });
     } finally {
@@ -81,17 +139,29 @@ function Releases({ device }: { device: SavedDevice }) {
   };
 
   const install = async (release: LitefinRelease, variant: string) => {
-    const label = `Litefin ${release.version} (${variantInfo(variant).label})`;
+    const build = release.build;
+    const label = build ? `Litefin dev build #${build.number} (${variantInfo(variant).label})` : `Litefin ${release.version} (${variantInfo(variant).label})`;
+    const devNote = build && (
+      <p>
+        Dev builds aren’t tested releases: a new one is made for every change to Litefin’s development branch, so it gets fixes and features first but
+        can be broken. To go back, install a release.
+      </p>
+    );
     if (!apps.data) {
       // Couldn't read the TV's apps: Litefin may be there, and this would replace it.
       const ok = await confirm({
         title: `Install ${label}?`,
-        message: <p>The apps on {device.name} couldn’t be read, so it isn’t known whether Litefin is installed. If it is, this replaces it.</p>,
+        message: (
+          <>
+            <p>The apps on {device.name} couldn’t be read, so it isn’t known whether Litefin is installed. If it is, this replaces it.</p>
+            {devNote}
+          </>
+        ),
         confirmText: 'Install',
       });
       if (!ok) return;
     } else if (installed) {
-      const older = installed.version && compareVersions(release.version, installed.version) < 0;
+      const older = !build && installed.version && compareVersions(release.version, installed.version) < 0;
       const ok = await confirm({
         title: `Replace Litefin on ${device.name}?`,
         message: (
@@ -101,13 +171,18 @@ function Releases({ device }: { device: SavedDevice }) {
               <b>{label}</b> replaces it.
             </p>
             {older && <p>This is an older version than the one installed.</p>}
+            {devNote}
           </>
         ),
         confirmText: 'Install',
       });
       if (!ok) return;
+    } else if (build) {
+      const ok = await confirm({ title: `Install ${label}?`, message: devNote, confirmText: 'Install' });
+      if (!ok) return;
     }
-    await ops.installLitefin(release.tag, variant, label);
+    await ops.installLitefin(release.tag, variant, label, channel);
+    qc.invalidateQueries({ queryKey: ['litefin-installed', device.id] });
   };
 
   return (
@@ -120,10 +195,30 @@ function Releases({ device }: { device: SavedDevice }) {
               <span className="muted">Checking {device.name}…</span>
             ) : installed ? (
               <>
-                Litefin <b className="mono">v{installed.version}</b> is installed on <TvName device={device} />
-                {latest && installed.version && compareVersions(latest.version, installed.version) > 0 && (
-                  <span className="badge warning litefin-badge">v{latest.version} available</span>
+                {matched?.build ? (
+                  <>
+                    Litefin <b className="mono">dev build #{matched.build.number}</b> (v{installed.version}) is installed on <TvName device={device} />
+                  </>
+                ) : (
+                  <>
+                    Litefin <b className="mono">v{installed.version}</b> is installed on <TvName device={device} />
+                  </>
                 )}
+                {match?.variant && <span className="muted"> ({variantInfo(match.variant).label} build)</span>}
+                {notListed && (
+                  <span className="muted" title="Its files were packaged at a time no listed release or dev build matches — a build made by hand, or an older one.">
+                    {' '}
+                    · not a listed build (packaged {new Date(builtAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })})
+                  </span>
+                )}
+                {newer &&
+                  (newer.kind === 'dev' ? (
+                    <span className="badge warning litefin-badge">Dev build #{newer.release.build?.number} available</span>
+                  ) : (
+                    <span className="badge warning litefin-badge">
+                      {match?.channel === 'dev' ? `Release v${newer.release.version} available` : `v${newer.release.version} available`}
+                    </span>
+                  ))}
               </>
             ) : (
               <>
@@ -139,8 +234,17 @@ function Releases({ device }: { device: SavedDevice }) {
           </span>
         </div>
         <div className="data-toolbar-right">
-          {list.data && <span className="muted count-label">{releases.length} releases</span>}
-          <a className="btn btn--ghost btn--sm" href={LITEFIN_RELEASES_PAGE} target="_blank" rel="noopener noreferrer">
+          {devSupported && (
+            <div className="tabs pills" role="group" aria-label="Show">
+              {(['stable', 'dev'] as const).map((c) => (
+                <button key={c} type="button" className={`tab${channel === c ? ' is-active' : ''}`} aria-pressed={channel === c} onClick={() => setChannel(c)}>
+                  {c === 'dev' ? 'Dev builds' : 'Releases'}
+                </button>
+              ))}
+            </div>
+          )}
+          {list.data && <span className="muted count-label">{dev ? count(releases.length, 'dev build') : count(releases.length, 'release')}</span>}
+          <a className="btn btn--ghost btn--sm" href={page} target="_blank" rel="noopener noreferrer">
             <Icon name="github" /> GitHub
           </a>
           <button type="button" className="btn btn--icon btn--ghost" onClick={refresh} disabled={!ready || refreshing} aria-label="Refresh" title="Check GitHub again">
@@ -149,26 +253,34 @@ function Releases({ device }: { device: SavedDevice }) {
         </div>
       </div>
 
+      {dev && (
+        <div className="page-notice">
+          <Alert kind="warning" title="Dev builds are untested">
+            A new build is made for every change to Litefin’s development branch: fixes and features arrive here first, but a build can be broken. They
+            all carry the version being worked on, so the build number and commit tell them apart. To go back, install a release.
+          </Alert>
+        </div>
+      )}
       {list.data?.stale && (
         <Alert kind="warning" title="Showing the list from earlier">
           {list.data.stale}
         </Alert>
       )}
       {list.error ? (
-        <ErrorAlert error={list.error} title="Couldn’t load Litefin’s releases" action={<button type="button" className="btn btn--sm btn--ghost" onClick={() => list.refetch()}>Retry</button>} />
+        <ErrorAlert error={list.error} title={dev ? 'Couldn’t load Litefin’s dev builds' : 'Couldn’t load Litefin’s releases'} action={<button type="button" className="btn btn--sm btn--ghost" onClick={() => list.refetch()}>Retry</button>} />
       ) : !list.data ? (
-        <div className="empty-state"><span className="spinner" /><p>Reading Litefin’s releases from GitHub…</p></div>
+        <div className="empty-state"><span className="spinner" /><p>{dev ? 'Reading Litefin’s dev builds from GitHub…' : 'Reading Litefin’s releases from GitHub…'}</p></div>
       ) : !releases.length ? (
         <div className="empty-state">
-          <h3>No releases with webOS builds</h3>
-          <p>GitHub lists no published Litefin release with a webOS IPK right now.</p>
+          <h3>{dev ? 'No dev builds with webOS files' : 'No releases with webOS builds'}</h3>
+          <p>{dev ? 'GitHub lists no dev build with a webOS IPK right now. The newest may still be building.' : 'GitHub lists no published Litefin release with a webOS IPK right now.'}</p>
         </div>
       ) : (
         <div className="table-scroll">
           <table className="data-table litefin-table">
             <thead>
               <tr>
-                <th scope="col">Release</th>
+                <th scope="col">{dev ? 'Build' : 'Release'}</th>
                 {columns.map((v) => {
                   const info = variantInfo(v);
                   return (
@@ -183,23 +295,46 @@ function Releases({ device }: { device: SavedDevice }) {
             </thead>
             <tbody>
               {releases.map((r, i) => {
-                const isInstalled = !!installed?.version && compareVersions(installed.version, r.version) === 0;
+                const isInstalled = isInstalledRow(r);
+                const when = r.publishedAt
+                  ? new Date(r.publishedAt).toLocaleString(undefined, r.build ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' })
+                  : '';
                 return (
                   <tr key={r.tag}>
                     <th scope="row" className="litefin-release">
-                      <span className="litefin-version mono">v{r.version}</span>
+                      {r.build ? (
+                        <>
+                          <span className="litefin-version mono">#{r.build.number}</span>
+                          <span className="muted mono litefin-build-version"> v{r.version}</span>
+                        </>
+                      ) : (
+                        <span className="litefin-version mono">v{r.version}</span>
+                      )}
                       {i === 0 && <span className="badge info litefin-badge">Latest</span>}
                       {isInstalled && <span className="badge success litefin-badge">Installed</span>}
+                      {r.build?.message && (
+                        <span className="litefin-commit-message" title={r.build.message}>
+                          {r.build.message}
+                        </span>
+                      )}
                       <span className="litefin-date muted">
-                        {r.publishedAt ? new Date(r.publishedAt).toLocaleDateString(undefined, { dateStyle: 'medium' }) : ''} ·{' '}
-                        <a href={`${LITEFIN_RELEASES_PAGE}/tag/${encodeURIComponent(r.tag)}`} target="_blank" rel="noopener noreferrer">
+                        {when} ·{' '}
+                        {r.build && /^[0-9a-f]{7,40}$/.test(r.build.commit) && (
+                          <>
+                            <a className="mono" href={`${LITEFIN_COMMIT_PAGE}${r.build.commit}`} target="_blank" rel="noopener noreferrer" title="The commit it was built from">
+                              {r.build.commit}
+                            </a>{' '}
+                            ·{' '}
+                          </>
+                        )}
+                        <a href={`${page}/tag/${encodeURIComponent(r.tag)}`} target="_blank" rel="noopener noreferrer">
                           Notes
                         </a>
                       </span>
                     </th>
                     {columns.map((v) => {
                       const asset = r.assets.find((a) => a.variant === v);
-                      const label = `Install Litefin ${r.version} ${variantInfo(v).label}`;
+                      const label = r.build ? `Install Litefin dev build ${r.build.number} ${variantInfo(v).label}` : `Install Litefin ${r.version} ${variantInfo(v).label}`;
                       return (
                         <td key={v} className={v === suggested ? 'is-suggested' : undefined}>
                           {asset ? (
@@ -215,6 +350,7 @@ function Releases({ device }: { device: SavedDevice }) {
                                 <Icon name="download" /> Install
                               </button>
                               <span className="muted litefin-size">{asset.size ? fmtBytes(asset.size) : ''}</span>
+                              {isInstalled && match?.variant === v && <span className="badge success litefin-badge litefin-cell-badge">On the TV</span>}
                             </div>
                           ) : (
                             <span className="muted">

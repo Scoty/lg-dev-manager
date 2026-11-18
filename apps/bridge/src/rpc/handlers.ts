@@ -22,6 +22,7 @@ import {
   type ResultOf,
   BridgeFeatures,
   StoreErrorCodes,
+  type LitefinChannel,
 } from '@lgdm/protocol';
 import { RpcError } from './errors.js';
 import { BRIDGE_VERSION } from '../version.js';
@@ -38,7 +39,7 @@ import { tvPower } from '../devices/power.js';
 import { appIcon, hbChannelConfig, installDownloadable, installFromRepo, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
 import type { HttpTrace } from '../net/fetch.js';
 import type { RepoRegistry } from '../repo/registry.js';
-import type { LitefinClient } from '../litefin/litefin.js';
+import { installedLitefinTime, type LitefinClient } from '../litefin/litefin.js';
 import type { ShellSessions } from '../shell/shells.js';
 import { homeDir, listDir, makeDir, readChunk, removePath, renameFile, statFile, writeFile } from '../files/files.js';
 import type { UploadStore } from './uploads.js';
@@ -121,6 +122,13 @@ const httpTraceFor = (session: Session, quiet = false): HttpTrace => (target, co
 const progressFor = (session: Session, opId: string) => (p: Omit<OpProgress, 'opId'>) =>
   session.emit(OP_PROGRESS_EVENT, { opId, ...p } satisfies OpProgress);
 
+/** The Litefin list a call is about: releases, or dev builds. */
+function litefinFor(ctx: Context, channel: LitefinChannel | undefined): LitefinClient {
+  if (channel !== 'dev') return ctx.litefin;
+  if (!ctx.litefinDev) throw new RpcError(ErrorCodes.Internal, 'Litefin dev builds aren’t available on this bridge.');
+  return ctx.litefinDev;
+}
+
 export interface Context {
   token: string;
   pool: SshPool;
@@ -128,6 +136,8 @@ export interface Context {
   repos: RepoRegistry;
   /** Litefin's GitHub releases (LGDM_LITEFIN_URL overrides, for tests). */
   litefin: LitefinClient;
+  /** Litefin's dev builds (LGDM_LITEFIN_DEV_URL overrides, for tests); absent in tests that don't need them. */
+  litefinDev?: LitefinClient;
   /** LG's Developer Mode session service (LGDM_LGE_URL overrides, for tests). */
   lgeUrl?: string;
   /** Started with --dev: unexpected errors include their stack trace. */
@@ -182,7 +192,7 @@ export const handlers: HandlerMap = {
       bridgeVersion: BRIDGE_VERSION,
       platform: platform(),
       distribution: distribution(),
-      features: [BridgeFeatures.CustomRepos, ...(ctx.store ? [BridgeFeatures.ServerStore] : [])],
+      features: [BridgeFeatures.CustomRepos, BridgeFeatures.LitefinDev, ...(ctx.store ? [BridgeFeatures.ServerStore] : [])],
       ...(ctx.lan ? { lan: true } : {}),
     };
   },
@@ -362,18 +372,36 @@ export const handlers: HandlerMap = {
   'apps.installFromRepo': ({ device, id, channel, opId, repo, alsoInstall }, session, ctx) =>
     installFromRepo(sshFor(session, ctx), ctx.repos.for(repo), device, id, channel ?? 'stable', progressFor(session, opId), httpTraceFor(session), alsoInstall),
 
-  'litefin.list': (params, session, { litefin }) => litefin.list({ refresh: params?.refresh, trace: httpTraceFor(session) }),
-  'litefin.install': async ({ device, tag, variant, opId }, session, ctx) => {
+  'litefin.list': (params, session, ctx) => litefinFor(ctx, params?.channel).list({ refresh: params?.refresh, trace: httpTraceFor(session) }),
+  'litefin.install': async ({ device, tag, variant, opId, channel }, session, ctx) => {
     const progress = progressFor(session, opId);
     const trace = httpTraceFor(session);
-    const { release, asset, url, fetch } = await ctx.litefin.download(tag, variant, progress, trace);
+    const { release, asset, url, fetch } = await litefinFor(ctx, channel).download(tag, variant, progress, trace);
+    const build = release.build ? ` dev build #${release.build.number}` : '';
     return installDownloadable(
       sshFor(session, ctx),
       device,
-      { id: LITEFIN_APP_ID, title: `Litefin ${release.version} (${asset.variant.replace(/-/g, ' ')})`, version: release.version, ipkUrl: url, sha256: asset.sha256 },
+      { id: LITEFIN_APP_ID, title: `Litefin ${release.version}${build} (${asset.variant.replace(/-/g, ' ')})`, version: release.version, ipkUrl: url, sha256: asset.sha256 },
       fetch,
       progress,
     );
+  },
+
+  'litefin.installed': async ({ device }, session, ctx) => {
+    const time = await installedLitefinTime(sshFor(session, ctx), device);
+    if (time === null) return {};
+    // Which listed release or dev build has a package made at that second; none for a build made elsewhere.
+    const trace = httpTraceFor(session, true);
+    const lists: [LitefinChannel, LitefinClient | undefined][] = [
+      ['stable', ctx.litefin],
+      ['dev', ctx.litefinDev],
+    ];
+    for (const [channel, client] of lists) {
+      const found = await client?.findBuilt(time, trace).catch(() => []);
+      const hit = found?.[0];
+      if (hit) return { builtAt: time * 1000, match: { channel, tag: hit.tag, ...(hit.variants.length === 1 ? { variant: hit.variants[0] } : {}) } };
+    }
+    return { builtAt: time * 1000 };
   },
 
   'repo.list': ({ refresh, repo }, session, { repos }) => repos.for(repo).list({ refresh, trace: httpTraceFor(session, true) }),

@@ -1,15 +1,35 @@
-import { LITEFIN_APP_ID, LITEFIN_RELEASE_COUNT, LitefinErrorCodes, type LitefinAsset, type LitefinRelease } from '@lgdm/protocol';
+import { LITEFIN_APP_ID, LITEFIN_DEV_BUILD_COUNT, LITEFIN_RELEASE_COUNT, LitefinErrorCodes, type LitefinAsset, type LitefinChannel, type LitefinRelease } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
 import { bridgeUploadBudget, type UploadBudget } from '../rpc/uploads.js';
-import { downloadIpk, readBody, type HttpTrace, type Progress } from '../net/fetch.js';
+import { downloadIpk, readBody, readStart, safeGet, type HttpTrace, type Progress } from '../net/fetch.js';
+import type { SshRunner } from '../ssh/pool.js';
+import { ipkBuildTime } from './buildTime.js';
 
 /**
  * Litefin's GitHub releases (M8). The Homebrew repository carries one Litefin build per version; its releases have one
  * IPK per webOS variant (`Litefin-<version>-webOS-<variant>.ipk`). The bridge reads the release list itself and only
  * ever downloads files from that list, from the project's own release-download path.
+ *
+ * The same client reads Litefin's dev builds (2.1.0, `channel: 'dev'`): the author's pipeline makes a release in
+ * MoazSalem/litefin-dev-builds for every commit to Litefin's development branch, tagged `dev-b<build>-<commit>`, with
+ * the same IPKs named `Litefin-<version>-webOS-<variant>-<commit>.ipk`. They all carry the version being worked on, so
+ * the build number and commit are what tell them apart.
  */
 
 const DEFAULT_LITEFIN_API = 'https://api.github.com/repos/MoazSalem/litefin';
+const DEFAULT_LITEFIN_DEV_API = 'https://api.github.com/repos/MoazSalem/litefin-dev-builds';
+/** `dev-b99-0ac5e76` → build 99, commit 0ac5e76 (`dev` for a manual run without one). */
+const DEV_TAG = /^dev-b(\d{1,9})-([A-Za-z0-9]{1,40})$/;
+/** The commit message line in a dev build's notes. */
+const DEV_MESSAGE = /\*\*Commit Message:\*\*[ \t]*([^\r\n]*)/;
+/** How much of a package is read to learn when it was built (its first tar header sits a few hundred bytes in). */
+const HEAD_BYTES = 8192;
+/** A listed package can be the installed one only if it was uploaded after it was built, and not ages after. */
+const UPLOAD_AFTER_BUILD_MS = 14 * 86_400_000;
+/** At most this many packages' first bytes are read per litefin.installed. */
+const MAX_HEAD_READS = 30;
+/** The installed Litefin's main page (the TV keeps its packaged time; appinfo.json gets rewritten on install). */
+const INSTALLED_INDEX = `/media/developer/apps/usr/palm/applications/${LITEFIN_APP_ID}/index.html`;
 const CACHE_MS = 10 * 60_000;
 /** An install of something not in the list fetches it again at most this often (GitHub allows 60 calls an hour). */
 const MISS_REFRESH_MS = 60_000;
@@ -24,6 +44,7 @@ const untraced: HttpTrace = (_t, _c, fn) => fn();
 interface GhAsset {
   name?: unknown;
   size?: unknown;
+  created_at?: unknown;
   digest?: unknown;
   browser_download_url?: unknown;
 }
@@ -34,12 +55,15 @@ interface GhRelease {
   prerelease?: unknown;
   published_at?: unknown;
   assets?: unknown;
+  body?: unknown;
 }
 
 /** A release plus where each of its files is (kept on the bridge; the client only sees tag + variant). */
 interface Entry {
   release: LitefinRelease;
   urls: Map<string, string>;
+  /** When each variant's file was uploaded (ms), from GitHub. */
+  uploaded: Map<string, number>;
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
@@ -54,8 +78,15 @@ export class LitefinClient {
   private readonly apiOrigin: string;
   private cache?: { at: number; entries: Entry[] };
   private loading?: Promise<{ at: number; entries: Entry[] }>;
+  /** When each package (by URL) was built, in seconds: release files never change, so this is kept. */
+  private built = new Map<string, Promise<number | null>>();
 
-  constructor(api = process.env.LGDM_LITEFIN_URL ?? DEFAULT_LITEFIN_API, private readonly budget: UploadBudget = bridgeUploadBudget) {
+  constructor(
+    api?: string,
+    private readonly budget: UploadBudget = bridgeUploadBudget,
+    readonly channel: LitefinChannel = 'stable',
+  ) {
+    api ??= channel === 'dev' ? (process.env.LGDM_LITEFIN_DEV_URL ?? DEFAULT_LITEFIN_DEV_API) : (process.env.LGDM_LITEFIN_URL ?? DEFAULT_LITEFIN_API);
     this.api = api.replace(/\/+$/, '');
     const u = new URL(this.api);
     const m = /^\/repos\/([^/]+)\/([^/]+)$/.exec(u.pathname);
@@ -103,11 +134,12 @@ export class LitefinClient {
     }
     if (!hit) {
       const listed = c.entries.some((e) => e.release.tag === tag);
+      const name = this.channel === 'dev' ? `Litefin dev build ${tag}` : `Litefin ${versionOfTag(tag)}`;
       throw new RpcError(
         LitefinErrorCodes.NotFound,
         listed
-          ? `Litefin ${versionOfTag(tag)} has no ${variant.replace(/-/g, ' ')} build for webOS.`
-          : `Litefin ${versionOfTag(tag)} isn’t among the latest releases any more. Refresh the list.`,
+          ? `${name} has no ${variant.replace(/-/g, ' ')} build for webOS.`
+          : `${name} isn’t among the latest ${this.channel === 'dev' ? 'dev builds' : 'releases'} any more. Refresh the list.`,
       );
     }
     return hit;
@@ -169,18 +201,71 @@ export class LitefinClient {
     return { at: Date.now(), entries: this.parse(json as GhRelease[]) };
   }
 
-  /** Published releases with webOS builds, newest first, the latest LITEFIN_RELEASE_COUNT. */
+  /**
+   * The listed builds packaged at `time` (seconds since 1970, from the installed files), with the variants whose file
+   * says exactly that. Only packages uploaded after that moment (and within two weeks) are looked at, and of those only
+   * the first 8 KB is read, once per file. A build compiled elsewhere (by hand, say) matches nothing.
+   */
+  async findBuilt(time: number, trace: HttpTrace = untraced): Promise<{ tag: string; variants: string[] }[]> {
+    const c = await this.load(false, trace);
+    const found: { tag: string; variants: string[] }[] = [];
+    let reads = 0;
+    for (const e of c.entries) {
+      const near = [...e.urls].filter(([variant]) => {
+        const up = e.uploaded.get(variant);
+        return up === undefined || (up >= time * 1000 - 120_000 && up <= time * 1000 + UPLOAD_AFTER_BUILD_MS);
+      });
+      if (!near.length || reads + near.length > MAX_HEAD_READS) continue;
+      reads += near.length;
+      const times = await Promise.all(near.map(([, url]) => this.builtAt(url, trace)));
+      const variants = near.filter((_, i) => times[i] === time).map(([v]) => v);
+      if (variants.length) found.push({ tag: e.release.tag, variants });
+    }
+    return found;
+  }
+
+  /** When a listed package was built (seconds), from its first bytes; null when that can't be read. */
+  private builtAt(url: string, trace: HttpTrace): Promise<number | null> {
+    let p = this.built.get(url);
+    if (!p) {
+      p = trace(new URL(url).host, `GET ${url} (first ${HEAD_BYTES / 1024} KB)`, async () => {
+        const res = await safeGet(url, 20_000, this.apiOrigin, undefined, false, HEAD_BYTES);
+        if (!res.ok) {
+          await res.body?.cancel().catch(() => {});
+          throw new Error(`HTTP ${res.status}`);
+        }
+        return ipkBuildTime(await readStart(res, HEAD_BYTES));
+      }).catch(() => {
+        this.built.delete(url); // a failure isn't kept: asked again next time
+        return null;
+      });
+      if (this.built.size > 500) this.built.delete(this.built.keys().next().value!);
+      this.built.set(url, p);
+    }
+    return p;
+  }
+
+  /**
+   * Published releases with webOS builds, newest first, the latest LITEFIN_RELEASE_COUNT — or, for dev builds, the
+   * latest LITEFIN_DEV_BUILD_COUNT builds whose webOS IPKs are there (a build's release appears before its files).
+   */
   parse(list: GhRelease[]): Entry[] {
+    const dev = this.channel === 'dev';
     const out: Entry[] = [];
     for (const r of list) {
       const tag = str(r.tag_name);
       const publishedAt = str(r.published_at);
-      if (!tag || !publishedAt || r.draft === true || r.prerelease === true || PREVIEW_TAG.test(tag)) continue;
+      if (!tag || !publishedAt || r.draft === true) continue;
+      const devTag = dev ? DEV_TAG.exec(tag) : null;
+      if (dev ? !devTag : r.prerelease === true || PREVIEW_TAG.test(tag)) continue;
+      // A dev build's files end in its commit: Litefin-2.0.350-webOS-Normal-0ac5e76.ipk.
+      const suffix = devTag ? `-${devTag[2]}.ipk` : '.ipk';
       const urls = new Map<string, string>();
+      const uploaded = new Map<string, number>();
       const assets: LitefinAsset[] = [];
       for (const a of Array.isArray(r.assets) ? (r.assets as GhAsset[]) : []) {
         const name = str(a.name);
-        const m = name ? IPK_NAME.exec(name) : null;
+        const m = name?.endsWith(suffix) ? IPK_NAME.exec(`${name.slice(0, -suffix.length)}.ipk`) : null;
         const dl = str(a.browser_download_url);
         if (!name || !m || !dl || urls.has(m[2]!)) continue;
         // Only files from this project's own release downloads, at the place GitHub puts this release's files.
@@ -188,19 +273,43 @@ export class LitefinClient {
         const digest = str(a.digest);
         const sha = digest && /^sha256:[0-9a-f]{64}$/i.test(digest) ? digest.slice(7).toLowerCase() : undefined;
         urls.set(m[2]!, dl);
+        const up = Date.parse(str(a.created_at) ?? '');
+        if (Number.isFinite(up)) uploaded.set(m[2]!, up);
         assets.push({ variant: m[2]!, name, size: typeof a.size === 'number' ? a.size : 0, ...(sha ? { sha256: sha } : {}) });
       }
       if (!assets.length) continue;
       // The version in the file names is the one the app reports once installed; the tag is only a fallback.
-      const fromNames = IPK_NAME.exec(assets[0]!.name)?.[1];
+      const fromNames = IPK_NAME.exec(assets[0]!.name.slice(0, -suffix.length) + '.ipk')?.[1];
+      const version = fromNames && /^\d[\w.]*$/.test(fromNames) ? fromNames : dev ? '' : versionOfTag(tag);
+      if (!version) continue;
+      const message = devTag ? DEV_MESSAGE.exec(str(r.body) ?? '')?.[1]?.trim().slice(0, 200) : undefined;
       out.push({
-        release: { tag, version: fromNames && /^\d[\w.]*$/.test(fromNames) ? fromNames : versionOfTag(tag), title: str(r.name)?.trim() || tag, publishedAt, assets },
+        release: {
+          tag,
+          version,
+          title: str(r.name)?.trim().slice(0, 200) || tag,
+          publishedAt,
+          assets,
+          ...(devTag ? { build: { number: Number(devTag[1]), commit: devTag[2]!, ...(message ? { message } : {}) } } : {}),
+        },
         urls,
+        uploaded,
       });
     }
-    out.sort((a, b) => Date.parse(b.release.publishedAt) - Date.parse(a.release.publishedAt));
-    return out.slice(0, LITEFIN_RELEASE_COUNT);
+    // Dev builds by build number (a rerun keeps its number); releases by date.
+    out.sort((a, b) => (dev ? b.release.build!.number - a.release.build!.number : Date.parse(b.release.publishedAt) - Date.parse(a.release.publishedAt)));
+    return out.slice(0, dev ? LITEFIN_DEV_BUILD_COUNT : LITEFIN_RELEASE_COUNT);
   }
+}
+
+/**
+ * When the Litefin on this TV was packaged (seconds), from its index.html — null when Litefin isn't installed in the
+ * developer apps folder (or its files can't be read).
+ */
+export async function installedLitefinTime(pool: SshRunner, device: Parameters<SshRunner['exec']>[0]): Promise<number | null> {
+  const res = await pool.exec(device, `stat -c %Y ${INSTALLED_INDEX}`, { timeoutMs: 20_000 });
+  const t = /^\s*(\d{6,12})\s*$/.exec(res.stdout);
+  return res.exitCode === 0 && t ? Number(t[1]) : null;
 }
 
 function lookup(entries: Entry[], tag: string, variant: string) {

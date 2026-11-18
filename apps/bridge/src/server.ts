@@ -75,6 +75,7 @@ export function startServer(
   access = config.lan?.cfAccess ? new CfAccess(config.lan.cfAccess) : undefined,
 ): Promise<Server> {
   const repos = new RepoRegistry(repo);
+  const litefinDev = new LitefinClient(config.litefinDevUrl, undefined, 'dev');
   const lan = config.lan;
   // Storage (--store): every paired browser hears about each change, so they all show the same TVs.
   const store = config.storeDir ? new BridgeStore(config.storeDir) : undefined;
@@ -328,7 +329,7 @@ export function startServer(
         // other connections are counted too.
         if (limited) limiter.failed(key);
       }
-      const res = await dispatch(data.toString(), session, { token: config.token, pool, repos, litefin, lgeUrl: config.lgeUrl, dev: config.dev, lan: !!lan, store });
+      const res = await dispatch(data.toString(), session, { token: config.token, pool, repos, litefin, litefinDev, lgeUrl: config.lgeUrl, dev: config.dev, lan: !!lan, store });
       if (res && ws.readyState === ws.OPEN) ws.send(JSON.stringify(res));
       if (unauthed && session.authed) {
         uncount();

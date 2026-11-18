@@ -28,12 +28,33 @@ test('lists the last 5 releases by build, and installs one straight onto the TV'
   await expect(page.getByText('Litefin v1.7.0 is installed on Litefin Dev')).toBeVisible();
   await expect(page.getByText('v1.9.0 available')).toBeVisible();
   await expect(table.locator('tbody tr').nth(2)).toContainText('Installed');
+  // The bridge tells which build it is from the installed files: that release, and its Legacy variant.
+  await expect(page.getByText('(Legacy build)')).toBeVisible();
+  await expect(table.locator('tbody tr').nth(2).getByText('On the TV')).toBeVisible();
 
   // Installing another build asks first (it replaces the installed one).
   await page.getByRole('button', { name: 'Install Litefin 1.9.0 Normal' }).click();
   const ask = page.getByRole('dialog', { name: /Replace Litefin/ });
   await expect(ask).toContainText('replaces it');
   await ask.getByRole('button', { name: 'Cancel' }).click();
+
+  // A dev build: all of them carry one version, yet the page knows which one is on the TV.
+  await page.getByRole('button', { name: 'Dev builds', exact: true }).click();
+  await page.getByRole('button', { name: 'Install Litefin dev build 100 Normal' }).click();
+  const devAsk = page.getByRole('dialog', { name: /Replace Litefin/ });
+  await expect(devAsk).toContainText('Dev builds aren’t tested releases');
+  await devAsk.getByRole('button', { name: 'Install' }).click();
+  const devDone = page.getByRole('dialog');
+  await expect(devDone.getByText(/Litefin.* v2\.0\.350 is installed/)).toBeVisible({ timeout: 30_000 });
+  await devDone.getByRole('button', { name: 'Done' }).click();
+  await expect(page.getByText('Litefin dev build #100 (v2.0.350) is installed on Litefin Dev')).toBeVisible();
+  await expect(page.getByText('Dev build #101 available')).toBeVisible(); // no release came after it: the next dev build
+  await expect(table.locator('tbody tr').nth(1)).toContainText('Installed');
+  await expect(table.locator('tbody tr').nth(0)).not.toContainText('Installed');
+  // No release is marked installed.
+  await page.getByRole('button', { name: 'Releases', exact: true }).click();
+  await expect(table.locator('.litefin-version').first()).toHaveText('v1.9.0');
+  await expect(table.getByText('Installed', { exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -47,4 +68,33 @@ test('a build that fails GitHub’s checksum is not installed', async ({ paired:
   const confirmReplace = page.getByRole('dialog', { name: /Replace Litefin/ });
   if (await confirmReplace.count()) await confirmReplace.getByRole('button', { name: 'Install' }).click();
   await expect(page.getByRole('dialog').getByText('Install failed')).toBeVisible({ timeout: 30_000 });
+});
+
+test('lists the latest dev builds by build number and commit, and warns before installing one', async ({ paired: page, errors }) => {
+  await addDevModeTv(page, 'Litefin Dev');
+  await page.goto('/#/apps/litefin');
+  await expect(page.locator('.litefin-table tbody tr')).toHaveCount(5, { timeout: 30_000 });
+  await page.getByRole('button', { name: 'Dev builds', exact: true }).click();
+  const table = page.locator('.litefin-table');
+  // The newest one is still building (no files yet), so the list starts at #101; all carry the same version.
+  await expect(table.locator('.litefin-version')).toHaveText(['#101', '#100', '#99', '#98', '#97'], { timeout: 30_000 });
+  await expect(table.locator('thead th').first()).toHaveText('Build');
+  await expect(page.getByText('5 dev builds')).toBeVisible();
+  await expect(page.getByText('Dev builds are untested')).toBeVisible();
+  const first = table.locator('tbody tr').first();
+  await expect(first).toContainText('v2.0.350');
+  await expect(first).toContainText('Latest');
+  // The commit message as plain text, and a link to the commit in Litefin's repository.
+  await expect(first.locator('.litefin-commit-message')).toHaveText('fix(webos): use the dvh1 hint <b>even</b> when canPlayType reports empty');
+  await expect(first.getByRole('link', { name: '0ac5e76' })).toHaveAttribute('href', 'https://github.com/MoazSalem/litefin/commit/0ac5e76');
+
+  await page.getByRole('button', { name: 'Install Litefin dev build 100 Normal' }).click();
+  const ask = page.getByRole('dialog', { name: /Install Litefin dev build #100 \(Normal\)\?|Replace Litefin/ });
+  await expect(ask).toContainText('Dev builds aren’t tested releases');
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+
+  // Back to the releases.
+  await page.getByRole('button', { name: 'Releases', exact: true }).click();
+  await expect(table.locator('.litefin-version')).toHaveText(['v1.9.0', 'v1.8.0', 'v1.7.0', 'v1.6.0', 'v1.5.1']);
+  expect(errors).toEqual([]);
 });

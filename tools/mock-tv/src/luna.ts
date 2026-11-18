@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { get } from 'node:http';
 import { addApp, addFile, devApp, makeIconPng, readControl, type MockState } from './state.js';
+import { readBuildTime } from './ipk.js';
 
 /** Canned luna-send responses. Keep payload shapes close to real webOS. */
 type LunaHandler = (params: Record<string, unknown>, state: MockState) => Record<string, unknown>;
@@ -110,7 +111,8 @@ function installPackage(state: MockState, data: Buffer | undefined): { ok: true;
   if (!control) return { ok: false, errorCode: -1, reason: 'FAILED_IPKG_INSTALL' };
   // A package described as MOCK_NO_SPACE fails like a full developer partition.
   if (control.title === 'MOCK_NO_SPACE') return { ok: false, errorCode: -5, reason: 'FAILED_IPKG_INSTALL' };
-  addApp(state, devApp(control.id, control.title ?? control.id, control.version));
+  const builtAt = readBuildTime(data);
+  addApp(state, { ...devApp(control.id, control.title ?? control.id, control.version), ...(builtAt ? { builtAt } : {}) });
   state.diskKb.available = Math.max(0, state.diskKb.available - Math.ceil(data.length / 1024));
   return { ok: true, id: control.id };
 }

@@ -68,8 +68,16 @@ export function isNonPublicAddress(address: string): boolean {
  * by hand, and every hop outside `trustedOrigin` (the configured source itself) must be a public address — no
  * loopback, LAN or link-local.
  */
-export async function safeGet(href: string, timeoutMs: number, trustedOrigin?: string, stayOn?: string, httpsOnly = false): Promise<Response> {
-  return (await getFollowing(href, timeoutMs, { trustedOrigin, stayOn, httpsOnly })).res;
+export async function safeGet(
+  href: string,
+  timeoutMs: number,
+  trustedOrigin?: string,
+  stayOn?: string,
+  httpsOnly = false,
+  /** Only the first bytes of the file (an HTTP Range request; a server may still send all of it). */
+  firstBytes?: number,
+): Promise<Response> {
+  return (await getFollowing(href, timeoutMs, { trustedOrigin, stayOn, httpsOnly, firstBytes })).res;
 }
 
 /**
@@ -86,8 +94,9 @@ export async function finalUrl(href: string, timeoutMs: number, testRig = false)
 async function getFollowing(
   href: string,
   timeoutMs: number,
-  o: { trustedOrigin?: string; stayOn?: string; httpsOnly?: boolean; anyHost?: boolean },
+  o: { trustedOrigin?: string; stayOn?: string; httpsOnly?: boolean; anyHost?: boolean; firstBytes?: number },
 ): Promise<{ res: Response; url: URL }> {
+  const headers: Record<string, string> = { accept: '*/*', ...(o.firstBytes ? { range: `bytes=0-${o.firstBytes - 1}` } : {}) };
   const signal = AbortSignal.timeout(timeoutMs);
   let url = new URL(href);
   for (let hop = 0; ; hop++) {
@@ -100,7 +109,7 @@ async function getFollowing(
     if (!trusted) await assertPublicHost(url);
     // Outside the trusted source the connection checks the address it actually uses (pinnedGet), so a host that
     // answers DNS with a public address for the check and 127.0.0.1 a moment later still can't reach this computer.
-    const res = trusted ? await fetch(url, { redirect: 'manual', signal, headers: { accept: '*/*' } }) : await pinnedGet(url, signal);
+    const res = trusted ? await fetch(url, { redirect: 'manual', signal, headers }) : await pinnedGet(url, signal, headers);
     const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
     if (!location) return { res, url };
     await res.body?.cancel().catch(() => {});
@@ -231,14 +240,14 @@ const httpAgent = new HttpAgent(agentOptions);
 const httpsAgent = new HttpsAgent(agentOptions);
 
 /** A GET whose connection may only go to a public address. Answers like fetch (no redirects followed). */
-function pinnedGet(url: URL, signal: AbortSignal): Promise<Response> {
+function pinnedGet(url: URL, signal: AbortSignal, extra: Record<string, string> = {}): Promise<Response> {
   return new Promise((resolve, reject) => {
     const https = url.protocol === 'https:';
     const req = (https ? httpsRequest : httpRequest)(
       url,
       {
         method: 'GET',
-        headers: { accept: '*/*', 'user-agent': 'lg-dev-manager-bridge' },
+        headers: { accept: '*/*', ...extra, 'user-agent': 'lg-dev-manager-bridge' },
         agent: https ? httpsAgent : httpAgent,
         lookup: publicLookup as never,
         signal,
@@ -271,6 +280,25 @@ async function assertPublicHost(url: URL) {
 const tooBig = (id: string) => new RpcError(AppsErrorCodes.UploadTooLarge, `${id} is larger than the bridge can download (${MAX_UPLOAD_BYTES / 1024 / 1024} MB).`);
 
 /** Read a body up to `maxBytes`. `onChunk` may throw (e.g. the budget is full); the download is then cancelled. */
+/** The first `n` bytes of an answer (or all of it, if shorter); the rest isn't downloaded. */
+export async function readStart(res: Response, n: number): Promise<Buffer> {
+  if (!res.body) return Buffer.alloc(0);
+  const reader = res.body.getReader();
+  const parts: Buffer[] = [];
+  let got = 0;
+  try {
+    while (got < n) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(Buffer.from(value));
+      got += value.length;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  return Buffer.concat(parts).subarray(0, n);
+}
+
 export async function readBody(res: Response, maxBytes: number, onChunk?: (got: number, chunk: number) => void): Promise<Buffer> {
   if (!res.body) return Buffer.alloc(0);
   const chunks: Buffer[] = [];

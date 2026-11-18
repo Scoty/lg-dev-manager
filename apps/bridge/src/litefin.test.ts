@@ -1,7 +1,8 @@
 import type { Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { startMockGithub, startMockTv, type MockGithub, type MockTv } from '@lgdm/mock-tv';
+import { fakeIpk, startMockGithub, startMockTv, type MockGithub, type MockTv } from '@lgdm/mock-tv';
+import { ipkBuildTime } from './litefin/buildTime.js';
 import { startServer } from './server.js';
 import { connect, type TestClient } from './testing/rpcClient.js';
 import { SshPool } from './ssh/pool.js';
@@ -23,7 +24,7 @@ const call = (method: string, params?: unknown): Promise<any> => client.call(met
 beforeAll(async () => {
   [gh, devTv, hbTv] = await Promise.all([startMockGithub(), startMockTv(), startMockTv({ username: 'root', password: 'alpine', hbchannel: true })]);
   server = await startServer(
-    { host: '127.0.0.1', port: 0, allowedOrigins: [ORIGIN], token: TOKEN, dev: true },
+    { host: '127.0.0.1', port: 0, allowedOrigins: [ORIGIN], token: TOKEN, dev: true, litefinDevUrl: gh.devUrl },
     new SshPool(),
     new RepoClient('http://127.0.0.1:1/api'),
     new LitefinClient(gh.url),
@@ -139,5 +140,111 @@ describe('LitefinClient', () => {
       { tag_name: 'v0.9.0', published_at: '2025-12-01T00:00:00Z', assets: [{ name: 'Litefin-0.9.0-Tizen-Normal.wgt' }] },
     ]);
     expect(entries.map((e) => [e.release.tag, e.release.assets.map((a) => a.variant)])).toEqual([['v1.0.0', ['Normal']]]);
+  });
+});
+
+describe('Litefin dev builds', () => {
+  it('lists the latest dev builds with their build number, commit and message (all on one version)', async () => {
+    const res = (await call('litefin.list', { channel: 'dev' })).result;
+    // #102 is still building (no files yet): left out.
+    expect(res.releases.map((r: any) => r.tag)).toEqual(['dev-b101-0ac5e76', 'dev-b100-0adcb34', 'dev-b99-4485d43', 'dev-b98-8406c0d', 'dev-b97-ebaf422']);
+    const latest = res.releases[0];
+    expect(latest).toMatchObject({
+      version: '2.0.350',
+      title: 'Litefin Dev Build #101 (0ac5e76)',
+      // Plain text, as written (the page never renders it as HTML).
+      build: { number: 101, commit: '0ac5e76', message: 'fix(webos): use the dvh1 hint <b>even</b> when canPlayType reports empty' },
+    });
+    expect(latest.assets.map((a: any) => a.variant).sort()).toEqual(['Legacy', 'Modern', 'Normal', 'Ultra-Legacy', 'Ultra-Legacy-NoService']);
+    expect(latest.assets.find((a: any) => a.variant === 'Normal').name).toBe('Litefin-2.0.350-webOS-Normal-0ac5e76.ipk');
+    expect(new Set(res.releases.map((r: any) => r.version))).toEqual(new Set(['2.0.350']));
+    // The releases list is unchanged, without build details.
+    expect((await call('litefin.list')).result.releases.every((r: any) => r.build === undefined && r.tag.startsWith('v'))).toBe(true);
+  });
+
+  it('installs a dev build from its own release, and keeps the two lists apart', async () => {
+    const res = await call('litefin.install', { device: devmode(), tag: 'dev-b100-0adcb34', variant: 'Normal', opId: 'd1', channel: 'dev' });
+    expect(res.result).toEqual({ appId: 'org.litefin.app', version: '2.0.350', via: 'devmode' });
+    expect(devTv.state.apps.find((a) => a.id === 'org.litefin.app')?.version).toBe('2.0.350');
+    expect(
+      frames.some((f) => f.event === 'cmd.log' && /GET .*litefin-dev-builds\/releases\/download\/dev-b100-0adcb34\/Litefin-2\.0\.350-webOS-Normal-0adcb34\.ipk/.test(f.data.command)),
+    ).toBe(true);
+    // A dev build isn't a release, a release isn't a dev build, and a build still running has nothing to install.
+    expect((await call('litefin.install', { device: devmode(), tag: 'dev-b100-0adcb34', variant: 'Normal', opId: 'd2' })).error.code).toBe('litefin_not_found');
+    expect((await call('litefin.install', { device: devmode(), tag: 'v1.9.0', variant: 'Normal', opId: 'd3', channel: 'dev' })).error.code).toBe('litefin_not_found');
+    const building = await call('litefin.install', { device: devmode(), tag: 'dev-b102-f00ba12', variant: 'Normal', opId: 'd4', channel: 'dev' });
+    expect(building.error).toMatchObject({ code: 'litefin_not_found', message: expect.stringMatching(/dev build dev-b102-f00ba12 isn’t among the latest dev builds/) });
+  });
+
+  it('keeps only this project’s dev build files, named after the build’s commit', () => {
+    const c = new LitefinClient('https://api.github.com/repos/MoazSalem/litefin-dev-builds', undefined, 'dev');
+    const dl = (tag: string, name: string, repo = 'MoazSalem/litefin-dev-builds') => `https://github.com/${repo}/releases/download/${tag}/${name}`;
+    const entries = c.parse([
+      {
+        tag_name: 'dev-b7-abc1234',
+        published_at: '2026-01-01T00:00:00Z',
+        body: '- **Commit Message:** fix: things\n- **Pushed by:** @someone',
+        assets: [
+          { name: 'Litefin-2.0.1-webOS-Normal-abc1234.ipk', size: 1, browser_download_url: dl('dev-b7-abc1234', 'Litefin-2.0.1-webOS-Normal-abc1234.ipk') },
+          // Another build's file, another repository's, or no commit in the name: left out.
+          { name: 'Litefin-2.0.1-webOS-Modern-fff0000.ipk', size: 1, browser_download_url: dl('dev-b7-abc1234', 'Litefin-2.0.1-webOS-Modern-fff0000.ipk') },
+          { name: 'Litefin-2.0.1-webOS-Legacy-abc1234.ipk', size: 1, browser_download_url: dl('dev-b7-abc1234', 'Litefin-2.0.1-webOS-Legacy-abc1234.ipk', 'someone/else') },
+          { name: 'Litefin-2.0.1-webOS-Ultra-Legacy.ipk', size: 1, browser_download_url: dl('dev-b7-abc1234', 'Litefin-2.0.1-webOS-Ultra-Legacy.ipk') },
+        ],
+      },
+      // Not a dev build's tag.
+      { tag_name: 'v2.0.1', published_at: '2026-01-02T00:00:00Z', assets: [{ name: 'Litefin-2.0.1-webOS-Normal.ipk', size: 1, browser_download_url: dl('v2.0.1', 'Litefin-2.0.1-webOS-Normal.ipk') }] },
+      // A manual run without a commit hash.
+      {
+        tag_name: 'dev-b8-dev',
+        published_at: '2026-01-01T00:00:00Z',
+        assets: [{ name: 'Litefin-2.0.1-webOS-Normal-dev.ipk', size: 1, browser_download_url: dl('dev-b8-dev', 'Litefin-2.0.1-webOS-Normal-dev.ipk') }],
+      },
+    ]);
+    expect(entries.map((e) => [e.release.tag, e.release.build, e.release.assets.map((a) => a.variant)])).toEqual([
+      ['dev-b8-dev', { number: 8, commit: 'dev' }, ['Normal']],
+      ['dev-b7-abc1234', { number: 7, commit: 'abc1234', message: 'fix: things' }, ['Normal']],
+    ]);
+  });
+});
+
+describe('litefin.installed', () => {
+  it('tells which listed release or dev build is on the TV from its files’ packaged time — or that it’s none of them', async () => {
+    // The Dev Mode TV got dev build #100 (Normal) above; the rooted one release v1.6.0 (Normal).
+    expect((await call('litefin.installed', { device: devmode() })).result).toEqual({
+      builtAt: (Date.parse('2026-11-12T12:57:00Z') / 1000 + 180 + 2) * 1000,
+      match: { channel: 'dev', tag: 'dev-b100-0adcb34', variant: 'Normal' },
+    });
+    expect((await call('litefin.installed', { device: rooted() })).result).toMatchObject({ match: { channel: 'stable', tag: 'v1.6.0', variant: 'Normal' } });
+    // Only the first bytes of the candidates' files were read (a ranged request), and only once.
+    const heads = () => frames.filter((f) => f.event === 'cmd.log' && f.data.phase === 'start' && /\(first 8 KB\)/.test(f.data.command)).length;
+    const before = heads();
+    await call('litefin.installed', { device: devmode() });
+    expect(heads()).toBe(before);
+
+    // A build made elsewhere (compiled by hand): its time, and no match.
+    const app = devTv.state.apps.find((a) => a.id === 'org.litefin.app')!;
+    const real = app.builtAt;
+    app.builtAt = Date.parse('2026-10-26T10:33:40Z') / 1000;
+    try {
+      expect((await call('litefin.installed', { device: devmode() })).result).toEqual({ builtAt: Date.parse('2026-10-26T10:33:40Z') });
+    } finally {
+      app.builtAt = real;
+    }
+    // No Litefin: nothing to say.
+    const apps = devTv.state.apps;
+    devTv.state.apps = apps.filter((a) => a.id !== 'org.litefin.app');
+    try {
+      expect((await call('litefin.installed', { device: devmode() })).result).toEqual({});
+    } finally {
+      devTv.state.apps = apps;
+    }
+  });
+
+  it('reads a package’s build time from its first bytes only', () => {
+    const ipk = fakeIpk('org.litefin.app', '2.0.0', 'Litefin', 50_000, { builtAt: 1794491844 });
+    expect(ipkBuildTime(ipk.subarray(0, 8192))).toBe(1794491844);
+    expect(ipkBuildTime(ipk.subarray(0, 200))).toBeNull(); // not far enough in
+    expect(ipkBuildTime(Buffer.from('not an ipk'))).toBeNull();
   });
 });

@@ -14,6 +14,8 @@ export interface MockApp {
   visible: boolean;
   removable: boolean;
   systemApp: boolean;
+  /** Installed from an IPK: when its files were packaged (seconds), kept by the install like on a real TV. */
+  builtAt?: number;
 }
 
 /** Everything about one fake TV that commands can change. Each startMockTv() gets its own. */
