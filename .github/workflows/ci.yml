@@ -139,7 +139,9 @@ jobs:
           echo "Test image: \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
 
   e2e:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where Playwright can't install its headless Chromium yet (Nov 2026). Move
+    # back once a Playwright release supports it.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
