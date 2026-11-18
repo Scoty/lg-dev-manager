@@ -1,7 +1,7 @@
 import { constants, gunzipSync } from 'node:zlib';
 
 /**
- * When an IPK was packaged, from the first bytes of the file (2.0.2, litefin.installed): ares-package copies the build
+ * When an IPK was packaged, from the first bytes of the file (2.1.0, litefin.installed): ares-package copies the build
  * into a fresh folder and archives it, so every entry of data.tar.gz carries the same time — the moment that build ran.
  * The TV keeps those times when it installs the package, so the installed files say which build they came from.
  *

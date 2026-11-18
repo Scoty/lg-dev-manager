@@ -301,14 +301,14 @@ Legacy, newer ones run Modern best, and sometimes an older version is wanted.
 - The status line shows the installed Litefin version and whether a newer one is out. The **suggested build** for the TV
   is highlighted from its webOS version, by the release notes' webOS versions: webOS 22+ → Modern, webOS 6+ → Normal,
   webOS 4–5 → Legacy, older → Ultra Legacy (owner decision: the versions win over the notes' TV years). A "Which build?" box repeats the release notes' guidance.
-- **Dev builds** (2.0.2, owner request Nov 2026): a Releases / Dev builds switch, when the bridge has the `litefinDev`
+- **Dev builds** (2.1.0, owner request Nov 2026): a Releases / Dev builds switch, when the bridge has the `litefinDev`
   feature. The dev builds come from [MoazSalem/litefin-dev-builds](https://github.com/MoazSalem/litefin-dev-builds/releases),
   where the author's pipeline makes one release per commit to Litefin's development branch: tag `dev-b<build>-<commit>`,
   files `Litefin-<version>-webOS-<variant>-<commit>.ipk`. They all carry the version being worked on, so the list shows the
   5 newest by build number, with the commit (linked to Litefin's repository) and commit message. Builds whose files aren't
   uploaded yet are skipped. Installing one always confirms first (dev builds aren't tested). `litefin.list` / `litefin.install` take `channel: 'dev'`; the same download rules apply, with
   `github.com/MoazSalem/litefin-dev-builds/releases/download/`.
-- **Which build is installed** (2.0.2, `litefin.installed`, owner request: without storing anything): ares-package
+- **Which build is installed** (2.1.0, `litefin.installed`, owner request: without storing anything): ares-package
   archives a fresh copy of the build, so every file in a Litefin IPK carries one time stamp, the moment of that build
   (each variant a second or so apart). The TV keeps it on install. That holds for index.html; appinfo.json is rewritten by
   the installer, as checked on the owner's TV. The bridge runs `stat -c %Y` on the installed `index.html` and looks for a

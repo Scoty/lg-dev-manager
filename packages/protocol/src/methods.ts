@@ -20,7 +20,7 @@ import { DeviceId, ShotId, ShotMethod, STORE_LIMITS, StoredCustomRepo, StoredDev
  *  v8 — M8: litefin.list, litefin.install
  * Optional additions that keep the version (older bridges ignore them, the site checks `features`): 1.0.4
  * device.power; 1.0.5 custom repositories (`repo` on the repo methods, repo.check); 2.0 store.* (feature serverStore)
- * and `{ stored: id }` in place of any `device` (store.ts); 2.0.2 Litefin dev builds (`channel` on litefin.*, litefin.installed;
+ * and `{ stored: id }` in place of any `device` (store.ts); 2.1.0 Litefin dev builds (`channel` on litefin.*, litefin.installed;
  * feature litefinDev).
  */
 export const PROTOCOL_VERSION = 8;

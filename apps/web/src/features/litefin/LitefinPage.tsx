@@ -31,7 +31,7 @@ const LITEFIN_COMMIT_PAGE = 'https://github.com/MoazSalem/litefin/commit/';
 
 /**
  * Litefin repo (M8): every webOS build of the latest Litefin releases, installable straight onto the TV. The Homebrew
- * repository only carries one build per version. From 2.0.2 (bridge feature litefinDev) also Litefin's dev builds — one
+ * repository only carries one build per version. From 2.1.0 (bridge feature litefinDev) also Litefin's dev builds — one
  * per commit to its development branch, all with the same version, so they're told apart by build number and commit.
  */
 export function LitefinPage() {

@@ -10,7 +10,7 @@ import { ipkBuildTime } from './buildTime.js';
  * IPK per webOS variant (`Litefin-<version>-webOS-<variant>.ipk`). The bridge reads the release list itself and only
  * ever downloads files from that list, from the project's own release-download path.
  *
- * The same client reads Litefin's dev builds (2.0.2, `channel: 'dev'`): the author's pipeline makes a release in
+ * The same client reads Litefin's dev builds (2.1.0, `channel: 'dev'`): the author's pipeline makes a release in
  * MoazSalem/litefin-dev-builds for every commit to Litefin's development branch, tagged `dev-b<build>-<commit>`, with
  * the same IPKs named `Litefin-<version>-webOS-<variant>-<commit>.ipk`. They all carry the version being worked on, so
  * the build number and commit are what tell them apart.

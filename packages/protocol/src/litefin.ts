@@ -12,7 +12,7 @@ export const LITEFIN_RELEASES_PAGE = 'https://github.com/MoazSalem/litefin/relea
 export const LITEFIN_RELEASE_COUNT = 5;
 
 /**
- * Where Litefin's dev builds come from (2.0.2, feature `litefinDev`): one release per commit to Litefin's `development`
+ * Where Litefin's dev builds come from (2.1.0, feature `litefinDev`): one release per commit to Litefin's `development`
  * branch, built by the author's own pipeline. They share the version number of the release being worked on, so a build
  * is told apart by its number and commit.
  */
@@ -50,7 +50,7 @@ export const LitefinRelease = z.object({
 export type LitefinRelease = z.infer<typeof LitefinRelease>;
 
 /**
- * Which listed build is on the TV (`litefin.installed`, 2.0.2). Every file in a Litefin IPK carries the moment that
+ * Which listed build is on the TV (`litefin.installed`, 2.1.0). Every file in a Litefin IPK carries the moment that
  * build was packaged, and the TV keeps it when installing: the bridge reads the installed index.html's time and finds
  * the release or dev build whose package says the same (to the second). Nothing is stored anywhere.
  */

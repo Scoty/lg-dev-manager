@@ -112,6 +112,6 @@ export const BridgeFeatures = {
   CustomRepos: 'customRepos',
   /** 2.0: the bridge stores the TVs, custom repositories and screenshots (store.* methods, `{ stored: id }` targets). */
   ServerStore: 'serverStore',
-  /** 2.0.2: Litefin's dev builds (`channel: 'dev'` on litefin.list / litefin.install) and litefin.installed. */
+  /** 2.1.0: Litefin's dev builds (`channel: 'dev'` on litefin.list / litefin.install) and litefin.installed. */
   LitefinDev: 'litefinDev',
 } as const;

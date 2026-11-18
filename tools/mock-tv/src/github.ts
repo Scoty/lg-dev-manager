@@ -8,7 +8,7 @@ import { fakeIpk } from './ipk.js';
  * release files under `/MoazSalem/litefin/releases/download/<tag>/<file>`, which redirect to `/assets/…` like GitHub
  * redirects to its file host. IPKs are real, tiny packages (fakeIpk) with Litefin's app id.
  *
- * Also Litefin's dev builds (2.0.2) at `/repos/MoazSalem/litefin-dev-builds/releases`: one release per commit, tagged
+ * Also Litefin's dev builds (2.1.0) at `/repos/MoazSalem/litefin-dev-builds/releases`: one release per commit, tagged
  * `dev-b<build>-<commit>`, all with the same version, files named `Litefin-<version>-webOS-<variant>-<commit>.ipk`.
  */
 
