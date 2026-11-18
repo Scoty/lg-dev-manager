@@ -216,6 +216,15 @@ function runTyped(command: string, ctx: CommandContext): CommandResult | null {
           'Swap:        262140       10240      251900\n',
         code: 0,
       };
+    case 'stat': {
+      // `stat -c %Y <file>`: a file's time. Installed apps' files keep the time their IPK was packaged with.
+      const file = paths.find((p) => p.startsWith('/'));
+      if (rest[0] !== '-c' || rest[1] !== '%Y' || !file) return null;
+      const m = /^\/media\/developer\/apps\/usr\/palm\/applications\/([\w.-]+)\/index\.html$/.exec(posix.normalize(file));
+      const app = m && state.apps.find((a) => a.id === m[1] && a.folderPath.startsWith('/media/developer/apps/'));
+      if (!app) return { stdout: '', stderr: `stat: can't stat '${file}': No such file or directory\n`, code: 1 };
+      return { stdout: `${app.builtAt ?? 1767225600}\n`, code: 0 };
+    }
     case 'nyx-cmd':
       return rest.join(' ') === 'OSInfo query webos_release' ? { stdout: '8.0.0\n', code: 0 } : { stdout: '', stderr: 'nyx-cmd: bad query\n', code: 1 };
     case 'ls': {

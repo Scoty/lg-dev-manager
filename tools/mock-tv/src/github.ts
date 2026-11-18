@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { fakeIpk } from './ipk.js';
 
@@ -79,6 +79,18 @@ export interface MockGithub {
 
 const versionOf = (tag: string) => tag.replace(/^v\.?/, '');
 
+/** A release file, or the part a `Range: bytes=0-N` request asks for (206), as GitHub's file host does. */
+function sendFile(req: IncomingMessage, res: ServerResponse, data: Buffer) {
+  const range = /^bytes=0-(\d+)$/.exec(req.headers.range ?? '');
+  if (range) {
+    const part = data.subarray(0, Number(range[1]) + 1);
+    return res
+      .writeHead(206, { 'content-type': 'application/octet-stream', 'content-length': part.length, 'content-range': `bytes 0-${part.length - 1}/${data.length}` })
+      .end(part);
+  }
+  return res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': data.length }).end(data);
+}
+
 export async function startMockGithub(
   opts: { port?: number; host?: string; releases?: MockLitefinRelease[]; devBuilds?: MockLitefinDevBuild[] } = {},
 ): Promise<MockGithub> {
@@ -88,13 +100,26 @@ export async function startMockGithub(
   const devTag = (b: MockLitefinDevBuild) => `dev-b${b.build}-${b.commit}`;
   const requests: string[] = [];
   const files = new Map<string, Buffer>();
+  /**
+   * When a build was packaged (seconds): a dev build 3 minutes after its release was made, a release 10 minutes before
+   * it was published; each variant a second apart, like the real pipeline's parallel steps.
+   */
+  const builtAt = (tag: string, variant: string) => {
+    const dev = devBuilds.find((b) => devTag(b) === tag);
+    const at = Date.parse(dev ? dev.publishedAt : (releases.find((r) => r.tag === tag)?.publishedAt ?? '2026-01-01T00:00:00Z')) / 1000;
+    return at + (dev ? 180 : -600) + WEBOS_VARIANTS.indexOf(variant);
+  };
+  /** When a build's files were uploaded (ISO): 5 minutes after a dev build's release was made; a release's when published. */
+  const uploadedAt = (publishedAt: string, dev: boolean) => new Date(Date.parse(publishedAt) + (dev ? 300_000 : 0)).toISOString();
   const fileFor = (tag: string, variant: string) => {
     const key = `${tag}/${variant}`;
     let f = files.get(key);
     if (!f) {
       // A different payload per variant (and dev build), so each build has its own checksum.
       const dev = tag.startsWith('dev-b');
-      f = fakeIpk(LITEFIN_MOCK_APP_ID, dev ? MOCK_LITEFIN_DEV_VERSION : versionOf(tag), `Litefin ${variant}`, 20_000 + variant.length * 997 + (dev ? Number(/^dev-b(\d+)/.exec(tag)![1]) * 7 : 0));
+      f = fakeIpk(LITEFIN_MOCK_APP_ID, dev ? MOCK_LITEFIN_DEV_VERSION : versionOf(tag), `Litefin ${variant}`, 20_000 + variant.length * 997 + (dev ? Number(/^dev-b(\d+)/.exec(tag)![1]) * 7 : 0), {
+        builtAt: builtAt(tag, variant),
+      });
       files.set(key, f);
     }
     return f;
@@ -111,7 +136,13 @@ export async function startMockGithub(
         : WEBOS_VARIANTS.map((variant) => {
             const name = `Litefin-${MOCK_LITEFIN_DEV_VERSION}-webOS-${variant}-${b.commit}.ipk`;
             const data = fileFor(tag, variant);
-            return { name, size: data.length, digest: `sha256:${createHash('sha256').update(data).digest('hex')}`, browser_download_url: dl(name) };
+            return {
+              name,
+              size: data.length,
+              digest: `sha256:${createHash('sha256').update(data).digest('hex')}`,
+              created_at: uploadedAt(b.publishedAt, true),
+              browser_download_url: dl(name),
+            };
           });
       return {
         id: 5000 + i,
@@ -148,6 +179,7 @@ export async function startMockGithub(
           size: data.length,
           content_type: 'application/octet-stream',
           ...(r.noDigest?.includes(variant) ? {} : { digest: `sha256:${sha}` }),
+          created_at: uploadedAt(r.publishedAt, false),
           browser_download_url: dl(name),
         };
       });
@@ -192,15 +224,13 @@ export async function startMockGithub(
       const b = devBuilds.find((x) => devTag(x) === m![1]);
       const variant = m[3]!;
       if (!b || b.building || !WEBOS_VARIANTS.includes(variant)) return res.writeHead(404).end('Not Found');
-      const data = fileFor(m[1]!, variant);
-      return res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': data.length }).end(data);
+      return sendFile(req, res, fileFor(m[1]!, variant));
     }
     if ((m = path.match(/^\/assets\/([^/]+)\/Litefin-[^/]+-webOS-([\w.-]+)\.ipk$/))) {
       const r = releases.find((x) => x.tag === decodeURIComponent(m![1]!));
       const variant = m[2]!;
       if (!r || !(r.variants ?? WEBOS_VARIANTS).includes(variant)) return res.writeHead(404).end('Not Found');
-      const data = fileFor(r.tag, variant);
-      return res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': data.length }).end(data);
+      return sendFile(req, res, fileFor(r.tag, variant));
     }
     res.writeHead(404, { 'content-type': 'text/plain' }).end('Not Found');
   });

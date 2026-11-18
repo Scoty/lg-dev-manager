@@ -8,6 +8,12 @@
   message. Each webOS variant can be installed like a release, after a warning that dev builds aren't tested. As with
   releases, the bridge reads the list itself and only downloads files from that repository's own releases, checked
   against GitHub's checksums. The tab needs a 2.0.2 bridge.
+- **Which Litefin build is on the TV.** The page now names the exact release or dev build installed, and its variant
+  ("Litefin dev build #101 (v2.0.350) … (Normal build)"), even when many builds share a version. It also notices when
+  that is none of the listed ones, such as a build you compiled yourself. Nothing is stored for this. Every file in a
+  Litefin package carries the moment it was packaged, and the TV keeps it on install. The bridge reads that time from
+  the installed `index.html` and compares it, to the second, with the first 8 KB of each candidate package on GitHub.
+  So on a dev build you are told when a **release** made after it is out, or a newer dev build.
 
 ## 2.0.1 — 2026-11-12
 

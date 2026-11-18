@@ -306,9 +306,16 @@ Legacy, newer ones run Modern best, and sometimes an older version is wanted.
   where the author's pipeline makes one release per commit to Litefin's development branch: tag `dev-b<build>-<commit>`,
   files `Litefin-<version>-webOS-<variant>-<commit>.ipk`. They all carry the version being worked on, so the list shows the
   5 newest by build number, with the commit (linked to Litefin's repository) and commit message. Builds whose files aren't
-  uploaded yet are skipped. Installing one always confirms first (dev builds aren't tested), and they're never shown as an
-  update or marked installed (which build is on the TV can't be told). `litefin.list` / `litefin.install` take
-  `channel: 'dev'`; the same download rules apply, with `github.com/MoazSalem/litefin-dev-builds/releases/download/`.
+  uploaded yet are skipped. Installing one always confirms first (dev builds aren't tested). `litefin.list` / `litefin.install` take `channel: 'dev'`; the same download rules apply, with
+  `github.com/MoazSalem/litefin-dev-builds/releases/download/`.
+- **Which build is installed** (2.0.2, `litefin.installed`, owner request: without storing anything): ares-package
+  archives a fresh copy of the build, so every file in a Litefin IPK carries one time stamp, the moment of that build
+  (each variant a second or so apart). The TV keeps it on install. That holds for index.html; appinfo.json is rewritten by
+  the installer, as checked on the owner's TV. The bridge runs `stat -c %Y` on the installed `index.html` and looks for a
+  listed release or dev build whose package says the same second. It reads only packages uploaded after that moment
+  (within 14 days), and only their first 8 KB (a ranged request, the first data.tar.gz header), cached per file. A build
+  compiled by hand matches none: the page says "not a listed build" with its packaged time. On a dev build, a release
+  published after it with at least its version, or else a newer dev build, shows as available.
 
 **How.**
 - RPCs `litefin.list` (cached 10 minutes; a refresh button asks again) and `litefin.install` (`tag` + `variant` only — the

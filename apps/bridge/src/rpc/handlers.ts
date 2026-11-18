@@ -39,7 +39,7 @@ import { tvPower } from '../devices/power.js';
 import { appIcon, hbChannelConfig, installDownloadable, installFromRepo, installIpk, launchApp, listApps, removeApp } from '../apps/apps.js';
 import type { HttpTrace } from '../net/fetch.js';
 import type { RepoRegistry } from '../repo/registry.js';
-import type { LitefinClient } from '../litefin/litefin.js';
+import { installedLitefinTime, type LitefinClient } from '../litefin/litefin.js';
 import type { ShellSessions } from '../shell/shells.js';
 import { homeDir, listDir, makeDir, readChunk, removePath, renameFile, statFile, writeFile } from '../files/files.js';
 import type { UploadStore } from './uploads.js';
@@ -385,6 +385,23 @@ export const handlers: HandlerMap = {
       fetch,
       progress,
     );
+  },
+
+  'litefin.installed': async ({ device }, session, ctx) => {
+    const time = await installedLitefinTime(sshFor(session, ctx), device);
+    if (time === null) return {};
+    // Which listed release or dev build has a package made at that second; none for a build made elsewhere.
+    const trace = httpTraceFor(session, true);
+    const lists: [LitefinChannel, LitefinClient | undefined][] = [
+      ['stable', ctx.litefin],
+      ['dev', ctx.litefinDev],
+    ];
+    for (const [channel, client] of lists) {
+      const found = await client?.findBuilt(time, trace).catch(() => []);
+      const hit = found?.[0];
+      if (hit) return { builtAt: time * 1000, match: { channel, tag: hit.tag, ...(hit.variants.length === 1 ? { variant: hit.variants[0] } : {}) } };
+    }
+    return { builtAt: time * 1000 };
   },
 
   'repo.list': ({ refresh, repo }, session, { repos }) => repos.for(repo).list({ refresh, trace: httpTraceFor(session, true) }),

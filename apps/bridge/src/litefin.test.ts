@@ -1,7 +1,8 @@
 import type { Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { startMockGithub, startMockTv, type MockGithub, type MockTv } from '@lgdm/mock-tv';
+import { fakeIpk, startMockGithub, startMockTv, type MockGithub, type MockTv } from '@lgdm/mock-tv';
+import { ipkBuildTime } from './litefin/buildTime.js';
 import { startServer } from './server.js';
 import { connect, type TestClient } from './testing/rpcClient.js';
 import { SshPool } from './ssh/pool.js';
@@ -204,5 +205,46 @@ describe('Litefin dev builds', () => {
       ['dev-b8-dev', { number: 8, commit: 'dev' }, ['Normal']],
       ['dev-b7-abc1234', { number: 7, commit: 'abc1234', message: 'fix: things' }, ['Normal']],
     ]);
+  });
+});
+
+describe('litefin.installed', () => {
+  it('tells which listed release or dev build is on the TV from its files’ packaged time — or that it’s none of them', async () => {
+    // The Dev Mode TV got dev build #100 (Normal) above; the rooted one release v1.6.0 (Normal).
+    expect((await call('litefin.installed', { device: devmode() })).result).toEqual({
+      builtAt: (Date.parse('2026-11-12T12:57:00Z') / 1000 + 180 + 2) * 1000,
+      match: { channel: 'dev', tag: 'dev-b100-0adcb34', variant: 'Normal' },
+    });
+    expect((await call('litefin.installed', { device: rooted() })).result).toMatchObject({ match: { channel: 'stable', tag: 'v1.6.0', variant: 'Normal' } });
+    // Only the first bytes of the candidates' files were read (a ranged request), and only once.
+    const heads = () => frames.filter((f) => f.event === 'cmd.log' && f.data.phase === 'start' && /\(first 8 KB\)/.test(f.data.command)).length;
+    const before = heads();
+    await call('litefin.installed', { device: devmode() });
+    expect(heads()).toBe(before);
+
+    // A build made elsewhere (compiled by hand): its time, and no match.
+    const app = devTv.state.apps.find((a) => a.id === 'org.litefin.app')!;
+    const real = app.builtAt;
+    app.builtAt = Date.parse('2026-10-26T10:33:40Z') / 1000;
+    try {
+      expect((await call('litefin.installed', { device: devmode() })).result).toEqual({ builtAt: Date.parse('2026-10-26T10:33:40Z') });
+    } finally {
+      app.builtAt = real;
+    }
+    // No Litefin: nothing to say.
+    const apps = devTv.state.apps;
+    devTv.state.apps = apps.filter((a) => a.id !== 'org.litefin.app');
+    try {
+      expect((await call('litefin.installed', { device: devmode() })).result).toEqual({});
+    } finally {
+      devTv.state.apps = apps;
+    }
+  });
+
+  it('reads a package’s build time from its first bytes only', () => {
+    const ipk = fakeIpk('org.litefin.app', '2.0.0', 'Litefin', 50_000, { builtAt: 1794491844 });
+    expect(ipkBuildTime(ipk.subarray(0, 8192))).toBe(1794491844);
+    expect(ipkBuildTime(ipk.subarray(0, 200))).toBeNull(); // not far enough in
+    expect(ipkBuildTime(Buffer.from('not an ipk'))).toBeNull();
   });
 });

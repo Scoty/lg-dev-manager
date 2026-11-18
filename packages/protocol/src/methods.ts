@@ -5,7 +5,7 @@ import { ScanResult } from './console';
 import { CustomRepoUrl, RepoPackage, WebUrl } from './repo';
 import { FileItem, FileName, MAX_READ_CHUNK, RemotePath } from './files';
 import { CrashReportFile, LogSource, PmLogContext, PmLogLevel } from './debug';
-import { LitefinChannel, LitefinRelease, LitefinVariant } from './litefin';
+import { LitefinChannel, LitefinInstalled, LitefinRelease, LitefinVariant } from './litefin';
 import { DeviceId, ShotId, ShotMethod, STORE_LIMITS, StoredCustomRepo, StoredDevice, StoredDeviceInput, StoredShot, StoredTvInfo } from './store';
 
 /**
@@ -20,8 +20,8 @@ import { DeviceId, ShotId, ShotMethod, STORE_LIMITS, StoredCustomRepo, StoredDev
  *  v8 — M8: litefin.list, litefin.install
  * Optional additions that keep the version (older bridges ignore them, the site checks `features`): 1.0.4
  * device.power; 1.0.5 custom repositories (`repo` on the repo methods, repo.check); 2.0 store.* (feature serverStore)
- * and `{ stored: id }` in place of any `device` (store.ts); 2.0.2 Litefin dev builds (`channel` on litefin.*, feature
- * litefinDev).
+ * and `{ stored: id }` in place of any `device` (store.ts); 2.0.2 Litefin dev builds (`channel` on litefin.*, litefin.installed;
+ * feature litefinDev).
  */
 export const PROTOCOL_VERSION = 8;
 
@@ -470,6 +470,11 @@ export const Methods = {
   'litefin.install': {
     params: z.object({ device: DeviceTarget, tag: z.string().min(1).max(100), variant: LitefinVariant, opId: z.string().max(64), channel: LitefinChannel.optional() }),
     result: z.object({ appId: z.string(), version: z.string(), via: z.enum(['devmode', 'hbchannel']) }),
+  },
+  /** Which listed Litefin release or dev build is installed on the TV (LitefinInstalled; feature `litefinDev`). */
+  'litefin.installed': {
+    params: z.object({ device: DeviceTarget }),
+    result: LitefinInstalled,
   },
   /** Delete a crash report. Only files in the crash folders. */
   'crashes.delete': {

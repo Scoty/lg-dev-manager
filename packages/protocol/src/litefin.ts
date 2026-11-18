@@ -49,6 +49,19 @@ export const LitefinRelease = z.object({
 });
 export type LitefinRelease = z.infer<typeof LitefinRelease>;
 
+/**
+ * Which listed build is on the TV (`litefin.installed`, 2.0.2). Every file in a Litefin IPK carries the moment that
+ * build was packaged, and the TV keeps it when installing: the bridge reads the installed index.html's time and finds
+ * the release or dev build whose package says the same (to the second). Nothing is stored anywhere.
+ */
+export const LitefinInstalled = z.object({
+  /** When the installed build was packaged (ms), when the TV has Litefin and its files could be read. */
+  builtAt: z.number().optional(),
+  /** The listed release or dev build it is; `variant` when only one variant of that build matches. */
+  match: z.object({ channel: LitefinChannel, tag: z.string(), variant: LitefinVariant.optional() }).optional(),
+});
+export type LitefinInstalled = z.infer<typeof LitefinInstalled>;
+
 export const LitefinErrorCodes = {
   Unreachable: 'litefin_unreachable',
   BadResponse: 'litefin_bad_response',
