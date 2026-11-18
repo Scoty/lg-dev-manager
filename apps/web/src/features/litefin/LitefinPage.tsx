@@ -114,14 +114,15 @@ function Releases({ device }: { device: SavedDevice }) {
   // later dev build; otherwise a release with a higher version.
   const latestRelease = stableList.data?.releases[0];
   const newer = useMemo((): { kind: 'release' | 'dev'; release: LitefinRelease } | null => {
-    if (!installed?.version) return null;
+    const version = installed?.version;
+    if (!version) return null;
     if (match?.channel === 'dev' && builtAt) {
-      const release = stableList.data?.releases.find((r) => Date.parse(r.publishedAt) > builtAt && compareVersions(r.version, installed.version) >= 0);
+      const release = stableList.data?.releases.find((r) => Date.parse(r.publishedAt) > builtAt && compareVersions(r.version, version) >= 0);
       if (release) return { kind: 'release', release };
       const latestDev = devList.data?.releases[0];
       return latestDev?.build && matched?.build && latestDev.build.number > matched.build.number ? { kind: 'dev', release: latestDev } : null;
     }
-    return latestRelease && compareVersions(latestRelease.version, installed.version) > 0 ? { kind: 'release', release: latestRelease } : null;
+    return latestRelease && compareVersions(latestRelease.version, version) > 0 ? { kind: 'release', release: latestRelease } : null;
   }, [installed?.version, match?.channel, builtAt, stableList.data, devList.data, matched, latestRelease]);
 
   const refresh = async () => {
