@@ -1,4 +1,4 @@
-import { LITEFIN_APP_ID, LITEFIN_RELEASE_COUNT, LitefinErrorCodes, type LitefinAsset, type LitefinRelease } from '@lgdm/protocol';
+import { LITEFIN_APP_ID, LITEFIN_DEV_BUILD_COUNT, LITEFIN_RELEASE_COUNT, LitefinErrorCodes, type LitefinAsset, type LitefinChannel, type LitefinRelease } from '@lgdm/protocol';
 import { RpcError } from '../rpc/errors.js';
 import { bridgeUploadBudget, type UploadBudget } from '../rpc/uploads.js';
 import { downloadIpk, readBody, type HttpTrace, type Progress } from '../net/fetch.js';
@@ -7,9 +7,19 @@ import { downloadIpk, readBody, type HttpTrace, type Progress } from '../net/fet
  * Litefin's GitHub releases (M8). The Homebrew repository carries one Litefin build per version; its releases have one
  * IPK per webOS variant (`Litefin-<version>-webOS-<variant>.ipk`). The bridge reads the release list itself and only
  * ever downloads files from that list, from the project's own release-download path.
+ *
+ * The same client reads Litefin's dev builds (2.0.2, `channel: 'dev'`): the author's pipeline makes a release in
+ * MoazSalem/litefin-dev-builds for every commit to Litefin's development branch, tagged `dev-b<build>-<commit>`, with
+ * the same IPKs named `Litefin-<version>-webOS-<variant>-<commit>.ipk`. They all carry the version being worked on, so
+ * the build number and commit are what tell them apart.
  */
 
 const DEFAULT_LITEFIN_API = 'https://api.github.com/repos/MoazSalem/litefin';
+const DEFAULT_LITEFIN_DEV_API = 'https://api.github.com/repos/MoazSalem/litefin-dev-builds';
+/** `dev-b99-0ac5e76` → build 99, commit 0ac5e76 (`dev` for a manual run without one). */
+const DEV_TAG = /^dev-b(\d{1,9})-([A-Za-z0-9]{1,40})$/;
+/** The commit message line in a dev build's notes. */
+const DEV_MESSAGE = /\*\*Commit Message:\*\*[ \t]*([^\r\n]*)/;
 const CACHE_MS = 10 * 60_000;
 /** An install of something not in the list fetches it again at most this often (GitHub allows 60 calls an hour). */
 const MISS_REFRESH_MS = 60_000;
@@ -34,6 +44,7 @@ interface GhRelease {
   prerelease?: unknown;
   published_at?: unknown;
   assets?: unknown;
+  body?: unknown;
 }
 
 /** A release plus where each of its files is (kept on the bridge; the client only sees tag + variant). */
@@ -55,7 +66,12 @@ export class LitefinClient {
   private cache?: { at: number; entries: Entry[] };
   private loading?: Promise<{ at: number; entries: Entry[] }>;
 
-  constructor(api = process.env.LGDM_LITEFIN_URL ?? DEFAULT_LITEFIN_API, private readonly budget: UploadBudget = bridgeUploadBudget) {
+  constructor(
+    api?: string,
+    private readonly budget: UploadBudget = bridgeUploadBudget,
+    readonly channel: LitefinChannel = 'stable',
+  ) {
+    api ??= channel === 'dev' ? (process.env.LGDM_LITEFIN_DEV_URL ?? DEFAULT_LITEFIN_DEV_API) : (process.env.LGDM_LITEFIN_URL ?? DEFAULT_LITEFIN_API);
     this.api = api.replace(/\/+$/, '');
     const u = new URL(this.api);
     const m = /^\/repos\/([^/]+)\/([^/]+)$/.exec(u.pathname);
@@ -103,11 +119,12 @@ export class LitefinClient {
     }
     if (!hit) {
       const listed = c.entries.some((e) => e.release.tag === tag);
+      const name = this.channel === 'dev' ? `Litefin dev build ${tag}` : `Litefin ${versionOfTag(tag)}`;
       throw new RpcError(
         LitefinErrorCodes.NotFound,
         listed
-          ? `Litefin ${versionOfTag(tag)} has no ${variant.replace(/-/g, ' ')} build for webOS.`
-          : `Litefin ${versionOfTag(tag)} isn’t among the latest releases any more. Refresh the list.`,
+          ? `${name} has no ${variant.replace(/-/g, ' ')} build for webOS.`
+          : `${name} isn’t among the latest ${this.channel === 'dev' ? 'dev builds' : 'releases'} any more. Refresh the list.`,
       );
     }
     return hit;
@@ -169,18 +186,26 @@ export class LitefinClient {
     return { at: Date.now(), entries: this.parse(json as GhRelease[]) };
   }
 
-  /** Published releases with webOS builds, newest first, the latest LITEFIN_RELEASE_COUNT. */
+  /**
+   * Published releases with webOS builds, newest first, the latest LITEFIN_RELEASE_COUNT — or, for dev builds, the
+   * latest LITEFIN_DEV_BUILD_COUNT builds whose webOS IPKs are there (a build's release appears before its files).
+   */
   parse(list: GhRelease[]): Entry[] {
+    const dev = this.channel === 'dev';
     const out: Entry[] = [];
     for (const r of list) {
       const tag = str(r.tag_name);
       const publishedAt = str(r.published_at);
-      if (!tag || !publishedAt || r.draft === true || r.prerelease === true || PREVIEW_TAG.test(tag)) continue;
+      if (!tag || !publishedAt || r.draft === true) continue;
+      const devTag = dev ? DEV_TAG.exec(tag) : null;
+      if (dev ? !devTag : r.prerelease === true || PREVIEW_TAG.test(tag)) continue;
+      // A dev build's files end in its commit: Litefin-2.0.350-webOS-Normal-0ac5e76.ipk.
+      const suffix = devTag ? `-${devTag[2]}.ipk` : '.ipk';
       const urls = new Map<string, string>();
       const assets: LitefinAsset[] = [];
       for (const a of Array.isArray(r.assets) ? (r.assets as GhAsset[]) : []) {
         const name = str(a.name);
-        const m = name ? IPK_NAME.exec(name) : null;
+        const m = name?.endsWith(suffix) ? IPK_NAME.exec(`${name.slice(0, -suffix.length)}.ipk`) : null;
         const dl = str(a.browser_download_url);
         if (!name || !m || !dl || urls.has(m[2]!)) continue;
         // Only files from this project's own release downloads, at the place GitHub puts this release's files.
@@ -192,14 +217,25 @@ export class LitefinClient {
       }
       if (!assets.length) continue;
       // The version in the file names is the one the app reports once installed; the tag is only a fallback.
-      const fromNames = IPK_NAME.exec(assets[0]!.name)?.[1];
+      const fromNames = IPK_NAME.exec(assets[0]!.name.slice(0, -suffix.length) + '.ipk')?.[1];
+      const version = fromNames && /^\d[\w.]*$/.test(fromNames) ? fromNames : dev ? '' : versionOfTag(tag);
+      if (!version) continue;
+      const message = devTag ? DEV_MESSAGE.exec(str(r.body) ?? '')?.[1]?.trim().slice(0, 200) : undefined;
       out.push({
-        release: { tag, version: fromNames && /^\d[\w.]*$/.test(fromNames) ? fromNames : versionOfTag(tag), title: str(r.name)?.trim() || tag, publishedAt, assets },
+        release: {
+          tag,
+          version,
+          title: str(r.name)?.trim().slice(0, 200) || tag,
+          publishedAt,
+          assets,
+          ...(devTag ? { build: { number: Number(devTag[1]), commit: devTag[2]!, ...(message ? { message } : {}) } } : {}),
+        },
         urls,
       });
     }
-    out.sort((a, b) => Date.parse(b.release.publishedAt) - Date.parse(a.release.publishedAt));
-    return out.slice(0, LITEFIN_RELEASE_COUNT);
+    // Dev builds by build number (a rerun keeps its number); releases by date.
+    out.sort((a, b) => (dev ? b.release.build!.number - a.release.build!.number : Date.parse(b.release.publishedAt) - Date.parse(a.release.publishedAt)));
+    return out.slice(0, dev ? LITEFIN_DEV_BUILD_COUNT : LITEFIN_RELEASE_COUNT);
   }
 }
 

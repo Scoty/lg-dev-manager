@@ -48,3 +48,33 @@ test('a build that fails GitHub’s checksum is not installed', async ({ paired:
   if (await confirmReplace.count()) await confirmReplace.getByRole('button', { name: 'Install' }).click();
   await expect(page.getByRole('dialog').getByText('Install failed')).toBeVisible({ timeout: 30_000 });
 });
+
+test('lists the latest dev builds by build number and commit, and warns before installing one', async ({ paired: page, errors }) => {
+  await addDevModeTv(page, 'Litefin Dev');
+  await page.goto('/#/apps/litefin');
+  await expect(page.locator('.litefin-table tbody tr')).toHaveCount(5, { timeout: 30_000 });
+  await page.getByRole('button', { name: 'Dev builds', exact: true }).click();
+  const table = page.locator('.litefin-table');
+  // The newest one is still building (no files yet), so the list starts at #101; all carry the same version.
+  await expect(table.locator('.litefin-version')).toHaveText(['#101', '#100', '#99', '#98', '#97'], { timeout: 30_000 });
+  await expect(table.locator('thead th').first()).toHaveText('Build');
+  await expect(page.getByText('5 dev builds')).toBeVisible();
+  await expect(page.getByText('Dev builds are untested')).toBeVisible();
+  const first = table.locator('tbody tr').first();
+  await expect(first).toContainText('v2.0.350');
+  await expect(first).toContainText('Latest');
+  // The commit message as plain text, and a link to the commit in Litefin's repository.
+  await expect(first.locator('.litefin-commit-message')).toHaveText('fix(webos): use the dvh1 hint <b>even</b> when canPlayType reports empty');
+  await expect(first.getByRole('link', { name: '0ac5e76' })).toHaveAttribute('href', 'https://github.com/MoazSalem/litefin/commit/0ac5e76');
+  await expect(page.getByText(/v[\d.]+ available/)).toHaveCount(0); // never offers a dev build as an update
+
+  await page.getByRole('button', { name: 'Install Litefin dev build 100 Normal' }).click();
+  const ask = page.getByRole('dialog', { name: /Install Litefin dev build #100 \(Normal\)\?|Replace Litefin/ });
+  await expect(ask).toContainText('Dev builds aren’t tested releases');
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+
+  // Back to the releases.
+  await page.getByRole('button', { name: 'Releases', exact: true }).click();
+  await expect(table.locator('.litefin-version')).toHaveText(['v1.9.0', 'v1.8.0', 'v1.7.0', 'v1.6.0', 'v1.5.1']);
+  expect(errors).toEqual([]);
+});

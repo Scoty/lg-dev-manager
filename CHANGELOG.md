@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Litefin dev builds.** The Litefin page has a **Dev builds** tab with the 5 newest builds of Litefin's development
+  branch, from [litefin-dev-builds](https://github.com/MoazSalem/litefin-dev-builds/releases). There is one build per
+  change, all of them with the version being worked on, so each build shows its number, commit (linked) and commit
+  message. Each webOS variant can be installed like a release, after a warning that dev builds aren't tested. As with
+  releases, the bridge reads the list itself and only downloads files from that repository's own releases, checked
+  against GitHub's checksums. The tab needs a 2.0.2 bridge.
+
 ## 2.0.1 — 2026-11-12
 
 - **More filters and a sort order** (#6), behind one **More** button next to the tabs, so the toolbar stays as it was.

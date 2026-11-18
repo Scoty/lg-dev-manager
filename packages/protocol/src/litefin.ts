@@ -11,6 +11,19 @@ export const LITEFIN_RELEASES_PAGE = 'https://github.com/MoazSalem/litefin/relea
 /** Releases listed (newest first, published releases only). */
 export const LITEFIN_RELEASE_COUNT = 5;
 
+/**
+ * Where Litefin's dev builds come from (2.0.2, feature `litefinDev`): one release per commit to Litefin's `development`
+ * branch, built by the author's own pipeline. They share the version number of the release being worked on, so a build
+ * is told apart by its number and commit.
+ */
+export const LITEFIN_DEV_BUILDS_PAGE = 'https://github.com/MoazSalem/litefin-dev-builds/releases';
+/** Dev builds listed (newest first). */
+export const LITEFIN_DEV_BUILD_COUNT = 5;
+
+/** Which list: published releases, or dev builds. */
+export const LitefinChannel = z.enum(['stable', 'dev']);
+export type LitefinChannel = z.infer<typeof LitefinChannel>;
+
 /** A variant name as it appears in the file name (`Litefin-<version>-webOS-<variant>.ipk`), e.g. `Ultra-Legacy`. */
 export const LitefinVariant = z.string().min(1).max(64).regex(/^[A-Za-z0-9][\w.-]*$/, 'Not a variant name');
 
@@ -31,6 +44,8 @@ export const LitefinRelease = z.object({
   title: z.string(),
   publishedAt: z.string(),
   assets: z.array(LitefinAsset),
+  /** Dev builds only: the pipeline's build number, the source commit (short hash) and its message (plain text). */
+  build: z.object({ number: z.number().int().nonnegative(), commit: z.string(), message: z.string().optional() }).optional(),
 });
 export type LitefinRelease = z.infer<typeof LitefinRelease>;
 

@@ -301,6 +301,14 @@ Legacy, newer ones run Modern best, and sometimes an older version is wanted.
 - The status line shows the installed Litefin version and whether a newer one is out. The **suggested build** for the TV
   is highlighted from its webOS version, by the release notes' webOS versions: webOS 22+ → Modern, webOS 6+ → Normal,
   webOS 4–5 → Legacy, older → Ultra Legacy (owner decision: the versions win over the notes' TV years). A "Which build?" box repeats the release notes' guidance.
+- **Dev builds** (2.0.2, owner request Nov 2026): a Releases / Dev builds switch, when the bridge has the `litefinDev`
+  feature. The dev builds come from [MoazSalem/litefin-dev-builds](https://github.com/MoazSalem/litefin-dev-builds/releases),
+  where the author's pipeline makes one release per commit to Litefin's development branch: tag `dev-b<build>-<commit>`,
+  files `Litefin-<version>-webOS-<variant>-<commit>.ipk`. They all carry the version being worked on, so the list shows the
+  5 newest by build number, with the commit (linked to Litefin's repository) and commit message. Builds whose files aren't
+  uploaded yet are skipped. Installing one always confirms first (dev builds aren't tested), and they're never shown as an
+  update or marked installed (which build is on the TV can't be told). `litefin.list` / `litefin.install` take
+  `channel: 'dev'`; the same download rules apply, with `github.com/MoazSalem/litefin-dev-builds/releases/download/`.
 
 **How.**
 - RPCs `litefin.list` (cached 10 minutes; a refresh button asks again) and `litefin.install` (`tag` + `variant` only — the

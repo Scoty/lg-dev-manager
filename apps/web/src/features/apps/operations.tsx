@@ -283,10 +283,13 @@ export function useAppOperations(device: SavedDevice | null, apps: AppInfo[] | u
   };
 
   /** Install one build of a Litefin release from GitHub (M8). */
-  const installLitefin = async (tag: string, variant: string, subject: string) => {
+  const installLitefin = async (tag: string, variant: string, subject: string, channel: 'stable' | 'dev' = 'stable') => {
     if (!device || !client || running) return false;
     const target = toTarget(device);
-    return runWebInstall('Installing', subject, 'Litefin’s GitHub releases', (opId) => client.call('litefin.install', { device: target, tag, variant, opId }, 20 * 60_000));
+    const from = channel === 'dev' ? 'Litefin’s dev builds' : 'Litefin’s GitHub releases';
+    return runWebInstall('Installing', subject, from, (opId) =>
+      client.call('litefin.install', { device: target, tag, variant, opId, ...(channel === 'dev' ? { channel } : {}) }, 20 * 60_000),
+    );
   };
 
   /** An install the bridge downloads from the web (Homebrew repo, Litefin), with the progress dialog. */

@@ -25,6 +25,8 @@ export interface BridgeConfig {
   lgeUrl?: string;
   /** Litefin's GitHub releases API (default api.github.com/repos/MoazSalem/litefin; LGDM_LITEFIN_URL overrides, for tests). */
   litefinUrl?: string;
+  /** Litefin's dev builds API (default api.github.com/repos/MoazSalem/litefin-dev-builds; LGDM_LITEFIN_DEV_URL, for tests). */
+  litefinDevUrl?: string;
   dev: boolean;
   /**
    * LAN mode (opt-in, `--listen` + `--public-url`): the bridge on a home server, opened from other devices on the
@@ -187,6 +189,7 @@ export function parseArgs(argv: string[]): BridgeConfig {
     repoUrl: process.env.LGDM_REPO_URL,
     lgeUrl: process.env.LGDM_LGE_URL,
     litefinUrl: process.env.LGDM_LITEFIN_URL,
+    litefinDevUrl: process.env.LGDM_LITEFIN_DEV_URL,
     dev,
     storeDir: argv.includes('--store') || /^(1|true|yes|on)$/i.test(process.env.LGDM_STORE ?? '') ? stateDir() : undefined,
     lan: lanMode ? { publicUrls: [...new Set(publicUrls)], extraNetworks: parseNetworks(process.env.LGDM_ALLOWED_NETWORKS), cfAccess } : undefined,
